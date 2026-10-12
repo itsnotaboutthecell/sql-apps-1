@@ -12,7 +12,7 @@ function leaseAlreadyHeld(error: unknown): boolean {
 const leaseSeconds = 60;
 const renewalIntervalMs = 30_000;
 
-function renewUntilStopped(lease: BlobLeaseClient) {
+function renewUntilStopped(lease: BlobLeaseClient, controller: AbortController) {
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
   let renewal = Promise.resolve();
@@ -22,7 +22,10 @@ function renewUntilStopped(lease: BlobLeaseClient) {
     timer = setTimeout(() => {
       renewal = lease.renewLease()
         .then(() => { schedule(); })
-        .catch(error => { failure = error; });
+        .catch(error => {
+          failure = error;
+          controller.abort(error);
+        });
     }, renewalIntervalMs);
   };
   schedule();
@@ -30,24 +33,24 @@ function renewUntilStopped(lease: BlobLeaseClient) {
     stopped = true;
     if (timer) clearTimeout(timer);
     await renewal;
-    if (failure) throw failure;
+    return failure;
   };
 }
 
-async function leased<T>(lease: BlobLeaseClient, action: (leaseId: string) => Promise<T>): Promise<T> {
-  const stopRenewal = renewUntilStopped(lease);
+async function leased<T>(lease: BlobLeaseClient, action: (leaseId: string, signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const stopRenewal = renewUntilStopped(lease, controller);
   let result: T | undefined;
   let failure: unknown;
   try {
-    result = await action(lease.leaseId);
+    result = await action(lease.leaseId, controller.signal);
   } catch (error) {
     failure = error;
   }
-  try {
-    await stopRenewal();
-  } catch (error) {
+  const renewalFailure = await stopRenewal();
+  if (renewalFailure && renewalFailure !== failure) {
     failure = failure ?
-      new AggregateError([failure, error], 'Job operation and snapshot lease renewal failed') : error;
+      new AggregateError([failure, renewalFailure], 'Job operation and snapshot lease renewal failed') : renewalFailure;
   }
   try {
     await lease.releaseLease();
@@ -61,13 +64,15 @@ async function leased<T>(lease: BlobLeaseClient, action: (leaseId: string) => Pr
   return result as T;
 }
 
-export async function withJobSnapshotLease<T>(blob: BlobClient, action: () => Promise<T>): Promise<T> {
+export async function withJobSnapshotLease<T>(blob: BlobClient, action: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const lease = blob.getBlobLeaseClient();
   await lease.acquireLease(leaseSeconds);
-  return leased(lease, action);
+  return leased(lease, (_leaseId, signal) => action(signal));
 }
 
-export async function tryWithJobSnapshotLease(blob: BlobClient, action: () => Promise<void>): Promise<boolean> {
+export async function tryWithJobSnapshotLease(
+  blob: BlobClient, action: (signal: AbortSignal) => Promise<void>,
+): Promise<boolean> {
   try {
     await withJobSnapshotLease(blob, action);
     return true;
@@ -89,6 +94,6 @@ export async function deleteLocalJobSnapshot(
     if (!blobMissing(error)) throw error;
     return deleteLocalJob(jobs, oid, id, async () => {});
   }
-  return leased(lease, leaseId => deleteLocalJob(jobs, oid, id,
-    () => blob.deleteIfExists({ conditions: { leaseId } })));
+  return leased(lease, (leaseId, signal) => deleteLocalJob(jobs, oid, id,
+    () => blob.deleteIfExists({ conditions: { leaseId }, abortSignal: signal }), signal));
 }

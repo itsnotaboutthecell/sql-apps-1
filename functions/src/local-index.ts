@@ -49,22 +49,26 @@ app.storageQueue('analyzeFile', {
     if (job.key !== `${job.tenantId}/${job.oid}/jobs/${job.id}`) throw new Error('Job snapshot ownership mismatch');
     const initial = await jobs.get(job.oid, job.id);
     if (!initial || initial.status === 'completed' || initial.status === 'failed') return;
-    await withJobSnapshotLease(blobs.getBlockBlobClient(job.key), async () => {
-      const row = await jobs.get(job.oid, job.id);
+    await withJobSnapshotLease(blobs.getBlockBlobClient(job.key), async signal => {
+      const row = await jobs.get(job.oid, job.id, signal);
       if (!row || row.status === 'completed' || row.status === 'failed') return;
       const identity = { oid: job.oid, tenantId: job.tenantId };
       const process = async (parent?: TraceParent) => {
         const step = async <T>(name: string, work: () => Promise<T>) => telemetry
           ? telemetry.operation(identity, name, async (_trace, span) => { span.setAttribute('job.id', job.id); return work(); }, parent)
           : work();
-        await step('sql.job.processing', () => jobs.update(job.oid, job.id, { status: 'processing', error: null }));
+        await step('sql.job.processing', () => jobs.update(job.oid, job.id,
+          { status: 'processing', error: null }, signal));
         try {
-          const bytes = await step('blob.snapshot.read', () => blobs.getBlockBlobClient(job.key).downloadToBuffer());
-          await step('sql.job.complete', () => jobs.update(job.oid, job.id, { status: 'completed', ...analyzeFile(bytes), error: null }));
+          const bytes = await step('blob.snapshot.read', () =>
+            blobs.getBlockBlobClient(job.key).downloadToBuffer(0, undefined, { abortSignal: signal }));
+          await step('sql.job.complete', () => jobs.update(job.oid, job.id,
+            { status: 'completed', ...analyzeFile(bytes), error: null }, signal));
         } catch (error) {
           context.error('File processing failed', { jobId: job.id, errorType: error instanceof Error ? error.name : 'UnknownError' });
           if (Number(context.triggerMetadata?.dequeueCount) >= 5) {
-            await jobs.update(job.oid, job.id, { status: 'failed', error: 'Processing failed after five attempts; check worker logs' });
+            await jobs.update(job.oid, job.id,
+              { status: 'failed', error: 'Processing failed after five attempts; check worker logs' }, signal);
           }
           throw error;
         }

@@ -17,6 +17,7 @@ function fixture(t: TestContext) {
   let held: string | undefined;
   let exists = true;
   let deleteFailure: Error | undefined;
+  let renewalFailure: Error | undefined;
   const calls: string[] = [];
   const missing = Object.assign(new Error('Snapshot absent'), { code: 'BlobNotFound', statusCode: 404 });
   t.mock.method(files, 'getBlockBlobClient', (key: string) => {
@@ -35,6 +36,7 @@ function fixture(t: TestContext) {
       return { leaseId: held };
     });
     t.mock.method(lease, 'renewLease', async () => {
+      if (renewalFailure) throw renewalFailure;
       assert.equal(held, lease.leaseId);
       calls.push('renew');
       return { leaseId: held };
@@ -68,6 +70,7 @@ function fixture(t: TestContext) {
     remove: () => deleteLocalJobSnapshot(jobs, files, tenant, oid, id),
     snapshotExists: () => exists,
     setDeleteFailure: (error?: Error) => { deleteFailure = error; },
+    setRenewalFailure: (error?: Error) => { renewalFailure = error; },
     row: () => row,
     held: () => held,
   };
@@ -98,6 +101,23 @@ test('a live worker renews its finite snapshot lease', async t => {
   finish();
   await work;
   assert.deepEqual(state.calls, ['acquire', 'renew', 'release']);
+});
+
+test('lease renewal failure aborts protected work before exclusivity expires', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const state = fixture(t);
+  const failure = new Error('Lease renewal failed');
+  state.setRenewalFailure(failure);
+  const work = withJobSnapshotLease(state.blob, async (signal?: AbortSignal) => {
+    assert.ok(signal, 'protected work receives a lease-loss signal');
+    await new Promise<void>((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+  });
+  await Promise.resolve();
+  t.mock.timers.tick(30_000);
+  await assert.rejects(work, error => error === failure);
+  assert.equal(state.held(), undefined);
 });
 
 test('snapshot lease releases after a worker error and preserves its error', async t => {

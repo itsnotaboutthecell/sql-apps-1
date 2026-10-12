@@ -80,7 +80,9 @@ test('unknown operations and missing workspace fail explicitly', async t => {
   await assert.rejects(planConsent(home, { operation: 'app-test', selection: 'external-sql' }), /takes no container selection/);
   const configless = await fixture(t, true);
   await rm(join(configless, 'role-based-data.json'));
-  await assert.rejects(planConsent(configless, { operation: 'role-based-app' }), /role-based-data\.json is not configured.*role-based-data\.example\.json/);
+  assert.deepEqual((await planConsent(configless, { operation: 'role-based-app' })).requirements.map(item => item.scope),
+    ['restore', 'build', 'sql-start', 'schema', 'services'],
+    'permission planning must not require domain configuration that launch validates separately');
 });
 
 test('permissions persist across reads and revoke without losing other scopes', async t => {

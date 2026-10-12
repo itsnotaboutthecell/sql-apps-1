@@ -213,13 +213,6 @@ async function requirementsFor(home, request, proposed) {
   if (operation === 'selected-stop' && !/^[a-z][a-z0-9-]{0,31}$/.test(selection ?? '')) throw new Error('Invalid application selection');
   const profile = operation.startsWith('role-based-') ? 'role-based-data' : selected ? `selected:${artifact?.name ?? selection}` :
     ['serve-sql', 'start-sql', 'init', 'data', 'test', 'api-test', 'stop', 'recover-sql'].includes(operation) ? 'data' : 'foundation';
-  if (profile === 'role-based-data') {
-    try { await lstat(join(home, 'role-based-data.json')); }
-    catch (error) {
-      if (error.code === 'ENOENT') throw new Error('role-based-data.json is not configured: copy role-based-data.example.json, choose the application role and readiness path (docs/reference/role-based-data.md), then plan startup.');
-      throw error;
-    }
-  }
   const target = JSON.stringify({ home, workspace: runtime.id, mode: runtime.mode, ports: runtime.ports,
     container: runtime.sqlContainer, database: artifact ? `${runtime.database}_${artifact.name.replaceAll('-', '_')}` : runtime.database,
     profile });

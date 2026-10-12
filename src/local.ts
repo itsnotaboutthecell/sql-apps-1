@@ -48,6 +48,9 @@ async function prepareSqlResources(container: string, run: Run, create: boolean,
       ['volume', 'inspect', volume, '--format',
         '{"workspace":{{json (index .Labels "sql-apps.workspace")}},"role":{{json (index .Labels "sql-apps.local")}}}'])));
     if (owner.workspace !== runtime.id || owner.role !== 'sql') throw new Error('SQL volume belongs to another workspace; no credentials or volumes were reset');
+    if (create) {
+      throw new Error('Owned SQL volume exists without its credential-bearing container; data is preserved and credentials will not be reset');
+    }
   } else if (!create) throw new Error('Owned SQL volume is missing; review existing mounts without recreating data');
   if (!create && inspectMount) {
     const mounts = z.array(z.object({ Type: z.string(), Name: z.string().optional(), Destination: z.string() }))
@@ -194,16 +197,24 @@ async function waitLocalSql(container: string, run: Run): Promise<void> {
     }
     const started = Date.parse(state.StartedAt);
     if (!Number.isFinite(started)) throw new Error('SQL container returned an invalid startup timestamp');
+    let controlPlaneReady = false;
     try {
       const ready = await run('docker', ['exec', container, 'sh', '-c',
         'test -f /var/opt/mssql/.cp-shim/READY && stat -c %Y /var/opt/mssql/.cp-shim/READY']);
       if (!/^[0-9]+\s*$/.test(ready) || Number(ready) < Math.ceil(started / 1_000)) {
         throw new Error('Azure SQL preview control-plane initialization has not completed for this startup');
       }
+      controlPlaneReady = true;
       await verifyLocal(container, run);
       return;
     }
     catch (error) {
+      if (controlPlaneReady) {
+        const logs = await run('docker', ['logs', '--since', state.StartedAt, '--tail', '250', container]);
+        if (/Login failed for user 'sa'\. Reason: Password did not match/.test(logs)) {
+          throw new Error('SQL container password no longer matches the preserved SQL volume; data was not reset', { cause: error });
+        }
+      }
       if (attempt === 59) throw new Error(`Local SQL startup did not become ready; inspect docker logs ${container}`, { cause: error });
       await new Promise(done => setTimeout(done, 2_000));
     }

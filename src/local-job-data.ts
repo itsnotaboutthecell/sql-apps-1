@@ -3,26 +3,28 @@ import { fileJobSchema, type FileJob } from './file-jobs.js';
 
 export async function deleteLocalJob(
   jobs: Pick<ReturnType<typeof localJobData>, 'get' | 'delete'>,
-  oid: string, id: string, removeSnapshot: () => Promise<unknown>,
+  oid: string, id: string, removeSnapshot: () => Promise<unknown>, signal?: AbortSignal,
 ): Promise<boolean> {
-  const row = await jobs.get(oid, id);
+  const row = await jobs.get(oid, id, signal);
   if (row && !['completed', 'failed'].includes(row.status)) {
     throw Object.assign(new Error('Wait for processing to finish before deleting this job'), { statusCode: 409 });
   }
-  if (row) await jobs.delete(oid, id);
+  if (row) await jobs.delete(oid, id, signal);
+  signal?.throwIfAborted();
   await removeSnapshot();
   return row !== undefined;
 }
 
 export function localJobData(origin: string, fetcher: typeof fetch = fetch) {
-  async function request(oid: string, path: string, method = 'GET', body?: unknown) {
+  async function request(oid: string, path: string, method = 'GET', body?: unknown, signal?: AbortSignal) {
     const response = await fetcher(new URL(path, origin), {
       method, headers: {
         'x-ms-client-principal': localPrincipal(oid, 'access_as_user', 'processor'), 'x-ms-api-role': 'processor',
         'content-type': 'application/json', ...(method === 'PATCH' ? { 'if-match': '*' } : {}),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(15_000), redirect: 'error',
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000),
+      redirect: 'error',
     });
     if (!response.ok) throw new Error(`Job data operation failed (${response.status})`);
     return response;
@@ -62,8 +64,8 @@ export function localJobData(origin: string, fetcher: typeof fetch = fetch) {
     async create(oid: string, item: { id: string; filename: string; blob_key: string; parent_job_id?: string }) {
       await request(oid, '/api/FileJob', 'POST', item);
     },
-    async get(oid: string, id: string): Promise<FileJob | undefined> {
-      const response = await request(oid, `/api/FileJob?$filter=id eq ${id}`);
+    async get(oid: string, id: string, signal?: AbortSignal): Promise<FileJob | undefined> {
+      const response = await request(oid, `/api/FileJob?$filter=id eq ${id}`, 'GET', undefined, signal);
       const body = await response.json() as { value: unknown[] };
       if (!Array.isArray(body.value)) throw new Error('Invalid job response');
       return body.value[0] === undefined ? undefined : fileJobSchema.parse(body.value[0]);
@@ -85,11 +87,12 @@ export function localJobData(origin: string, fetcher: typeof fetch = fetch) {
     async listAll(oid: string): Promise<FileJob[]> {
       return allPages(oid, '/api/FileJob');
     },
-    async update(oid: string, id: string, changes: object) {
-      await request(oid, `/api/FileJob/id/${encodeURIComponent(id)}`, 'PATCH', { ...changes, updated_at: new Date().toISOString() });
+    async update(oid: string, id: string, changes: object, signal?: AbortSignal) {
+      await request(oid, `/api/FileJob/id/${encodeURIComponent(id)}`, 'PATCH',
+        { ...changes, updated_at: new Date().toISOString() }, signal);
     },
-    async delete(oid: string, id: string) {
-      await request(oid, `/api/FileJob/id/${encodeURIComponent(id)}`, 'DELETE');
+    async delete(oid: string, id: string, signal?: AbortSignal) {
+      await request(oid, `/api/FileJob/id/${encodeURIComponent(id)}`, 'DELETE', undefined, signal);
     },
   };
 }

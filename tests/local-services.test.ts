@@ -20,15 +20,15 @@ const readinessInput = {
   input: { readiness: true },
 };
 
-async function readinessStorage(t: TestContext, failure?: 'blob' | 'queue' | 'stall') {
+async function readinessStorage(t: TestContext, failure?: 'blob' | 'queue' | 'stall' | 'stalled-blob-and-queue') {
   const requests: { method: string; path: string }[] = [];
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://fixture.invalid');
     const method = request.method ?? '';
     requests.push({ method, path: url.pathname });
     const dependency = ['/fixturestorage/files', '/fixturestorage/traces'].includes(url.pathname) ? 'blob' : 'queue';
-    if (failure === 'stall' && dependency === 'blob') return;
-    response.writeHead(failure === dependency ? 503 : 200, {
+    if (['stall', 'stalled-blob-and-queue'].includes(failure ?? '') && dependency === 'blob') return;
+    response.writeHead(failure === dependency || failure === 'stalled-blob-and-queue' ? 503 : 200, {
       'x-ms-request-id': 'fixture-readiness', 'x-ms-version': '2025-11-05',
       'x-ms-approximate-messages-count': '0', etag: '"fixture"',
       'last-modified': 'Mon, 01 Jan 2024 00:00:00 GMT',
@@ -97,6 +97,12 @@ test('stalled Blob metadata requests respect the shared abort deadline', async t
   await assert.rejects(ready(async () => Response.json({ result: readinessInput }), AbortSignal.timeout(100)),
     error => error instanceof DependencyReadinessError && error.dependency === 'blob');
   assert.ok(performance.now() - start < 1_100, 'readiness must not wait for the normal storage retry budget');
+});
+
+test('readiness reports failures in dependency order instead of completion order', async t => {
+  const { ready } = await readinessStorage(t, 'stalled-blob-and-queue');
+  await assert.rejects(ready(async () => Response.json({ result: readinessInput }), AbortSignal.timeout(100)),
+    error => error instanceof DependencyReadinessError && error.dependency === 'blob');
 });
 
 test('local Functions require the SQL Apps development guard and always reject production', async () => {
