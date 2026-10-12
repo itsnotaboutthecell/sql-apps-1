@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { createDemoPublicationFile, initDemoPublication } from '../src/demo-init.js';
 import { demoPublicationSchema } from '../src/demo-publication.js';
+import { createJsonFile } from '../src/deployment.js';
 import { run, type Run, type RunOptions } from '../src/process.js';
 
 const subscriptionId = '11111111-1111-4111-8111-111111111111';
@@ -177,4 +178,32 @@ test('demo-init does not overwrite a configuration created during discovery', as
   finishDiscovery();
   await rejected;
   assert.equal(await readFile(path, 'utf8'), concurrent);
+});
+
+test('atomic publication collision preserves the destination and removes its temporary file', async t => {
+  const directory = resolve('.task-demo-publication-collision-test');
+  const path = join(directory, 'publication.json');
+  const existing = '{"existing":true}';
+  await mkdir(directory, { recursive: true });
+  await writeFile(path, existing);
+  t.after(() => rm(directory, { recursive: true, force: true }));
+
+  await assert.rejects(
+    createJsonFile(path, { replacement: true }),
+    (error: NodeJS.ErrnoException) => error.code === 'EEXIST',
+  );
+
+  assert.equal(await readFile(path, 'utf8'), existing);
+  assert.deepEqual(await readdir(directory), ['publication.json']);
+});
+
+test('pre-publication write failure leaves no final file or temporary artifact', async t => {
+  const directory = resolve('.task-demo-publication-write-failure-test');
+  const path = join(directory, `${'x'.repeat(240)}.json`);
+  await mkdir(directory, { recursive: true });
+  t.after(() => rm(directory, { recursive: true, force: true }));
+
+  await assert.rejects(createJsonFile(path, { publication: true }));
+
+  assert.deepEqual(await readdir(directory), []);
 });

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, rename, unlink, realpath } from 'node:fs/promises';
+import { link, mkdir, readFile, writeFile, rename, unlink, realpath } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -89,8 +89,29 @@ export async function saveJson(path: string, value: unknown): Promise<void> {
 }
 
 export async function createJsonFile(path: string, value: unknown): Promise<void> {
+  const content = serializeJson(value);
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, serializeJson(value), { flag: 'wx', mode: 0o600 });
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  let publicationError: unknown;
+  try {
+    await writeFile(temporary, content, { flag: 'wx', mode: 0o600 });
+    await link(temporary, path);
+  } catch (error) {
+    publicationError = error;
+  }
+  let cleanupError: unknown;
+  try {
+    await unlink(temporary);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') cleanupError = error;
+  }
+  if (cleanupError !== undefined) {
+    throw new AggregateError(
+      publicationError === undefined ? [cleanupError] : [publicationError, cleanupError],
+      `Failed to publish ${path} or remove its temporary file`,
+    );
+  }
+  if (publicationError !== undefined) throw publicationError;
 }
 
 function serializeJson(value: unknown): string {
