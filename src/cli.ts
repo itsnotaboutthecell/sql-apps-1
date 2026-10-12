@@ -12,6 +12,7 @@ import {
   demoPublicationSchema, demoPublicationStatus, planDemoPublication, publishDemo,
   readDemoPublicationState, validateDemoPublication, type DemoPublicationState,
 } from './demo-publication.js';
+import { initDemoPublication } from './demo-init.js';
 import { reviewRoleBasedCost } from './role-based-cost.js';
 import { assignApplicationRole, applicationRegistrationRole } from './role-based-identity.js';
 import { roleBasedSmoke } from './role-based-smoke.js';
@@ -38,8 +39,9 @@ function parseFlags(args: string[], allowed: string[]): Record<string, string | 
 }
 async function main() {
   if (command === 'help' || !command) {
-    console.log('Usage: npm run azure -- <validate|artifacts|identity|plan|provision|deploy|status|schema|static|redirect|smoke|gateway|functions|secret-set|demo-publish|demo-status|hosting-compare> [config.json] [options]\nRequires a current build (after approval, consent-run build). Azure CLI, Bicep, .NET, SqlPackage and the local pinned SWA CLI are used directly.');
+    console.log('Usage: npm run azure -- <validate|artifacts|identity|plan|provision|deploy|status|schema|static|redirect|smoke|gateway|functions|secret-set|demo-init|demo-publish|demo-status|hosting-compare> [config.json] [options]\nRequires a current build (after approval, consent-run build). Azure CLI, Bicep, .NET, SqlPackage and the local pinned SWA CLI are used directly.');
     console.log('Public-demo diagnostics: demo-preflight <explicit target configuration>. Read-only cache/tenant/ARM/provider/region/permission evidence; no Graph, app registration, login reset or resource writes. Not deployment readiness.');
+    console.log('Public-demo starter: demo-init <new-publication.json> --subscription <id> --resource-group <name> --location <region> --static-web-app-location <region> --application <name> --artifact <path> --owner <owner>. Discovery only; creates no Azure resources.');
     console.log('Public-demo costs: demo-cost <explicit cost configuration>. Offline free-allowance/fixed-charge review; no Azure login, network requests or resource writes. Exit 2 means cost intent is blocked or acknowledgement is missing; exit 1 means invalid input.');
     console.log('Role-based-data: role-based-cost <cost configuration> is offline and profile-specific. Use validate/artifacts/identity/plan/provision/deploy/status/schema with a role-based-data deployment configuration. role-based-assign <config> <user-or-group-object-id> explicitly assigns its application role; role-based-smoke <config> needs delegated tokens with and without the required role in SQL_APPS_USER_TOKEN / SQL_APPS_SECOND_USER_TOKEN. All cloud writes need operator approval; local simulations never deploy.');
     console.log('Shortest path: az login, then init <new-config.json> --profile <p> --location <region> --resource-group <rg> --registry <name>.azurecr.io (read-only), then deploy-all <config> to review pending paid steps and deploy-all <config> --approve <id> after explicit approval.');
@@ -48,6 +50,34 @@ async function main() {
   if (command === 'hosting-compare') {
     if (process.argv.length !== 4) throw new Error('Usage: hosting-compare <comparison-config.json>');
     console.log(JSON.stringify(compareHosting(JSON.parse(await readFile(resolve(configPath), 'utf8'))), null, 2));
+    return;
+  }
+  if (command === 'demo-init') {
+    if (process.argv.length < 4 || !configPath.endsWith('.json')) {
+      throw new Error('Usage: demo-init <new-publication.json> --subscription <id> --resource-group <name> --location <region> --static-web-app-location <region> --application <name> --artifact <path> --owner <owner>');
+    }
+    const flags = parseFlags(process.argv.slice(4), [
+      'subscription', 'resource-group', 'location', 'static-web-app-location', 'application', 'artifact', 'owner',
+    ]);
+    const outputPath = resolve(configPath);
+    if (existsSync(outputPath)) throw new Error(`${configPath} already exists; demo-init never overwrites a configuration.`);
+    for (const key of [
+      'subscription', 'resource-group', 'location', 'static-web-app-location', 'application', 'artifact', 'owner',
+    ]) {
+      if (!flags[key]) throw new Error(`demo-init needs --${key}.`);
+    }
+    const publication = await initDemoPublication({
+      subscriptionId: flags.subscription!,
+      resourceGroup: flags['resource-group']!,
+      location: flags.location!,
+      staticWebAppLocation: flags['static-web-app-location']!,
+      selectedApplication: flags.application!,
+      selectedArtifact: flags.artifact!,
+      owner: flags.owner!,
+    }, run);
+    await saveJson(outputPath, publication);
+    console.log(`Wrote ${outputPath} for Starter public-demo publication. Nothing was created in Azure.`);
+    console.log(`Next (read-only): demo-preflight <target>, then demo-publish ${outputPath}.`);
     return;
   }
   if (command === 'demo-publish' || command === 'demo-status') {
