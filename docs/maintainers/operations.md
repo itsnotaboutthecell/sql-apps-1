@@ -4,9 +4,9 @@ This checklist is for maintainers and operators of the full authenticated Azure 
 
 ## Diagnostics
 
-Container Apps sends service logs to Log Analytics. Functions is configured with Application Insights. Gateway logs redact authorization/cookies and report request IDs and error types, not raw downstream exception messages.
+Container Apps sends service logs to Log Analytics. Functions is configured with Application Insights. SQL server auditing is enabled and delivered to the same Log Analytics workspace through a diagnostic setting, so `SQLSecurityAuditEvents` is queryable with `AzureDiagnostics`. Gateway logs redact authorization/cookies and report request IDs and error types, not raw downstream exception messages.
 
-Use Azure CLI for container revisions, logs, identities, role assignments, and resource status. `status` checks the gateway resource and data-service readiness; it is not an authenticated storage/function smoke test.
+Use Azure CLI for container revisions, logs, identities, role assignments, and resource status. `status` checks the gateway resource and data-service readiness and reports the configured SQL backup retention, backup redundancy and audit workspace; it is not an authenticated storage/function smoke test and it does not verify that a restore or an audit query actually works.
 
 ## Failure and retry
 
@@ -46,7 +46,9 @@ Before production:
 - Pin every deployed image to an immutable digest, including validated base image provenance.
 - Exercise multiple replicas, temporary SQL outage, and dependency recovery.
 - Perform and document a SQL restore drill and Blob retention recovery.
-- Set SQL backup retention according to policy; do not treat default retention as an approved recovery plan.
+- Set SQL backup retention according to policy; do not treat default retention as an approved recovery plan. The template provisions an explicit `sqlBackupRetentionDays` (default 7) and `sqlBackupRedundancy` (default Geo), and `npm run azure -- status` reports both: confirm the reported values match the approved recovery objective.
+- Confirm SQL auditing reaches the workspace reported by `status`: run a failed login and an authorized query, then query `AzureDiagnostics` for `SQLSecurityAuditEvents` and record the evidence. Provisioned auditing is not verified auditing.
+- Burst-test the gateway before launch: drive concurrent authenticated traffic plus unauthenticated requests at `/api/*`, `/graphql` and `/storage`, and record observed throughput, error rates, SQL DTU saturation on S0 and the replica scaling response. The gateway applies no application-level rate limit, so establish the real saturation point and the fronting control (Front Door, App Gateway WAF or API Management) that will absorb it.
 - Configure alert rules and cost budgets for the selected environment.
 - Verify tenant consent restrictions and least-privilege directory/resource deployment permissions.
 - Exercise CI SQL authentication/private networking; hosted GitHub runners do not inherently reach private endpoints.

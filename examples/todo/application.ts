@@ -60,6 +60,10 @@ export const application: ApplicationDefinition = {
   },
   procedures: ['CreateSession', 'GetSession', 'DeleteSession', 'Readiness', 'List', 'Create', 'Update', 'Delete'],
   sessions: { create: 'CreateSession', get: 'GetSession', delete: 'DeleteSession', ready: 'Readiness' },
+  limits: {
+    sessionMinutes: 60, itemLimit: 50, titleLimit: 200,
+    mutationsPerMinute: 30, globalMutationsPerMinute: 300, globalSessionLimit: 1000,
+  },
   async register(app, services) {
     app.get('/api/todos', async request => {
       if (!z.strictObject({}).safeParse(request.query).success) throw new ApplicationError(400, 'Item list does not accept owner or query fields');

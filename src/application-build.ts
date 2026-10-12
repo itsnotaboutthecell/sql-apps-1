@@ -24,6 +24,11 @@ const metadata = z.object({
   }),
   procedures: z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/)).min(1),
   sessions: z.strictObject({ create: z.string(), get: z.string(), delete: z.string(), ready: z.string() }),
+  limits: z.strictObject({
+    sessionMinutes: z.number().int().positive(), itemLimit: z.number().int().positive(),
+    titleLimit: z.number().int().positive(), mutationsPerMinute: z.number().int().positive(),
+    globalMutationsPerMinute: z.number().int().positive(), globalSessionLimit: z.number().int().positive(),
+  }),
 });
 const file = z.strictObject({ path, sha256: z.string().regex(/^[a-f0-9]{64}$/) });
 const manifestSchema = metadata.extend({

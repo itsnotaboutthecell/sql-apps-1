@@ -8,6 +8,14 @@ export interface ApplicationRoute {
   path: string;
 }
 export type ProcedureParameters = Record<string, string | boolean | null>;
+export interface ApplicationLimits {
+  sessionMinutes: number;
+  itemLimit: number;
+  titleLimit: number;
+  mutationsPerMinute: number;
+  globalMutationsPerMinute: number;
+  globalSessionLimit: number;
+}
 export interface ApplicationServices {
   subject(request: FastifyRequest): Promise<string>;
   execute(name: string, parameters: ProcedureParameters): Promise<unknown>;
@@ -29,6 +37,7 @@ export interface ApplicationDefinition {
   };
   procedures: readonly string[];
   sessions: { create: string; get: string; delete: string; ready: string };
+  limits: ApplicationLimits;
   register(app: FastifyInstance, services: ApplicationServices): Promise<void>;
 }
 export interface ApplicationAdapter extends ApplicationServices {

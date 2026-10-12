@@ -23,6 +23,16 @@ param sqlSku object
 param sqlMaxSizeBytes int
 @allowed(['Local', 'Zone', 'Geo', 'GeoZone'])
 param sqlBackupRedundancy string
+@description('Registry credential posture. starter enables the registry admin user because the starter runtime pulls with it; hardened keeps the admin user disabled for identity-based pulls.')
+@allowed([
+  'starter'
+  'hardened'
+])
+param securityPosture string
+@description('Demo log retention in days for the environment workspace. The workspace stays inside the free daily ingestion allowance.')
+@minValue(30)
+@maxValue(90)
+param logRetentionDays int = 30
 
 var prefix = '${name}-${substring(deploymentId, 0, 8)}'
 var suffix = uniqueString(resourceGroup().id, deploymentId)
@@ -33,6 +43,7 @@ var ownedTags = union(tags, {
 })
 var freeSql = sqlBillingMode == 'free-paused'
 var freeSqlSku = { name: 'GP_S_Gen5_2', tier: 'GeneralPurpose', family: 'Gen5', capacity: 2 }
+var starterRegistry = securityPosture == 'starter'
 
 resource runtimeIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${prefix}-runtime'
@@ -46,7 +57,7 @@ resource registry 'Microsoft.ContainerRegistry/registries@2025-04-01' = {
   tags: ownedTags
   sku: { name: 'Basic' }
   properties: {
-    adminUserEnabled: true
+    adminUserEnabled: starterRegistry
     publicNetworkAccess: 'Enabled'
     policies: { azureADAuthenticationAsArmPolicy: { status: 'enabled' } }
   }
@@ -69,6 +80,20 @@ resource network 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   }
 }
 
+resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: '${prefix}-logs'
+  location: location
+  tags: ownedTags
+  properties: {
+    sku: { name: 'PerGB2018' }
+    retentionInDays: logRetentionDays
+    workspaceCapping: { dailyQuotaGb: json('0.1') }
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Enabled'
+    features: { disableLocalAuth: true }
+  }
+}
+
 resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: '${prefix}-containers'
   location: location
@@ -76,7 +101,16 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   properties: {
     vnetConfiguration: { infrastructureSubnetId: '${network.id}/subnets/containers', internal: false }
     workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }]
-    appLogsConfiguration: { destination: 'none' }
+    appLogsConfiguration: { destination: 'azure-monitor' }
+  }
+}
+
+resource environmentDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: environment
+  name: 'demo-console-logs'
+  properties: {
+    workspaceId: logs.id
+    logs: [{ categoryGroup: 'allLogs', enabled: true }]
   }
 }
 
@@ -146,3 +180,5 @@ output databaseId string = database.id
 output databaseName string = database.name
 output ownershipTags object = ownedTags
 output sqlBillingMode string = sqlBillingMode
+output logsWorkspaceId string = logs.id
+output logsWorkspaceName string = logs.name

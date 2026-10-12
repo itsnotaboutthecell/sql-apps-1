@@ -14,7 +14,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
       - run: node --test tests/setup.test.mjs tests/setup-install.test.mjs tests/setup-journey.test.mjs tests/local-consent.test.mjs tests/workspace.test.mjs tests/workspace-runtime.test.mjs
@@ -26,11 +26,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
         with:
           dotnet-version: '8.0.x'
       - run: npm ci

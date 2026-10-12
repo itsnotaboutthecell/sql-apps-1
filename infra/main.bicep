@@ -20,6 +20,13 @@ param dabImage string
 param functionsImage string = ''
 param registryServer string
 param deployGateway bool = true
+@description('Explicit point-in-time restore window for the application database. Longer retention increases backup storage cost and must be reviewed.')
+@minValue(1)
+@maxValue(35)
+param sqlBackupRetentionDays int = 7
+@description('Explicit backup storage redundancy for the application database.')
+@allowed(['Local', 'Zone', 'Geo', 'GeoZone'])
+param sqlBackupRedundancy string = 'Geo'
 
 var prefix = '${name}-${environment}'
 var fullFoundation = profile == 'foundation'
@@ -137,7 +144,37 @@ resource database 'Microsoft.Sql/servers/databases@2023-08-01' = {
   location: location
   tags: tags
   sku: { name: 'S0', tier: 'Standard', capacity: 10 }
-  properties: { collation: 'SQL_Latin1_General_CP1_CI_AS', zoneRedundant: false }
+  properties: {
+    collation: 'SQL_Latin1_General_CP1_CI_AS'
+    zoneRedundant: false
+    requestedBackupStorageRedundancy: sqlBackupRedundancy
+  }
+}
+resource backupRetention 'Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies@2023-08-01' = {
+  parent: database
+  name: 'default'
+  properties: { retentionDays: sqlBackupRetentionDays }
+}
+resource sqlAudit 'Microsoft.Sql/servers/auditingSettings@2023-08-01' = {
+  parent: sql
+  name: 'default'
+  properties: {
+    state: 'Enabled'
+    isAzureMonitorTargetEnabled: true
+    isManagedIdentityInUse: false
+  }
+}
+resource sqlAuditLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: database
+  name: 'sql-audit'
+  properties: {
+    workspaceId: logs.id
+    logs: [
+      { category: 'SQLSecurityAuditEvents', enabled: true }
+      { category: 'SQLInsights', enabled: true }
+      { category: 'Errors', enabled: true }
+    ]
+  }
 }
 resource files 'Microsoft.Storage/storageAccounts@2023-05-01' = if (fullFoundation) {
   name: storageName
@@ -353,3 +390,6 @@ output functionsName string = fullFoundation ? functions!.name : ''
 output networkId string = network.id
 output storageAccount string = fullFoundation ? files!.name : ''
 output vaultName string = fullFoundation ? vault!.name : ''
+output sqlBackupRetentionDays int = sqlBackupRetentionDays
+output sqlBackupRedundancy string = sqlBackupRedundancy
+output sqlAuditWorkspaceName string = logs.name

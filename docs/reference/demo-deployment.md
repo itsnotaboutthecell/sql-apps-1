@@ -50,7 +50,7 @@ Start with [costs and paid growth](../guides/costs.md), then run `npm run azure 
 
 The review reports known charge sources, SQL policy, shared grants, theoretical compute headroom and usage-monitoring next actions; it does not invent prices, query actual usage or configure budgets. A paid-cost review requires an explicit fixed-charge acknowledgement, but never authorizes deployment. Do not silently change hosting/network security or use paid resources when a free-only intent is blocked.
 
-Public visitor sessions are not admission-throttled or capped. Follow the [usage and paid-growth policy](demo-cost.md#visibility-before-growth): popularity prompts owner-approved capacity review, not automatic visitor blocking or billing changes. Per-session limits and SQL free-tier exhaustion pause still apply.
+Public visitor-session creation is not admission-throttled or rate-limited, but the application's SQL enforces a global cap of 1000 live sessions; beyond it the gateway returns HTTP 429 until sessions expire after 60 minutes. Unthrottled creation therefore makes a denial of new visitors reachable with about a thousand rapid requests. Follow the [usage and paid-growth policy](demo-cost.md#visibility-before-growth): popularity prompts owner-approved capacity review, not automatic billing changes. Per-session limits and SQL free-tier exhaustion pause still apply.
 
 ## Verify the actual selected app locally
 
@@ -93,7 +93,7 @@ The separate [foundation template](../../infra/demo.bicep) prepares a Container 
 - **Runtime is bounded:** HTTPS gateway ingress only, one active revision, zero-to-one replicas and loopback-only DAB. Scale-to-zero is not a claim that SQL, registry, networking or other platform charges disappear.
 - **Anonymous work is bounded:** SQL allows at most 1,000 active visitor sessions and 300 mutation attempts per minute across the demo, in addition to each session's 50-item and 30-mutation limits. Reaching a global limit returns HTTP 429.
 - **Usage visibility is separate:** review actual subscription-wide compute grants, SQL remaining free amount, and app/managed-group costs after approved deployment. Budgets are alerts, not hard spending caps; these preparation commands configure none.
-- **Logging is deliberately limited:** no Log Analytics workspace, Application Insights, storage, Functions, Key Vault, private endpoints or NAT gateway is provisioned. Persistent centralized application-log collection is disabled; this small demo profile is not an operational production baseline.
+- **Logging is deliberately minimal:** a capped Log Analytics workspace (0.1 GB/day, 30 day retention) receives Container Apps console logs so failures are diagnosable, and nothing else is provisioned. No Application Insights, storage, Functions, Key Vault, private endpoints or NAT gateway. This small demo profile is not an operational production baseline.
 - **Images remain selected:** build outputs contain separate gateway and pinned-base DAB Dockerfiles, OCI source/selection/route labels and an allowlist Docker build context. SQL setup files, the local-path manifest, unrelated examples and tests are not included in that context. Published images still require immutable digests and separate source-publication approval.
 
 With Azure CLI/Bicep already installed, the following compiles both templates into temporary files, checks the generated resource/SQL/network/ingress contracts and removes the temporary output. It does not require a subscription sign-in or provision resources:

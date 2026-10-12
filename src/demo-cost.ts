@@ -88,7 +88,8 @@ export function reviewDemoCost(input: unknown) {
       warning: 'Illustrative active allocation time with all grants unused, not visitor-hours or a spending cap. Both gateway and DAB count. Startup, idle gaps, bots and other subscription apps affect consumption; overages are billable.',
     },
     monitoring: {
-      status: 'not-configured',
+      status: 'workspace-provisioned-alerts-not-configured',
+      logs: 'The demo environment sends Container Apps console logs to its own Log Analytics workspace, capped at 0.1 GB per day and 30 day retention so it stays inside the included free allowance. Ingestion above the cap is dropped, not billed; raising the cap or retention is billable.',
       sql: 'Check Free monthly vCore amount / Free amount remaining in the SQL portal; create a reviewed alert before exhaustion.',
       compute: 'Review subscription-wide Container Apps usage and remaining grants, not just this app or request count.',
       costs: 'Review actual and forecast costs across the app resource group and its managed infrastructure resource group. Keep cleanup ownership explicit.',
@@ -100,6 +101,7 @@ export function reviewDemoCost(input: unknown) {
       checkedOn: '2026-10-09',
       sql: 'https://learn.microsoft.com/azure/azure-sql/database/free-offer',
       compute: 'https://learn.microsoft.com/azure/container-apps/billing',
+      logs: 'https://azure.microsoft.com/pricing/details/monitor/',
       budgets: 'https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets',
       note: 'Free tier means recurring monthly allowances, not time-bound trial credits or unlimited usage. Documented allowances are not subscription eligibility, live usage or a price quote. Recheck before deployment.',
     },

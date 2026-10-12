@@ -298,7 +298,7 @@ async function main() {
     const second = process.env.SQL_APPS_SECOND_USER_TOKEN;
     if (!first || !second) throw new Error('Set SQL_APPS_USER_TOKEN and SQL_APPS_SECOND_USER_TOKEN for two users; tokens are not persisted.');
     await smoke(state.outputs.gatewayUrl, first, second, fetch, `https://${state.outputs.functionsName}.azurewebsites.net`);
-    console.log('Authenticated two-user CRUD, GraphQL, files, function invocation, anonymous rejection, and fixture cleanup passed.');
+    console.log('Authenticated two-user REST and GraphQL reads, files, function invocation, anonymous rejection, and fixture cleanup passed.');
     return;
   }
   if (command === 'status') {
@@ -308,6 +308,7 @@ async function main() {
     const response = await fetch(new URL('/health/ready', state.outputs.gatewayUrl), { signal: AbortSignal.timeout(5_000) });
     if (!response.ok) throw new Error(`Readiness returned ${response.status}`);
     console.log(`Readiness passed. Last completed stage: ${state.stage}`);
+    console.log(`SQL recovery: ${state.outputs.sqlBackupRetentionDays}-day point-in-time restore, ${state.outputs.sqlBackupRedundancy} backup storage redundancy. Audit events go to workspace ${state.outputs.sqlAuditWorkspaceName}. Verify a restore before relying on it.`);
     return;
   }
   if (command === 'schema') {

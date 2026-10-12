@@ -151,9 +151,9 @@ Deployment sequence:
 
 Local state is keyed by subscription/group/app/environment under `.sql-apps`. A local exclusive lock prevents simultaneous commands from this checkout. CI must also use an environment concurrency group.
 
-Readiness checks do not authenticate a user or exercise files/functions. Set `SQL_APPS_USER_TOKEN` and `SQL_APPS_SECOND_USER_TOKEN` to short-lived delegated access tokens for two distinct users, then run `smoke`. It checks REST CRUD, GraphQL, cross-user row/file denial, file roundtrip, function invocation, anonymous rejection, and cleanup. It never persists tokens. Obtain tokens through your approved sign-in tooling; do not put them in the configuration file or shell history.
+Readiness checks do not authenticate a user or exercise data/files/functions. Set `SQL_APPS_USER_TOKEN` and `SQL_APPS_SECOND_USER_TOKEN` to short-lived delegated access tokens for two distinct users, then run `smoke`. For both users it reads the `FileJob` entity over REST and GraphQL through the gateway, so the gateway -> DAB -> SQL path, the database policy and the excluded `blob_key` field are all proven on the deployed environment. It then checks file roundtrip, cross-user file denial, function invocation, anonymous rejection of `/auth/me`, `/api/FileJob` and `/graphql`, and cleanup. It never persists tokens. Obtain tokens through your approved sign-in tooling; do not put them in the configuration file or shell history.
 
-The smoke creates uniquely named data/files and cleans them up on success/failure. Cleanup failures are reported, not ignored. It also checks direct private Function endpoint rejection, so run it from a trusted network-connected machine. It does not replace the other live acceptance steps below.
+The smoke reads data but does not write it: DAB grants the foundation entity read-only, so cross-user *row* isolation under writes remains a live acceptance step below. The smoke creates uniquely named files and cleans them up on success/failure. Cleanup failures are reported, not ignored. It also checks direct private Function endpoint rejection, so run it from a trusted network-connected machine. It does not replace the other live acceptance steps below.
 
 ## Live acceptance
 

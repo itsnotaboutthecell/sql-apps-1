@@ -118,7 +118,8 @@ async function saveDeployment(root: string, config: DeploymentConfig, stage: Dep
         dabPrincipalId: '55555555-5555-4555-8555-555555555555',
         gatewayPrincipalId: '66666666-6666-4666-8666-666666666666',
         gatewayName: 'fixture-gateway', gatewayUrl: 'https://fixture.invalid', functionsName: 'fixture-functions',
-        networkId: 'fixture-network', storageAccount: 'fixturestorage', vaultName: 'fixture-vault' } });
+        networkId: 'fixture-network', storageAccount: 'fixturestorage', vaultName: 'fixture-vault',
+        sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo', sqlAuditWorkspaceName: 'fixture-logs' } });
   `], { cwd: root });
 }
 

@@ -115,6 +115,8 @@ function harness(config: DemoPublicationConfig, failure?: 'image' | 'schema' | '
     sqlServerName: 'server', sqlHost: 'server.database.windows.net',
     databaseId: `/subscriptions/${config.subscriptionId}/resourceGroups/${config.resourceGroup}/providers/Microsoft.Sql/servers/server/databases/app`,
     databaseName: 'app', ownershipTags: { owner: 'tests' }, sqlBillingMode: config.sqlBillingMode,
+    logsWorkspaceId: `/subscriptions/${config.subscriptionId}/resourceGroups/${config.resourceGroup}/providers/Microsoft.OperationalInsights/workspaces/logs`,
+    logsWorkspaceName: 'logs',
   };
   const runtime = {
     applicationId: `/subscriptions/${config.subscriptionId}/resourceGroups/${config.resourceGroup}/providers/Microsoft.App/containerApps/${config.applicationName}`,

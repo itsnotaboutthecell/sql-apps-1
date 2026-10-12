@@ -34,6 +34,7 @@ const outputs = {
   gatewayPrincipalId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   gatewayName: 'app-gateway', gatewayUrl: 'https://data-app.azurecontainerapps.io',
   functionsName: '', networkId: '/network', storageAccount: '', vaultName: '',
+  sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo' as const, sqlAuditWorkspaceName: 'logs',
 } as const;
 const digest = `sha256:${'a'.repeat(64)}`;
 function runner(failRuntime = false) {

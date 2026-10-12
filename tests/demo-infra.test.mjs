@@ -22,13 +22,15 @@ test('compiled minimal foundation has reviewed SQL sizing, narrow networking and
   assert.deepEqual(resources.map(resource => resource.type).sort(), [
     'Microsoft.App/managedEnvironments',
     'Microsoft.ContainerRegistry/registries',
+    'Microsoft.Insights/diagnosticSettings',
     'Microsoft.ManagedIdentity/userAssignedIdentities',
     'Microsoft.Network/virtualNetworks',
+    'Microsoft.OperationalInsights/workspaces',
     'Microsoft.Sql/servers',
     'Microsoft.Sql/servers/databases',
     'Microsoft.Sql/servers/virtualNetworkRules',
   ].sort());
-  for (const field of ['sqlBillingMode', 'sqlSku', 'sqlMaxSizeBytes', 'sqlBackupRedundancy', 'location', 'tenantId', 'deploymentId', 'tags']) {
+  for (const field of ['sqlBillingMode', 'sqlSku', 'sqlMaxSizeBytes', 'sqlBackupRedundancy', 'location', 'tenantId', 'deploymentId', 'tags', 'securityPosture']) {
     assert.equal(Object.hasOwn(template.parameters[field], 'defaultValue'), false, `${field} must be explicit`);
   }
   const database = resources.find(resource => resource.type === 'Microsoft.Sql/servers/databases');
@@ -59,13 +61,27 @@ test('compiled minimal foundation has reviewed SQL sizing, narrow networking and
   for (const key of ['sql-apps-deployment', 'sql-apps-application', 'sql-apps-profile']) {
     assert.ok(JSON.stringify(template.variables.ownedTags).includes(key), `Missing ownership tag ${key}`);
   }
-  assert.equal(registry.properties.adminUserEnabled, true);
+  assert.equal(registry.properties.adminUserEnabled, "[variables('starterRegistry')]");
+  assert.deepEqual(template.parameters.securityPosture.allowedValues, ['starter', 'hardened']);
+  assert.equal(template.variables.starterRegistry, "[equals(parameters('securityPosture'), 'starter')]");
   assert.equal(resources.some(resource => resource.type === 'Microsoft.Authorization/roleAssignments'), false);
   assert.equal(registry.properties.policies.azureADAuthenticationAsArmPolicy.status, 'enabled');
   const environment = resources.find(resource => resource.type === 'Microsoft.App/managedEnvironments');
   assert.deepEqual(environment.properties.workloadProfiles, [{ name: 'Consumption', workloadProfileType: 'Consumption' }]);
-  assert.equal(environment.properties.appLogsConfiguration.destination, 'none');
-  for (const key of ['runtimeIdentityResourceId', 'runtimeIdentityClientId', 'runtimeIdentityPrincipalId', 'sqlServerId', 'databaseId', 'subnetId', 'registryId']) {
+  assert.equal(environment.properties.appLogsConfiguration.destination, 'azure-monitor');
+  const workspace = resources.find(resource => resource.type === 'Microsoft.OperationalInsights/workspaces');
+  assert.equal(workspace.properties.sku.name, 'PerGB2018');
+  assert.equal(workspace.properties.workspaceCapping.dailyQuotaGb, '[json(\'0.1\')]',
+    'The demo workspace must stay inside the free daily ingestion allowance');
+  assert.equal(workspace.properties.retentionInDays, "[parameters('logRetentionDays')]");
+  assert.equal(template.parameters.logRetentionDays.defaultValue, 30);
+  assert.equal(template.parameters.logRetentionDays.maxValue, 90,
+    'Retention beyond the included 31 days is billable; keep the reviewed ceiling');
+  assert.equal(workspace.properties.features.disableLocalAuth, true);
+  const diagnostics = resources.find(resource => resource.type === 'Microsoft.Insights/diagnosticSettings');
+  assert.match(JSON.stringify(diagnostics.properties.workspaceId), /workspaces/);
+  assert.deepEqual(diagnostics.properties.logs, [{ categoryGroup: 'allLogs', enabled: true }]);
+  for (const key of ['runtimeIdentityResourceId', 'runtimeIdentityClientId', 'runtimeIdentityPrincipalId', 'sqlServerId', 'databaseId', 'subnetId', 'registryId', 'logsWorkspaceId']) {
     assert.ok(template.outputs[key], `Missing exact tracked resource output ${key}`);
   }
   assert.doesNotMatch(JSON.stringify(template), /0\.0\.0\.0|listCredentials|Microsoft\.Graph|Microsoft\.Web|Microsoft\.Storage|privateEndpoints/);

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ApplicationError, composeApplication, type ApplicationAdapter, type ApplicationDefinition,
   type ApplicationProfile, type ProcedureParameters } from './application.js';
-import { newSessionToken, readSession, sessionCookie, sessionCookieName, sessionHash, sessionToken } from './demo-session.js';
+import { newSessionToken, readSession, sessionCookie, sessionCookieName, sessionHash, sessionMinutes, sessionToken } from './demo-session.js';
 
 export interface DemoOptions {
   profile: ApplicationProfile;
@@ -29,6 +29,9 @@ export async function createDemoApplication(
     throw new Error('Demo data service must be an internal loopback HTTP origin, never a public proxy');
   }
   const cookieName = sessionCookieName(options.origin, secure);
+  if (definition.limits.sessionMinutes !== sessionMinutes) {
+    throw new Error(`Selected application session lifetime (${definition.limits.sessionMinutes} minutes) does not match the issued session cookie lifetime (${sessionMinutes} minutes)`);
+  }
   const allowed = new Set(definition.procedures);
   for (const name of [...allowed, ...Object.values(definition.sessions)]) {
     if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name) || !allowed.has(name)) throw new Error('Invalid selected procedure allowlist');
@@ -80,9 +83,12 @@ export async function createDemoApplication(
         }
       });
       app.get('/api/application/config', async () => ({
-        profile: options.profile, syntheticDataOnly: true, sessionMinutes: 60,
-        itemLimit: 50, titleLimit: 200, mutationsPerMinute: 30,
-        globalSessionLimit: 1000, globalMutationsPerMinute: 300,
+        profile: options.profile, syntheticDataOnly: true,
+        sessionMinutes: definition.limits.sessionMinutes,
+        itemLimit: definition.limits.itemLimit, titleLimit: definition.limits.titleLimit,
+        mutationsPerMinute: definition.limits.mutationsPerMinute,
+        globalSessionLimit: definition.limits.globalSessionLimit,
+        globalMutationsPerMinute: definition.limits.globalMutationsPerMinute,
       }));
       app.post('/api/session', async (request, reply) => {
         if (!z.strictObject({ synthetic: z.literal(true) }).safeParse(request.body).success) {

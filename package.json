@@ -25,7 +25,7 @@
     "plugin:check": "node scripts/check-plugin.mjs",
     "plugin:install": "node scripts/install-plugin.mjs",
     "infra:build": "az bicep build --file infra/main.bicep --outfile dist/main.json",
-    "infra:test-demo": "node --test tests/demo-infra.test.mjs",
+    "infra:test-demo": "node --test tests/demo-infra.test.mjs tests/role-based-infra.test.mjs",
     "sql:build": "dotnet build sql/database.sqlproj --output dist/sql",
     "sql:tools": "dotnet tool restore",
     "dab:validate": "node dist/src/validate-dab.js"

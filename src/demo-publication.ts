@@ -100,6 +100,8 @@ const infrastructureSchema = z.strictObject({
   databaseName: z.literal('app'),
   ownershipTags: z.record(z.string(), z.string()),
   sqlBillingMode: z.enum(['free-paused', 'paid-reviewed']),
+  logsWorkspaceId: z.string().startsWith('/subscriptions/'),
+  logsWorkspaceName: z.string().min(1),
 });
 const pinnedImagesSchema = z.strictObject({
   gatewayImage: z.string().regex(/@sha256:[a-f0-9]{64}$/),
@@ -394,6 +396,7 @@ export async function publishDemo(
         sqlAdminObjectId: config.sqlAdminObjectId, sqlAdminName: config.sqlAdminName,
         sqlBillingMode: config.sqlBillingMode, sqlSku: config.sqlSku,
         sqlMaxSizeBytes: config.sqlMaxSizeBytes, sqlBackupRedundancy: config.sqlBackupRedundancy,
+        securityPosture: config.securityPosture,
       };
       const infrastructure = outputs(await runner('az', ['deployment', 'group', 'create',
         '--subscription', config.subscriptionId, '--resource-group', config.resourceGroup,

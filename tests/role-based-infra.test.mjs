@@ -16,8 +16,24 @@ test('compiled authorized profile gates excluded resources and retains private S
   assert.deepEqual(template.parameters.profile.allowedValues, ['foundation', 'role-based-data']);
   assert.equal(template.variables.fullFoundation, "[equals(parameters('profile'), 'foundation')]");
   for (const resource of template.resources.filter(resource =>
-    /Microsoft\.(Storage|Web|KeyVault|Insights)\//.test(resource.type))) {
+    /Microsoft\.(Storage|Web|KeyVault)\/|Microsoft\.Insights\/components/.test(resource.type))) {
     assert.equal(resource.condition, "[variables('fullFoundation')]", `Excluded resource ${resource.type} must be gated`);
+  }
+  const audit = template.resources.find(resource => resource.type === 'Microsoft.Sql/servers/auditingSettings');
+  assert.equal(audit.condition, undefined, 'SQL auditing must apply to both profiles');
+  assert.equal(audit.properties.state, 'Enabled');
+  assert.equal(audit.properties.isAzureMonitorTargetEnabled, true);
+  const auditLogs = template.resources.find(resource => resource.type === 'Microsoft.Insights/diagnosticSettings');
+  assert.equal(auditLogs.condition, undefined, 'SQL audit delivery must apply to both profiles');
+  assert.ok(auditLogs.properties.logs.some(entry => entry.category === 'SQLSecurityAuditEvents' && entry.enabled));
+  assert.match(JSON.stringify(auditLogs.properties.workspaceId), /workspaces/);
+  const retention = template.resources.find(resource => resource.type === 'Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies');
+  assert.equal(retention.properties.retentionDays, "[parameters('sqlBackupRetentionDays')]");
+  assert.equal(template.parameters.sqlBackupRetentionDays.defaultValue, 7);
+  assert.equal(template.parameters.sqlBackupRetentionDays.maxValue, 35);
+  assert.equal(template.parameters.sqlBackupRedundancy.defaultValue, 'Geo');
+  for (const key of ['sqlBackupRetentionDays', 'sqlBackupRedundancy', 'sqlAuditWorkspaceName']) {
+    assert.ok(template.outputs[key], `status must be able to report ${key}`);
   }
   for (const name of ['vault-endpoint', 'function-endpoint']) {
     assert.equal(template.resources.find(resource => resource.name === name).condition, "[variables('fullFoundation')]");

@@ -35,11 +35,16 @@ test('selected schema owns hashed visitor data separately from authenticated exa
   assert.doesNotMatch(project, /owner\.sql|FileJobs|Include=.*\.\./);
 });
 
-test('public demo SQL enforces global session and mutation limits under update locks', async () => {
+test('public demo SQL enforces the declared limits under update locks', async () => {
   const procedures = await readFile('examples/todo/demo/procedures.sql', 'utf8');
-  assert.match(procedures, /COUNT_BIG\(\*\)[\s\S]*DemoSessions[\s\S]*>=\s*1000[\s\S]*capacity/i);
+  const limits = application.limits;
+  assert.match(procedures, new RegExp(`COUNT_BIG\\(\\*\\)[\\s\\S]*DemoSessions[\\s\\S]*>=\\s*${limits.globalSessionLimit}[\\s\\S]*capacity`, 'i'));
   assert.match(procedures, /DemoLimits\s+WITH\s*\(UPDLOCK,\s*HOLDLOCK\)/i);
-  assert.match(procedures, /global_count\s*>=\s*300[\s\S]*rate_limited/i);
+  assert.match(procedures, new RegExp(`global_count\\s*>=\\s*${limits.globalMutationsPerMinute}[\\s\\S]*rate_limited`, 'i'));
+  assert.match(procedures, new RegExp(`@count\\s*>=\\s*${limits.mutationsPerMinute}\\s*SET @outcome = N'rate_limited'`, 'i'));
+  assert.match(procedures, new RegExp(`owner_session_hash = @token_hash\\)\\s*>=\\s*${limits.itemLimit}`, 'i'));
+  assert.match(procedures, new RegExp(`DATEADD\\(MINUTE,\\s*${limits.sessionMinutes},\\s*@now\\)`, 'i'));
+  assert.match(procedures, new RegExp(`nvarchar\\(${limits.titleLimit}\\)`, 'i'));
   const readiness = procedures.match(/CREATE PROCEDURE dbo\.DemoReadiness([\s\S]*?)\nGO/i)?.[1] ?? '';
   assert.match(readiness, /DemoLimits[\s\S]*id\s*=\s*1/i);
   assert.match(readiness, /THROW\s+51002/i);

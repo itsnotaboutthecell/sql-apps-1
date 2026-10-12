@@ -20,6 +20,9 @@ const outputSchema = z.object({
   networkId: z.string(),
   storageAccount: z.string(),
   vaultName: z.string(),
+  sqlBackupRetentionDays: z.number().int().min(1).max(35),
+  sqlBackupRedundancy: z.enum(['Local', 'Zone', 'Geo', 'GeoZone']),
+  sqlAuditWorkspaceName: z.string().min(1),
 });
 export type DeploymentOutputs = z.infer<typeof outputSchema>;
 export const functionRoleId = '15d91b1c-83c7-4cb6-b349-d7b8fd4b1425';

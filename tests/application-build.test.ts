@@ -42,6 +42,7 @@ export const application: ApplicationDefinition = {
     publicAcceptance:'tests/public-acceptance.ts'},
   procedures:['CreateSession','GetSession','DeleteSession','Readiness'],
   sessions:{create:'CreateSession',get:'GetSession',delete:'DeleteSession',ready:'Readiness'},
+  limits:{sessionMinutes:60,itemLimit:50,titleLimit:200,mutationsPerMinute:30,globalMutationsPerMinute:300,globalSessionLimit:1000},
   async register(app) {app.get('/api/inventory',async()=>({items:[]}));}
 };`);
   for (const [file, text] of [

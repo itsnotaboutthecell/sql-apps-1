@@ -11,7 +11,27 @@ import { z } from 'zod';
 
 const execute = promisify(execFile);
 const require = createRequire(import.meta.url);
-interface ImageFixture { directory: string; local: boolean }
+interface ImageFixture { directory: string; local: boolean; entry?: string }
+
+const buildCommands = new Map<string, (builder: string) => Promise<void>>([
+  ['RUN npx tsc --project tsconfig.runtime.json && npm prune --omit=dev', builder =>
+    isolated(builder, [require.resolve('typescript/lib/tsc.js'), '--project', 'tsconfig.runtime.json'])],
+  ['RUN npm run build && npm prune --omit=dev', async builder => {
+    const script = z.object({ scripts: z.object({ build: z.string().regex(/^node scripts\/[\w.-]+\.mjs$/) }) })
+      .parse(JSON.parse(await readFile(join(builder, 'package.json'), 'utf8'))).scripts.build;
+    await isolated(builder, [contained(builder, script.slice('node '.length))]);
+  }],
+]);
+
+async function isolated(builder: string, args: string[]): Promise<void> {
+  try {
+    await execute(process.execPath, args, { cwd: builder, windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+  } catch (cause) {
+    const stdout = cause instanceof Error && 'stdout' in cause && typeof cause.stdout === 'string' ? cause.stdout : '';
+    const stderr = cause instanceof Error && 'stderr' in cause && typeof cause.stderr === 'string' ? cause.stderr : '';
+    throw new Error(`Isolated image build failed:\n${stdout}${stderr}`, { cause });
+  }
+}
 
 function contained(root: string, path: string): string {
   const candidate = resolve(root, ...path.split('/'));
@@ -35,6 +55,7 @@ async function materializeFunctionsImage(
   await dependencyLink(join(builder, 'node_modules'));
   let stage = 0;
   let compiled = false;
+  let entry: string | undefined;
   const instructions = transform(await readFile(recipe, 'utf8')).replace(/\\\r?\n\s*/g, ' ').split(/\r?\n/);
   for (const instruction of instructions) {
     const line = instruction.trim();
@@ -44,20 +65,20 @@ async function materializeFunctionsImage(
     } else if (/^RUN\s/.test(line)) {
       assert.equal(stage, 1);
       if (line === 'RUN npm ci') continue;
-      assert.equal(line, 'RUN npx tsc --project tsconfig.runtime.json && npm prune --omit=dev');
-      try {
-        await execute(process.execPath, [require.resolve('typescript/lib/tsc.js'), '--project', 'tsconfig.runtime.json'],
-          { cwd: builder, windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
-      } catch (cause) {
-        const stdout = cause instanceof Error && 'stdout' in cause && typeof cause.stdout === 'string' ? cause.stdout : '';
-        const stderr = cause instanceof Error && 'stderr' in cause && typeof cause.stderr === 'string' ? cause.stderr : '';
-        throw new Error(`Isolated Functions compilation failed:\n${stdout}${stderr}`, { cause });
-      }
+      const action = buildCommands.get(line);
+      assert.ok(action, `Update this bounded fixture explicitly for the build command: ${line}`);
+      await action(builder);
       compiled = true;
+    } else if (/^CMD\s/.test(line)) {
+      const command = z.array(z.string()).parse(JSON.parse(line.slice(4).trim()));
+      assert.deepEqual(command.slice(0, 1), ['node'], 'Only a node entry point is replayed');
+      assert.equal(command.length, 2);
+      entry = command[1];
     } else if (/^COPY\s/.test(line)) {
       const args = line.slice(5).trim().split(/\s+/);
       const fromBuild = args[0] === '--from=build';
       if (fromBuild) args.shift();
+      if (args[0]?.startsWith('--chown=')) args.shift();
       assert.ok(args.every(arg => !arg.startsWith('--')), 'Unsupported COPY option');
       const destination = args.pop();
       assert.ok(destination && args.length);
@@ -87,13 +108,15 @@ async function materializeFunctionsImage(
   }
   assert.equal(stage, 2);
   assert.equal(compiled, true);
-  return { directory: image, local: basename(recipe) === 'local.Dockerfile' };
+  return { directory: image, local: basename(recipe) === 'local.Dockerfile', ...(entry ? { entry } : {}) };
 }
 
 async function assertImageModuleClosure(image: ImageFixture): Promise<void> {
-  const manifest = z.object({ main: z.string() })
+  const manifest = z.object({ main: z.string().optional() })
     .parse(JSON.parse(await readFile(join(image.directory, 'package.json'), 'utf8')));
-  const pending = [contained(image.directory, manifest.main)];
+  const start = image.entry ?? manifest.main;
+  assert.ok(start, 'The image must declare an entry point through CMD or package.json main');
+  const pending = [contained(image.directory, start)];
   if (image.local) {
     const collect = async (directory: string): Promise<void> => {
       for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -126,6 +149,20 @@ for (const name of ['local.Dockerfile', 'Dockerfile']) {
     await assertImageModuleClosure(image);
   });
 }
+
+test('the gateway image compiles from its own inputs and ships its entry-point closure', async t => {
+  const image = await materializeFunctionsImage(t, resolve('Dockerfile'));
+  assert.equal(image.entry, 'dist/src/server.js');
+  await assertImageModuleClosure(image);
+  for (const required of ['dist/src/server.js', 'public/app.js', 'package.json']) {
+    await readFile(contained(image.directory, required));
+  }
+});
+
+test('the gateway clean room cannot borrow an omitted source directory from the checkout', async t => {
+  await assert.rejects(materializeFunctionsImage(t, resolve('Dockerfile'), text =>
+    text.replace(/^COPY scripts \.\/scripts\r?$/m, '')), /Isolated image build failed/);
+});
 
 test('clean-room compiler cannot borrow an omitted script from the checkout', async t => {
   await assert.rejects(materializeFunctionsImage(t, resolve('functions', 'local.Dockerfile'), text =>

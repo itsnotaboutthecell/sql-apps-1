@@ -16,6 +16,7 @@ const outputs: DeploymentOutputs = {
   gatewayPrincipalId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   gatewayName: 'gateway', gatewayUrl: 'https://example.azurecontainerapps.io',
   functionsName: 'functions', networkId: '/network', storageAccount: 'storage', vaultName: 'vault',
+  sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo' as const, sqlAuditWorkspaceName: 'logs',
 };
 function fakeRunner(failSchema = false): { run: Run; calls: string[][] } {
   const calls: string[][] = [];

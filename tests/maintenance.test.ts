@@ -13,6 +13,7 @@ const state: DeploymentState = {
     dabPrincipalId: config.apiClientId, gatewayPrincipalId: config.apiClientId,
     gatewayName: 'gateway', gatewayUrl: 'https://gateway.example', functionsName: 'functions',
     storageAccount: 'storage', networkId: '/network', vaultName: 'vault',
+    sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo' as const, sqlAuditWorkspaceName: 'logs',
   },
 };
 test('image-only updates use native Azure commands without touching SQL', async () => {
