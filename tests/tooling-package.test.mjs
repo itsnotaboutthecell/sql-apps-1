@@ -52,6 +52,14 @@ before(async () => {
   await runNode([join(root, 'scripts', 'build-tooling-package.mjs')]);
 });
 
+test('tooling:pack uses a POSIX-portable package path', async () => {
+  const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+  assert.equal(
+    pkg.scripts['tooling:pack'],
+    'npm run tooling:build && npm run tooling:check && npm pack ./dist/tooling-package',
+  );
+});
+
 test('stages publishable package metadata with synchronized exact runtime dependencies', async () => {
   const [pkg, source, rootPackage] = await Promise.all([
     readFile(join(staged, 'package.json'), 'utf8').then(JSON.parse),
