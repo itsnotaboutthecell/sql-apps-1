@@ -9,8 +9,8 @@
   "scripts": {
     "build": "node scripts/build-provenance.mjs",
     "tooling:build": "node scripts/build-tooling-package.mjs",
-    "tooling:check": "npm run tooling:build && node scripts/check-tooling-package.mjs",
-    "tooling:pack": "npm run tooling:check && npm pack .\\dist\\tooling-package",
+    "tooling:check": "node scripts/check-tooling-package.mjs",
+    "tooling:pack": "npm run tooling:build && npm run tooling:check && npm pack .\\dist\\tooling-package",
     "app:check": "node scripts/check-application.mjs",
     "app:build": "node scripts/build-application.mjs",
     "app:check-api": "node scripts/check-application-api.mjs",

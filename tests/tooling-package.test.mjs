@@ -20,6 +20,19 @@ async function runNode(args, options = {}) {
   });
 }
 
+async function runNpm(args, options = {}) {
+  const command = process.platform === 'win32' ? process.env.ComSpec : 'npm';
+  const commandArgs = process.platform === 'win32'
+    ? ['/d', '/s', '/c', `npm ${args.join(' ')}`]
+    : args;
+  return execute(command, commandArgs, {
+    cwd: root,
+    windowsHide: true,
+    maxBuffer: 8 * 1024 * 1024,
+    ...options,
+  });
+}
+
 async function pathsBelow(directory) {
   const paths = [];
   async function visit(current) {
@@ -146,4 +159,16 @@ test('package tree validation rejects links', async t => {
 test('tooling package check validates npm dry-run contents', async () => {
   const result = await runNode([join(root, 'scripts', 'check-tooling-package.mjs')]);
   assert.match(result.stdout, /Tooling package checks passed/);
+});
+
+test('tooling:check rejects an unexpected staged file without removing it', async t => {
+  const unexpected = join(staged, 'unexpected.txt');
+  await writeFile(unexpected, 'unexpected');
+  t.after(() => rm(unexpected, { force: true }));
+
+  await assert.rejects(runNpm(['run', 'tooling:check']), error => {
+    assert.match(`${error.stdout}\n${error.stderr}`, /Unexpected top-level package path: unexpected\.txt/);
+    return true;
+  });
+  assert.equal(await readFile(unexpected, 'utf8'), 'unexpected');
 });
