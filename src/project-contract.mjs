@@ -86,6 +86,20 @@ async function inspectManifest(path) {
   return info;
 }
 
+export async function readBoundedManifestText(handle) {
+  const buffer = Buffer.allocUnsafe(MAX_MANIFEST_BYTES + 1);
+  let offset = 0;
+  while (offset < buffer.length) {
+    const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);
+    if (bytesRead === 0) break;
+    offset += bytesRead;
+  }
+  if (offset > MAX_MANIFEST_BYTES) {
+    throw projectError('PROJECT_MANIFEST_INVALID', 'Project manifest exceeds 16 KiB.');
+  }
+  return buffer.toString('utf8', 0, offset);
+}
+
 export async function readProjectManifest(root) {
   const home = await canonicalDirectory(root);
   const path = join(home, PROJECT_MANIFEST);
@@ -100,7 +114,7 @@ export async function readProjectManifest(root) {
         opened.dev !== inspected.dev || opened.ino !== inspected.ino) {
       throw projectError('PROJECT_PATH_UNSAFE', 'Project manifest changed while it was being opened.');
     }
-    const text = await handle.readFile('utf8');
+    const text = await readBoundedManifestText(handle);
     let value;
     try {
       value = JSON.parse(text);

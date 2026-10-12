@@ -8,6 +8,7 @@ import {
   PROJECT_MANIFEST,
   findProjectHome,
   parseProjectManifest,
+  readBoundedManifestText,
   readProjectManifest,
 } from '../src/project-contract.mjs';
 
@@ -114,6 +115,28 @@ test('rejects oversized and non-regular manifests', async t => {
   const nonRegular = await fixture(t);
   await mkdir(join(nonRegular, PROJECT_MANIFEST));
   await assert.rejects(readProjectManifest(nonRegular), { code: 'PROJECT_PATH_UNSAFE' });
+});
+
+test('bounds manifest reads before rejecting overflow', async () => {
+  const available = 16 * 1024 + 128;
+  let exposed = 0;
+  const handle = {
+    async read(buffer, offset, length) {
+      const bytesRead = Math.min(length, 1024, available - exposed);
+      buffer.fill(0x78, offset, offset + bytesRead);
+      exposed += bytesRead;
+      return { bytesRead, buffer };
+    },
+  };
+
+  await assert.rejects(
+    readBoundedManifestText(handle),
+    {
+      code: 'PROJECT_MANIFEST_INVALID',
+      message: 'Project manifest exceeds 16 KiB.',
+    },
+  );
+  assert.equal(exposed, 16 * 1024 + 1);
 });
 
 test('rejects linked manifests when the host supports links', async t => {
