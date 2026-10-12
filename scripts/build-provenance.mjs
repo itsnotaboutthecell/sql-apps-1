@@ -29,7 +29,17 @@ await copyFile(resolve(home, 'src', 'local-auth.mjs'), resolve(home, 'dist', 'sr
 await copyFile(resolve(home, 'src', 'role-based-rules.mjs'), resolve(home, 'dist', 'src', 'role-based-rules.mjs'));
 await copyFile(resolve(home, 'src', 'project-contract.mjs'), resolve(home, 'dist', 'src', 'project-contract.mjs'));
 await mkdir(resolve(home, 'dist', 'scripts'), { recursive: true });
-await copyFile(resolve(home, 'scripts', 'workspace-check.mjs'), resolve(home, 'dist', 'scripts', 'workspace-check.mjs'));
+for (const script of [
+  'build-provenance.mjs',
+  'setup.mjs',
+  'setup-check.mjs',
+  'guide.mjs',
+  'workspace-check.mjs',
+  'local-consent.mjs',
+  'check-application.mjs',
+]) {
+  await copyFile(resolve(home, 'scripts', script), resolve(home, 'dist', 'scripts', script));
+}
 await build({ absWorkingDir: home, entryPoints: { app: 'src/web/app.ts', 'auth/redirect': 'src/web/auth-redirect.ts' },
   bundle: true, format: 'esm', outdir: 'public' });
 await mkdir(resolve(home, 'dist', 'src', 'web'), { recursive: true });
