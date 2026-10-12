@@ -33,9 +33,9 @@ async function writeManifest(root, value = validManifest()) {
   await writeFile(join(root, PROJECT_MANIFEST), `${JSON.stringify(value)}\n`);
 }
 
-test('parses a valid version 1 manifest into a new normalized object', () => {
+test('parses a valid version 1 manifest into a new normalized object', async () => {
   const input = validManifest();
-  const parsed = parseProjectManifest(input);
+  const parsed = await parseProjectManifest(input);
   assert.deepEqual(parsed, input);
   assert.notEqual(parsed, input);
   assert.notEqual(parsed.tooling, input.tooling);
@@ -56,13 +56,13 @@ test('discovers the canonical project root from a nested directory', async t => 
   assert.equal(await findProjectHome(nested), await realpath(root));
 });
 
-test('rejects unknown manifest and tooling fields', () => {
-  assert.throws(
-    () => parseProjectManifest({ ...validManifest(), extra: true }),
+test('rejects unknown manifest and tooling fields', async () => {
+  await assert.rejects(
+    parseProjectManifest({ ...validManifest(), extra: true }),
     { code: 'PROJECT_MANIFEST_INVALID' },
   );
-  assert.throws(
-    () => parseProjectManifest({
+  await assert.rejects(
+    parseProjectManifest({
       ...validManifest(),
       tooling: { ...validManifest().tooling, extra: true },
     }),
@@ -70,20 +70,20 @@ test('rejects unknown manifest and tooling fields', () => {
   );
 });
 
-test('rejects an invalid UUID', () => {
-  assert.throws(
-    () => parseProjectManifest({ ...validManifest(), id: 'not-a-uuid' }),
+test('rejects an invalid UUID', async () => {
+  await assert.rejects(
+    parseProjectManifest({ ...validManifest(), id: 'not-a-uuid' }),
     { code: 'PROJECT_MANIFEST_INVALID' },
   );
 });
 
-test('rejects an invalid starter and profile pair', () => {
-  assert.throws(
-    () => parseProjectManifest({ ...validManifest(), starter: 'data', profile: 'foundation' }),
+test('rejects an invalid starter and profile pair', async () => {
+  await assert.rejects(
+    parseProjectManifest({ ...validManifest(), starter: 'data', profile: 'foundation' }),
     { code: 'PROJECT_MANIFEST_INVALID' },
   );
-  assert.throws(
-    () => parseProjectManifest({
+  await assert.rejects(
+    parseProjectManifest({
       ...validManifest(),
       starter: 'files-jobs',
       profile: 'role-based-data',
@@ -92,9 +92,9 @@ test('rejects an invalid starter and profile pair', () => {
   );
 });
 
-test('rejects a tooling version range', () => {
-  assert.throws(
-    () => parseProjectManifest({
+test('rejects a tooling version range', async () => {
+  await assert.rejects(
+    parseProjectManifest({
       ...validManifest(),
       tooling: { package: '@microsoft/sql-apps', version: '^1.2.3' },
     }),

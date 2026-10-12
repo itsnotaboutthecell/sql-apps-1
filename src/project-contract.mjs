@@ -25,7 +25,7 @@ function exactKeys(value, expected) {
   return keys.length === expected.length && keys.every(key => expected.includes(key));
 }
 
-export function parseProjectManifest(value) {
+export async function parseProjectManifest(value) {
   const invalid = message => { throw projectError('PROJECT_MANIFEST_INVALID', message); };
   if (!plainObject(value) || !exactKeys(value, manifestKeys)) invalid('Project manifest has an invalid shape.');
   if (value.version !== 1) invalid('Project manifest version must be 1.');
