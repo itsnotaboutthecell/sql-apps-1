@@ -3,7 +3,9 @@ import type { Run } from './process.js';
 
 const guid = z.string().uuid().transform(value => value.toLowerCase());
 export const demoTargetSchema = z.strictObject({
-  profile: z.literal('public-demo'), tenantId: guid, subscriptionId: guid,
+  profile: z.literal('public-demo'),
+  securityPosture: z.enum(['starter', 'hardened']),
+  tenantId: guid, subscriptionId: guid,
   resourceGroup: z.string().regex(/^[a-zA-Z0-9_().-]{1,90}$/).refine(value => !value.endsWith('.')),
   location: z.string().regex(/^[a-z][a-z0-9]{1,31}$/),
   staticWebAppLocation: z.string().regex(/^[a-z][a-z0-9]{1,31}$/).optional(),
@@ -20,13 +22,12 @@ export class DemoPreflightError extends Error {
     this.name = 'DemoPreflightError';
   }
 }
-const providers = {
+const baseProviders = {
   'Microsoft.App': ['managedEnvironments', 'containerApps'],
   'Microsoft.Sql': ['servers'],
   'Microsoft.Network': ['virtualNetworks'],
   'Microsoft.ContainerRegistry': ['registries'],
   'Microsoft.ManagedIdentity': ['userAssignedIdentities'],
-  'Microsoft.Authorization': ['roleAssignments'],
   'Microsoft.Web': ['staticSites', 'staticSites/linkedBackends'],
 } as const;
 
@@ -88,6 +89,9 @@ function actionMatches(pattern: string, action: string) {
 
 export async function preflightDemo(input: unknown, runner: Run, fetcher: typeof fetch = fetch) {
   const target = demoTargetSchema.parse(input);
+  const providers = target.securityPosture === 'hardened'
+    ? { ...baseProviders, 'Microsoft.Authorization': ['roleAssignments'] as const }
+    : baseProviders;
   const [cache, token] = await Promise.all([cacheEvidence(target, runner), tenantToken(target, runner)]);
   const subscriptionScope = `/subscriptions/${target.subscriptionId}`;
   const groupScope = `${subscriptionScope}/resourcegroups/${encodeURIComponent(target.resourceGroup)}`;
@@ -203,13 +207,14 @@ export async function preflightDemo(input: unknown, runner: Run, fetcher: typeof
     'Microsoft.Network/virtualNetworks/subnets/joinViaServiceEndpoint/action',
     'Microsoft.ManagedIdentity/userAssignedIdentities/assign/action',
     'Microsoft.ContainerRegistry/registries/scheduleRun/action', 'Microsoft.ContainerRegistry/registries/runs/read',
+    'Microsoft.ContainerRegistry/registries/listCredentials/action',
     'Microsoft.Web/staticSites/listSecrets/action',
     ...(group === null ? ['Microsoft.Resources/subscriptions/resourceGroups/write'] : [])];
   const missing = actions.filter(action => !permissions.some(permission =>
     permission.actions.some(pattern => actionMatches(pattern, action)) && !permission.notActions.some(pattern => actionMatches(pattern, action))));
   if (missing.length) throw new DemoPreflightError('WRITE_AUTHORIZATION_MISSING', `Effective scope permissions do not include: ${missing.join(', ')}. No resource operation was attempted.`);
   return {
-    version: 1 as const, target, cache, arm: { status: 'verified' as const },
+    version: 1 as const, target, securityPosture: target.securityPosture, cache, arm: { status: 'verified' as const },
     resourceGroup: { status: group === null ? 'requires-approved-creation' as const : 'exists' as const },
     providers: availableProviders, authorization: { status: 'eligible-for-what-if' as const },
     policy: { status: 'not-yet-evaluated' as const,
