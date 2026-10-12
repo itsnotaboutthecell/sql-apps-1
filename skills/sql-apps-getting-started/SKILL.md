@@ -5,7 +5,12 @@ description: Guide a beginner from an app idea to one verified local SQL Apps wo
 
 # SQL Apps
 
-Confirm the absolute SQL Apps application checkout before edits. Use its project-owned commands and leave other plugins unchanged.
+Confirm the absolute SQL Apps application project before edits. If the user is
+starting a new app or the resolved home is the foundation checkout, use the
+installed launcher's `projects create "<name>"` command first. Generated apps
+belong under the configured project root (`%USERPROFILE%\SqlAppsProjects` by
+default), never beside or inside the foundation/plugin checkout. Use the
+generated project's commands and leave other plugins unchanged.
 
 Follow **Describe -> Run locally -> Make it yours -> Share optionally**.
 

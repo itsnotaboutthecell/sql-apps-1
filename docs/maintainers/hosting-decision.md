@@ -27,6 +27,11 @@ the Node API. The Node API owns HttpOnly visitor sessions, request validation,
 procedure allowlisting and response validation. DAB is reachable only from the
 Node API over loopback and is never the public or linked backend.
 
+Linking installs the `Azure Static Web Apps (Linked)` identity provider on the
+Container App. That platform boundary, not the caller-controlled `Origin`
+header, denies direct backend requests. Publication verifies the boundary by
+calling the Container App URL directly and requiring HTTP 401 or 403.
+
 ## First-party constraints
 
 Microsoft's [API overview][api-overview], [Container Apps linked-backend

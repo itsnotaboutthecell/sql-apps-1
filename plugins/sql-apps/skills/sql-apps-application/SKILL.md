@@ -5,7 +5,13 @@ description: "Use when defining or implementing a domain-specific SQL Apps scree
 
 # Build the application
 
-Resolve `../../scripts/sql-apps.mjs` from this installed skill and run its absolute path with `home`. Confirm the intended application checkout before edits. `SQL_APPS_HOME` selects runtime code; it does not change the loaded skill.
+Resolve `../../scripts/sql-apps.mjs` from this installed skill and run its
+absolute path with `home`. Confirm the intended application project before
+edits. If `home` resolves to the SQL Apps foundation and the user is creating a
+new app, run `projects create "<name>"`, then work only in the generated
+project. Projects default to `%USERPROFILE%\SqlAppsProjects`; never implement a
+domain app inside or beside the foundation/plugin checkout. `SQL_APPS_HOME`
+selects runtime code; it does not change the loaded skill.
 
 This skill owns domain behavior. Use `sql-apps-local` for setup and startup, `sql-apps-validation` for acceptance, `sql-apps-design` for substantial visual work and `sql-apps-cloud-preview` for requested sharing.
 

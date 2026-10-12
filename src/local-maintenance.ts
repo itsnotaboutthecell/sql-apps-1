@@ -33,11 +33,11 @@ export async function maintainLocalJobs(
       const action = maintenanceAction(job, settings, now);
       if (action === 'recover') {
         const snapshot = files.getBlockBlobClient(`${localTenantId}/${oid}/jobs/${job.id}`);
-        const recovered = await tryWithJobSnapshotLease(snapshot, () =>
+        const recovered = await tryWithJobSnapshotLease(snapshot, signal =>
           jobs.update(oid, job.id, {
             status: 'failed',
             error: 'Job exceeded the recovery timeout; retry the saved snapshot when services are healthy',
-          }));
+          }, signal));
         if (recovered) result.recovered++;
       } else if (action === 'remove') {
         const removed = await deleteLocalJobSnapshot(jobs, files, localTenantId, oid, job.id);

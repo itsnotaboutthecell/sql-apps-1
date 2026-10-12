@@ -213,7 +213,8 @@ test('plugin launcher reports invalid bindings and commands rather than falling 
   t.after(() => rm(profile, { recursive: true, force: true }));
   await mkdir(join(profile, 'not-sql-apps'));
   await writeFile(join(profile, 'sql-apps-local.json'), '{ invalid');
-  await assert.rejects(probe('await resolveHome();', { COPILOT_HOME: profile, SQL_APPS_HOME: undefined }), /JSON|SyntaxError/);
+  await assert.rejects(probe('process.chdir(process.env.COPILOT_HOME); await resolveHome();',
+    { COPILOT_HOME: profile, SQL_APPS_HOME: undefined }), /JSON|SyntaxError/);
   await assert.rejects(probe('await resolveHome();', { SQL_APPS_HOME: join(profile, 'not-sql-apps') }), /ENOENT/);
   await assert.rejects(run(process.execPath, [launcher, 'deploy']), /Unsupported plugin command/);
   await assert.rejects(run(process.execPath, [launcher, 'verify', 'invalid;container']), /Invalid SQL container name/);

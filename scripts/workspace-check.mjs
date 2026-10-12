@@ -6,7 +6,7 @@ import { dirname, extname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const execute = promisify(execFile);
-const inputDirectories = ['src', 'functions/src', 'public', 'sql', 'dab', 'infra', 'scripts', 'plugins/sql-apps'];
+const inputDirectories = ['src', 'functions/src', 'public', 'sql', 'dab', 'infra', 'scripts'];
 const inputFiles = ['package.json', 'package-lock.json', 'application.json', 'runtime-contract.json',
   'tsconfig.json', 'tsconfig.runtime.json', 'Dockerfile', 'functions/Dockerfile', 'functions/local.Dockerfile',
   'functions/package.json', 'functions/local-package.json', 'functions/host.json', 'functions/local-host.json',
@@ -96,11 +96,12 @@ export async function inspectSource(value) {
     const pkg = JSON.parse(await readFile(join(home, 'package.json'), 'utf8'));
     const application = JSON.parse(await readFile(join(home, 'application.json'), 'utf8'));
     const contract = JSON.parse(await readFile(join(home, 'runtime-contract.json'), 'utf8'));
-    if (pkg.name !== 'sql-apps' || pkg.scripts?.local !== 'node dist/src/local-cli.js' ||
+    if ((pkg.name !== 'sql-apps' && pkg.sqlApps?.project !== true) || pkg.scripts?.local !== 'node dist/src/local-cli.js' ||
         !validApplication(application) || !validContract(contract)) {
       return { home, ready: false, code: 'SOURCE_INVALID', nextAction: 'Review the selected checkout application/runtime contract; do not copy another worktree implicitly.' };
     }
-    for (const file of ['src/local-cli.ts', 'src/workspace.mjs', 'sql/database.sqlproj', 'plugins/sql-apps/plugin.json']) {
+    for (const file of ['src/local-cli.ts', 'src/workspace.mjs', 'sql/database.sqlproj',
+      ...(pkg.name === 'sql-apps' ? ['plugins/sql-apps/plugin.json'] : [])]) {
       await readFile(join(home, file));
     }
     const inputs = await fingerprint(home, inputDirectories, inputFiles, true);

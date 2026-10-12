@@ -2,11 +2,30 @@
 
 Prepare your computer to build and run SQL Apps locally. You do not need an Azure subscription or Azure CLI login.
 
-## 1. Open the project
+## 1. Install the foundation and create a project
 
 On the repository page, choose **Code -> Download ZIP**, or clone it with Git. If it was shared with you, confirm which branch to use. For a ZIP download, extract it first.
 
-Open the folder containing `package.json`, `scripts` and `src` in your preferred editor, then open a terminal in that folder. In VS Code, these actions are **File -> Open Folder** and **Terminal -> New Terminal**. Only trust code from the intended source. Keep the project in a folder you own; local credentials and app data will be created later.
+Open a terminal in the trusted SQL Apps foundation folder, then create an
+independent application:
+
+```powershell
+npm run projects -- create "My App"
+```
+
+Projects default to `%USERPROFILE%\SqlAppsProjects` on Windows and
+`~/SqlAppsProjects` elsewhere. Change the root before creating projects when
+needed:
+
+```powershell
+npm run projects -- root "D:\SqlAppsProjects"
+```
+
+The create command refuses an existing destination, initializes a new Git
+repository and records the project as active. Open the generated folder
+containing `package.json`, `scripts` and `src` in your preferred editor. The
+foundation/plugin checkout remains separate and should not become an
+application. See [Manage projects](../reference/projects.md).
 
 You can ask your AI assistant:
 
@@ -53,7 +72,7 @@ If Docker reports socket permission denied, follow its [post-install guidance](h
 
 ## 3. Run the setup check
 
-From the project folder:
+From the generated project folder:
 
 ```powershell
 node scripts/setup-check.mjs

@@ -10,7 +10,11 @@ This walkthrough uses an equipment checkout app as an example. You can use the s
 
 ## 1. Describe the first useful version
 
-Open your intended project folder in your preferred editor. Give your AI assistant access to the project files and guides, then ask:
+Create or open an independent project as described in
+[Manage projects](../reference/projects.md), then open that project folder in
+your preferred editor. Do not implement the app in the SQL Apps
+foundation/plugin checkout. Give your AI assistant access to the project files
+and guides, then ask:
 
 > Help me build an equipment checkout app with SQL Apps. Ask me one question at a time about the people using it, the information it needs and what they should be able to do. Keep the first version small and local.
 

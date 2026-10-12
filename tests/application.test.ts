@@ -24,6 +24,10 @@ test('clean application validation rejects leftovers in each actual delivery sur
     await writeFile(join(root, file), 'COPY --from=build /app/dist/src ./dist/src');
   }
   assert.match(await run(process.execPath, [checker, root]), /Clean application passed/);
+  await writeFile(join(root, 'public/index.html'), '<title>Todo</title><h1>Todo</h1>');
+  assert.match(await run(process.execPath, [checker, root]), /Clean application passed/,
+    'a domain word alone is not evidence that the reference example was copied');
+  await writeFile(join(root, 'public/index.html'), '');
   const leftovers: [string, string][] = [
     ['src/client.ts', 'async listTodos() {}'],
     ['src/component.mjs', 'async listTodos() {}'],

@@ -229,6 +229,30 @@ test('dependency readiness validates all locked packages and the actual SQL tool
   assert.equal((await setup.inspectDependencies(home, probe)).npmReady, false);
 });
 
+test('CLI-only dependencies require their locked package and executable, not a library entry', async t => {
+  const home = await mkdtemp(join(tmpdir(), 'sql-apps-cli-dependencies-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await mkdir(join(home, 'node_modules', 'fixture', 'dist'), { recursive: true });
+  await mkdir(join(home, '.config'));
+  await writeFile(join(home, 'package.json'), JSON.stringify({ devDependencies: { fixture: '1.0.0' } }));
+  await writeFile(join(home, 'package-lock.json'), JSON.stringify({
+    packages: { '': { devDependencies: { fixture: '1.0.0' } }, 'node_modules/fixture': { version: '1.0.0' } },
+  }));
+  await writeFile(join(home, 'node_modules', 'fixture', 'package.json'),
+    '{"name":"fixture","version":"1.0.0","bin":{"fixture":"dist/cli.js"}}');
+  await writeFile(join(home, '.config', 'dotnet-tools.json'), JSON.stringify({
+    tools: { 'microsoft.sqlpackage': { version: '170.5.96', commands: ['sqlpackage'] } },
+  }));
+  const probe = async command => command === 'npm'
+    ? '{"dependencies":{"fixture":{"version":"1.0.0"}}}' : '170.5.96.0';
+  assert.equal((await setup.inspectDependencies(home, probe)).npmReady, false);
+  await writeFile(join(home, 'node_modules', 'fixture', 'dist', 'cli.js'), 'console.log("fixture");');
+  assert.equal((await setup.inspectDependencies(home, probe)).npmReady, true);
+  await writeFile(join(home, 'node_modules', 'fixture', 'package.json'),
+    '{"name":"fixture","version":"2.0.0","bin":{"fixture":"dist/cli.js"}}');
+  assert.equal((await setup.inspectDependencies(home, probe)).npmReady, false);
+});
+
 test('slow cold dependency probes are retried and never reported as missing dependencies', async t => {
   const home = await mkdtemp(join(tmpdir(), 'sql-apps-dependency-timeout-'));
   t.after(() => rm(home, { recursive: true, force: true }));

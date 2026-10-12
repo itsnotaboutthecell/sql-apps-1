@@ -15,9 +15,25 @@ SQL Apps gives you a working application foundation and guides for creating your
 
 These are ideas for your own application, not prebuilt templates. SQL Apps includes a separate [Todo reference app](examples/todo/README.md) if you want to try a concrete example first.
 
-## Start building
+## Create a project
 
-Open this project in your preferred editor and give your AI assistant access to the project files and guides. Ask:
+Keep this foundation checkout as the SQL Apps tool source. Create each application
+as an independent Git repository under your user project root (by default
+`%USERPROFILE%\SqlAppsProjects` on Windows):
+
+```powershell
+npm run projects -- create "Equipment Checkout"
+```
+
+The command creates `%USERPROFILE%\SqlAppsProjects\equipment-checkout`, records
+it as the active SQL Apps project and initializes its Git history. It refuses to
+merge into an existing folder. Use `npm run projects -- root D:\SqlAppsProjects`
+to choose another absolute root, `npm run projects -- list` to see registered
+projects, and `npm run projects -- open C:\path\to\project` to register an
+existing SQL Apps project.
+
+Open the generated project—not this foundation checkout—in your preferred editor
+and give your AI assistant access to that project. Ask:
 
 > Help me build an equipment checkout app with SQL Apps. Start by asking who will use it and what it should do. Help me run it locally, then make one useful change. Do not deploy it yet.
 
@@ -25,7 +41,7 @@ Replace equipment checkout with your idea. Follow [Build your app](docs/guides/b
 
 The journey is **Describe -> Run locally -> Make it yours -> Share optionally**.
 
-Already have Node installed? Check your setup from the project folder:
+Already have Node installed? Check your setup from the generated project folder:
 
 ```powershell
 node scripts/setup-check.mjs
@@ -39,7 +55,7 @@ For one connected setup journey, ask your assistant to use the [setup coordinato
 
 **Local first.** No Azure subscription is needed to run locally. You need Node 22 or 24, a .NET SDK, Docker with Linux containers, and access to the Azure SQL Database container. The container is in **private preview**: [request access](https://aka.ms/azuresqldb-container-signup) and read the [container documentation](https://aka.ms/azuresqldb-container). Initial package and image downloads require internet. Docker and your chosen AI provider have their own licensing/access conditions.
 
-**Your application.** Work with your AI assistant to implement and test its screens and SQL behavior using the existing foundation. This is not a one-command generator. The default foundation has no Todo screen or sample data; examples are selected explicitly.
+**Your application.** Work with your AI assistant to implement and test its screens and SQL behavior in its generated repository. The project factory creates the runtime foundation, not a finished domain app. The default project has no Todo screen or sample data; examples are selected explicitly.
 
 **A useful first result.** Run the app, create a record, reload it, and make a change such as adding a field or filter. A launch URL is usable only after the intended server responds. [Run locally](docs/guides/run-locally.md) explains startup paths, scoped approvals and how to keep your data between sessions.
 

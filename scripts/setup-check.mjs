@@ -289,8 +289,16 @@ export async function inspectDependencies(home, probe = (command, args) => runPr
       try {
         const installed = JSON.parse(await readFile(join(home, 'node_modules', ...name.split('/'), 'package.json'), 'utf8'));
         const version = lock.packages?.[`node_modules/${name}`]?.version;
-        const entry = require.resolve(name.startsWith('@types/') ? `${name}/package.json` : name);
-        await access(entry);
+        if (!installed.main && !installed.exports && installed.bin) {
+          const bins = typeof installed.bin === 'string' ? [installed.bin] : Object.values(installed.bin);
+          if (bins.length === 0 || bins.some(bin => typeof bin !== 'string' || !bin || bin.split(/[\\/]/).includes('..'))) {
+            throw new Error(`Invalid executable paths in ${name}`);
+          }
+          for (const bin of bins) await access(join(home, 'node_modules', ...name.split('/'), bin));
+        } else {
+          const entry = require.resolve(name.startsWith('@types/') ? `${name}/package.json` : name);
+          await access(entry);
+        }
         checks.push({ id: name, ready: typeof version === 'string' && installed.name === name && installed.version === version,
           code: installed.version === version ? 'PACKAGE_RESOLVED' : 'PACKAGE_VERSION_MISMATCH' });
       } catch (error) {

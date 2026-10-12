@@ -51,6 +51,11 @@ test('Static Web Apps reports its Standard fixed charge without estimating a pri
   });
 });
 
+test('paid candidate cost guidance includes the Static Web Apps Standard charge', async () => {
+  const reference = await readFile('docs/reference/demo-cost.md', 'utf8');
+  assert.match(reference, /Separately reviewing paid supporting resources[\s\S]*"hosting": "static-web-apps"/);
+});
+
 test('paid cost review requires an explicit acknowledgement even when SQL stays free-paused', () => {
   assert.equal(reviewDemoCost({ ...free, intent: 'review-paid-costs' }).review.status, 'fixed-charge-acknowledgement-required');
   const report = reviewDemoCost({ ...free, intent: 'review-paid-costs', acknowledgeFixedCharges: true });

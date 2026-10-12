@@ -12,17 +12,51 @@ export async function validateHome(value) {
   if (typeof value !== 'string' || !isAbsolute(value)) throw new Error('SQL Apps home must be an absolute checkout path');
   const root = await realpath(value);
   const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
-  if (pkg.name !== 'sql-apps' || pkg.scripts?.local !== 'node dist/src/local-cli.js') {
+  const foundation = pkg.name === 'sql-apps';
+  if ((!foundation && pkg.sqlApps?.project !== true) || pkg.scripts?.local !== 'node dist/src/local-cli.js') {
     throw new Error('The selected directory is not this SQL Apps application checkout');
   }
-  for (const file of ['src/local-cli.ts', 'sql/database.sqlproj', 'plugins/sql-apps/plugin.json']) await access(join(root, file));
+  for (const file of ['src/local-cli.ts', 'sql/database.sqlproj',
+    ...(foundation ? ['plugins/sql-apps/plugin.json'] : [])]) await access(join(root, file));
   return root;
 }
 
-export async function resolveHome() {
-  if (process.env.SQL_APPS_HOME !== undefined) return validateHome(process.env.SQL_APPS_HOME);
+async function activeProject(userHome) {
+  let state;
+  try { state = JSON.parse(await readFile(join(userHome, '.sql-apps', 'projects.json'), 'utf8')); }
+  catch (error) {
+    if (error.code === 'ENOENT') return undefined;
+    if (error instanceof SyntaxError) throw new Error('Invalid SQL Apps project registry; review it without resetting state.');
+    throw error;
+  }
+  if (state?.version !== 1 || (state.activeProject !== null && typeof state.activeProject !== 'string')) {
+    throw new Error('Invalid SQL Apps project registry; review it without resetting state.');
+  }
+  return state.activeProject ?? undefined;
+}
+
+export async function resolveHome(options = {}) {
+  const environment = options.environment ?? process.env;
+  const userHome = resolve(options.userHome ?? homedir());
+  if (environment.SQL_APPS_HOME !== undefined) return validateHome(environment.SQL_APPS_HOME);
+  let candidate = resolve(options.cwd ?? process.cwd());
+  let foundation;
+  while (true) {
+    try {
+      const pkg = JSON.parse(await readFile(join(candidate, 'package.json'), 'utf8'));
+      if (pkg.sqlApps?.project === true) return validateHome(candidate);
+      if (pkg.name === 'sql-apps') foundation = candidate;
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    const parent = dirname(candidate);
+    if (parent === candidate) break;
+    candidate = parent;
+  }
+  const active = await activeProject(userHome);
+  if (active !== undefined) return validateHome(active);
+  if (foundation !== undefined) return validateHome(foundation);
   let binding;
-  try { binding = await readFile(bindingPath(), 'utf8'); }
+  const configuredBinding = join(environment.COPILOT_HOME || join(userHome, '.copilot'), 'sql-apps-local.json');
+  try { binding = await readFile(configuredBinding, 'utf8'); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (binding !== undefined) {
     const config = JSON.parse(binding);
@@ -31,33 +65,60 @@ export async function resolveHome() {
     }
     return validateHome(config.home);
   }
-  let candidate = process.cwd();
-  while (true) {
-    try {
-      const pkg = JSON.parse(await readFile(join(candidate, 'package.json'), 'utf8'));
-      if (pkg.name === 'sql-apps') return validateHome(candidate);
-    } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    const parent = dirname(candidate);
-    if (parent === candidate) break;
-    candidate = parent;
-  }
   throw new Error('SQL Apps checkout not configured. Run npm run plugin:install there, or set SQL_APPS_HOME to its absolute path');
 }
 
-export async function workspaceReport(home) {
+async function resolveToolHome(options = {}) {
+  const environment = options.environment ?? process.env;
+  const userHome = resolve(options.userHome ?? homedir());
+  const configuredBinding = join(environment.COPILOT_HOME || join(userHome, '.copilot'), 'sql-apps-local.json');
+  let binding;
+  try { binding = JSON.parse(await readFile(configuredBinding, 'utf8')); }
+  catch (error) {
+    if (error.code === 'ENOENT') throw new Error('SQL Apps project creation requires an installed foundation binding. Run npm run plugin:install from the SQL Apps foundation checkout.');
+    if (error instanceof SyntaxError) throw new Error('Invalid SQL Apps local binding; rerun npm run plugin:install from the foundation checkout.');
+    throw error;
+  }
+  if (binding.version !== 1 || typeof binding.home !== 'string' ||
+      Object.keys(binding).some(key => !['version', 'home'].includes(key))) {
+    throw new Error('Invalid SQL Apps local binding; rerun npm run plugin:install from the foundation checkout.');
+  }
+  const home = await validateHome(binding.home);
+  const pkg = JSON.parse(await readFile(join(home, 'package.json'), 'utf8'));
+  if (pkg.name !== 'sql-apps') throw new Error('The installed SQL Apps binding must point to the foundation checkout, not an application project.');
+  return home;
+}
+
+export async function dispatchProjects(args, options = {}) {
+  const home = await resolveToolHome(options);
+  const projectMain = options.projectMain ??
+    (await import(pathToFileURL(join(home, 'scripts', 'projects.mjs')).href)).main;
+  return projectMain(args, home);
+}
+
+export async function workspaceReport(home, options = {}) {
   const inspector = join(home, 'scripts', 'workspace-check.mjs');
   try { await access(inspector); }
   catch (error) {
     throw new Error('Workspace preflight missing from the selected checkout; obtain the updated source before execution.', { cause: error });
   }
   const { checkWorkspace } = await import(pathToFileURL(inspector).href);
+  const environment = options.environment ?? process.env;
+  const userHome = resolve(options.userHome ?? homedir());
   let source = 'checkout';
-  if (process.env.SQL_APPS_HOME !== undefined) source = 'environment';
-  else {
-    try { await access(bindingPath()); source = 'installed-binding'; }
+  let explicit = false;
+  if (environment.SQL_APPS_HOME !== undefined) {
+    source = 'environment';
+    explicit = true;
+  } else if (await activeProject(userHome) === home) {
+    source = 'active-project';
+    explicit = true;
+  } else {
+    const configuredBinding = join(environment.COPILOT_HOME || join(userHome, '.copilot'), 'sql-apps-local.json');
+    try { await access(configuredBinding); source = 'installed-binding'; }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
-  return checkWorkspace({ home, activeDirectory: process.cwd(), bindingSource: source, explicitHome: source === 'environment' });
+  return checkWorkspace({ home, activeDirectory: options.cwd ?? process.cwd(), bindingSource: source, explicitHome: explicit });
 }
 
 export async function status(fetcher = fetch, origins = { app: 'http://127.0.0.1:18080', data: 'http://127.0.0.1:15000' }) {
@@ -86,10 +147,15 @@ const consentCommands = new Set(['consent-plan', 'consent-status', 'consent-gran
 
 export async function main(args = process.argv.slice(2)) {
   const [command = 'help', container = 'sql-apps-sql'] = args;
+  if (command === 'projects') {
+    if (args.length > 3) throw new Error('Usage: projects <root [absolute-path]|create <name>|list|open <absolute-path>>');
+    await dispatchProjects(args.slice(1));
+    return;
+  }
   const journey = command === 'setup';
   if (!journey && !consentCommands.has(command) && args.length > 2) throw new Error('Expected a command and its optional selection');
   if (command === 'help') {
-    console.log('SQL Apps local plugin: home | workspace-check | guide | guide-save <absolute-brief.json> | status | setup-check [existing-sql-container] | ' + [...commands].join(' | '));
+    console.log('SQL Apps local plugin: projects <root|create|list|open> | home | workspace-check | guide | guide-save <absolute-brief.json> | status | setup-check [existing-sql-container] | ' + [...commands].join(' | '));
     console.log('role-based-setup-check [existing-sql-container] checks only role-based-data service ports before build. Local commands use the configured checkout; no cloud deployment command is exposed.');
     console.log('Pre-build consent: consent-plan|consent-status|consent-run <operation> [selection] | consent-grant|consent-grant-once <absolute-plan.json> | consent-terms <absolute-reviewed-document> | consent-revoke [scope|terms]. Record only explicitly approved scopes.');
     console.log('Pre-build journey: setup plan|status|run|resume --profile foundation|role-based-data [--workspace <base-port|legacy>] [--json]; setup approval|approve --profile <profile> [--workspace <n>] [--approval <id>] is the one local approval; setup install-plan <tool> | setup install <absolute-reviewed-plan.json>. Install only after explicit approval.');

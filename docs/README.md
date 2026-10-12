@@ -17,6 +17,7 @@ To try something already implemented, use the [Todo reference app](../examples/t
 - [Local runtime](reference/local-development.md): services, workspace settings, diagnostics and recovery.
 - [Setup coordinator](reference/setup.md): connected first-run planning, approved tool installation and safe continuation.
 - [Remember local permissions](reference/local-consent.md): one setup approval covering restore, build, workspace, startup and SQL terms, reusable grants and revocation.
+- [Manage projects](reference/projects.md): create independent application repositories under the user-level SQL Apps project root.
 - [Authentication and application access](reference/authentication.md): account states, local preview, real Entra opt-in, access permissions and current/future hosting boundaries.
 - [Role-based-data profile](reference/role-based-data.md): SQL/DAB/browser startup, application-role authorization, matching costs and private SQL Azure deployment.
 - [Copilot plugin](reference/copilot-plugin.md): installation, binding and troubleshooting.

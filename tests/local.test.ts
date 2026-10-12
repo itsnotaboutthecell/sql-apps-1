@@ -264,3 +264,38 @@ for (const selection of ['legacy', 42000] as const) {
     assert.equal(engineChecks, 1);
   });
 }
+
+test('start-sql reports a preserved-volume password mismatch without resetting data', async t => {
+  const runtime = await localWorkspaceFixture(t, 42100);
+  let stateChecks = 0;
+  const started = startLocalSql(runtime.sqlContainer, async (_command, args) => {
+    const ownership = sqlOwnership(runtime, args);
+    if (ownership !== undefined) return ownership;
+    if (args[0] === 'ps') return runtime.sqlContainer;
+    if (args.includes('{{index .Config.Labels "sql-apps.local"}}')) return 'sql';
+    if (args[0] === 'start') return '';
+    if (args.includes('{{json .State}}')) {
+      if (stateChecks++) throw new Error('readiness retried after known password mismatch');
+      return JSON.stringify({ StartedAt: new Date(Date.now() - 10_000).toISOString(), Status: 'running' });
+    }
+    if (args.some(value => value.includes('stat -c %Y'))) return String(Math.floor(Date.now() / 1_000));
+    if (args[0] === 'exec') throw new Error('sqlcmd failed');
+    if (args[0] === 'logs') return "Login failed for user 'sa'. Reason: Password did not match that for the login provided.";
+    assert.fail(`Unexpected fixture command: ${args.join(' ')}`);
+  });
+  await assert.rejects(started, /password no longer matches the preserved SQL volume/);
+});
+
+test('start-sql preserves an orphaned owned volume instead of resetting its password', async t => {
+  const runtime = await localWorkspaceFixture(t, 42100);
+  const calls: string[][] = [];
+  await assert.rejects(startLocalSql(runtime.sqlContainer, async (_command, args) => {
+    calls.push([...args]);
+    if (args[0] === 'ps') return '';
+    const ownership = sqlOwnership(runtime, args);
+    if (ownership !== undefined) return ownership;
+    if (args[0] === 'run') throw new Error('unsafe container recreation attempted');
+    assert.fail(`Unexpected fixture command: ${args.join(' ')}`);
+  }), /Owned SQL volume exists without its credential-bearing container/);
+  assert.equal(calls.some(call => call[0] === 'run'), false);
+});

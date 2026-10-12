@@ -54,7 +54,7 @@ export function localServiceReadiness(connection: string, secret: string) {
     }),
   });
   return async (fetcher: typeof fetch, signal: AbortSignal): Promise<void> => {
-    await Promise.all([
+    const results = await Promise.allSettled([
       probeReadiness('blob', async () => {
         await Promise.all(['files', 'traces'].map(name =>
           blobs.getContainerClient(name).getProperties({ abortSignal: signal })));
@@ -71,6 +71,8 @@ export function localServiceReadiness(connection: string, secret: string) {
         expected.parse(await response.json());
       }),
     ]);
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
   };
 }
 

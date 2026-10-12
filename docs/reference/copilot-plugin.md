@@ -92,13 +92,30 @@ forwards arguments literally to the bound checkout's coordinator and retains
 source/binding checks. It does not change loaded skills, grant permissions,
 install another assistant, generate domain screens or deploy.
 
-The launcher resolves the runtime independently of the session's current project:
+The launcher resolves the application runtime in this order:
 
 1. Explicit `SQL_APPS_HOME` environment variable.
-2. Installer-created binding under `COPILOT_HOME` / `~/.copilot`.
-3. Current directory or an ancestor that is the validated application checkout.
+2. Current directory or an ancestor that is a validated SQL Apps project.
+3. Active project in `~/.sql-apps/projects.json`.
+4. Installer-created foundation binding under `COPILOT_HOME` / `~/.copilot`
+   for compatibility and project creation.
 
-Invalid explicit paths/bindings fail; they never silently fall back. This is important when the plugin is used from another repository or a plugin cache. Only one default checkout is bound per profile. To use another temporarily, set `SQL_APPS_HOME` to an absolute path. To move the default, review/edit just the `home` property of your binding and register the matching local marketplace explicitly; the installer will not overwrite it automatically.
+Invalid explicit paths/bindings fail; they never silently fall back. The
+installer binding identifies the trusted foundation that supplies the project
+factory. It does not require applications to live beside that checkout.
+
+Create and switch projects through the plugin:
+
+```powershell
+node "C:\git\sql-apps\plugins\sql-apps\scripts\sql-apps.mjs" projects root
+node "C:\git\sql-apps\plugins\sql-apps\scripts\sql-apps.mjs" projects create "Equipment Checkout"
+node "C:\git\sql-apps\plugins\sql-apps\scripts\sql-apps.mjs" projects list
+node "C:\git\sql-apps\plugins\sql-apps\scripts\sql-apps.mjs" projects open "C:\path\to\project"
+```
+
+`projects create` writes under `%USERPROFILE%\SqlAppsProjects` by default,
+creates an independent Git repository, excludes plugin/example implementation
+files and refuses an existing destination. See [Manage projects](projects.md).
 
 ```powershell
 node "C:\git\sql-apps\plugins\sql-apps\scripts\sql-apps.mjs" home

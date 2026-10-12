@@ -157,7 +157,7 @@ test('invalid application selection is rejected with a safe structured source er
   assert.equal(report.code, 'SOURCE_INVALID');
 });
 
-test('conflicting installed binding prevents runtime spawn until home is explicit', async t => {
+test('current project takes precedence over the foundation binding and explicit home still overrides it', async t => {
   const home = await fixture(t);
   const active = await fixture(t);
   const profile = await mkdtemp(join(tmpdir(), 'sql-apps binding-'));
@@ -165,10 +165,11 @@ test('conflicting installed binding prevents runtime spawn until home is explici
   await writeFile(join(profile, 'sql-apps-local.json'), JSON.stringify({ version: 1, home }));
   const { recordBuild } = await load();
   await recordBuild(home);
+  await recordBuild(active);
   const env = { ...process.env, COPILOT_HOME: profile };
   delete env.SQL_APPS_HOME;
-  await assert.rejects(execute(process.execPath, [launcher, 'verify'], { cwd: active, env }), error =>
-    /explicit runtime home/i.test(error.stderr) && !error.stdout.includes('EXECUTED'));
+  const current = await execute(process.execPath, [launcher, 'verify'], { cwd: active, env });
+  assert.match(current.stdout, /EXECUTED/);
   const selected = await execute(process.execPath, [launcher, 'verify'], {
     cwd: active, env: { ...env, SQL_APPS_HOME: home },
   });
