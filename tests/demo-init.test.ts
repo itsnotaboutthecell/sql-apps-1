@@ -197,6 +197,27 @@ test('atomic publication collision preserves the destination and removes its tem
   assert.deepEqual(await readdir(directory), ['publication.json']);
 });
 
+test('temporary name collision preserves the unowned file and does not publish', async t => {
+  const directory = resolve('.task-demo-temporary-collision-test');
+  const path = join(directory, 'publication.json');
+  const temporary = join(directory, 'existing.tmp');
+  const existing = Buffer.from([0x00, 0xff, 0x10, 0x80]);
+  await mkdir(directory, { recursive: true });
+  await writeFile(temporary, existing);
+  t.after(() => rm(directory, { recursive: true, force: true }));
+
+  await assert.rejects(
+    createJsonFile(path, { replacement: true }, () => temporary),
+    (error: NodeJS.ErrnoException) => error.code === 'EEXIST',
+  );
+
+  assert.deepEqual(await readFile(temporary), existing);
+  await assert.rejects(
+    readFile(path),
+    (error: NodeJS.ErrnoException) => error.code === 'ENOENT',
+  );
+});
+
 test('pre-publication write failure leaves no final file or temporary artifact', async t => {
   const directory = resolve('.task-demo-publication-write-failure-test');
   const path = join(directory, `${'x'.repeat(240)}.json`);

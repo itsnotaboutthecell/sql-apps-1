@@ -1,4 +1,4 @@
-import { link, mkdir, readFile, writeFile, rename, unlink, realpath } from 'node:fs/promises';
+import { link, mkdir, open, readFile, writeFile, rename, unlink, realpath } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -88,30 +88,56 @@ export async function saveJson(path: string, value: unknown): Promise<void> {
   }
 }
 
-export async function createJsonFile(path: string, value: unknown): Promise<void> {
+export async function createJsonFile(
+  path: string,
+  value: unknown,
+  temporaryPath: (destination: string) => string = destination => `${destination}.${randomUUID()}.tmp`,
+): Promise<void> {
   const content = serializeJson(value);
   await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.${randomUUID()}.tmp`;
+  const temporary = temporaryPath(path);
+  let temporaryFile: Awaited<ReturnType<typeof open>> | undefined;
+  let ownsTemporary = false;
   let publicationError: unknown;
   try {
-    await writeFile(temporary, content, { flag: 'wx', mode: 0o600 });
-    await link(temporary, path);
+    temporaryFile = await open(temporary, 'wx', 0o600);
+    ownsTemporary = true;
+    await temporaryFile.writeFile(content);
+    await temporaryFile.sync();
   } catch (error) {
     publicationError = error;
   }
-  let cleanupError: unknown;
-  try {
-    await unlink(temporary);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') cleanupError = error;
+  let closeError: unknown;
+  if (temporaryFile !== undefined) {
+    try {
+      await temporaryFile.close();
+    } catch (error) {
+      closeError = error;
+    }
   }
-  if (cleanupError !== undefined) {
+  if (publicationError === undefined && closeError === undefined) {
+    try {
+      await link(temporary, path);
+    } catch (error) {
+      publicationError = error;
+    }
+  }
+  let cleanupError: unknown;
+  if (ownsTemporary) {
+    try {
+      await unlink(temporary);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') cleanupError = error;
+    }
+  }
+  const errors = [publicationError, closeError, cleanupError].filter(error => error !== undefined);
+  if (errors.length > 1) {
     throw new AggregateError(
-      publicationError === undefined ? [cleanupError] : [publicationError, cleanupError],
-      `Failed to publish ${path} or remove its temporary file`,
+      errors,
+      `Failed to publish ${path}, close its temporary file, or remove the temporary entry`,
     );
   }
-  if (publicationError !== undefined) throw publicationError;
+  if (errors.length === 1) throw errors[0];
 }
 
 function serializeJson(value: unknown): string {
