@@ -32,6 +32,7 @@ If you choose to review paid supporting resources, use a local `azure-demo-cost.
 {
   "version": 1,
   "profile": "public-demo",
+  "hosting": "static-web-apps",
   "intent": "review-paid-costs",
   "sql": { "mode": "free-paused" },
   "acknowledgeFixedCharges": true

@@ -151,6 +151,11 @@ also lists what stays separate: tool installs, stop/recovery, maintenance and
 Azure. `approve` re-plans and refuses a stale id, so a changed plan must be shown
 again. `run` and `resume` themselves never record approvals. Existing matching
 grants are reused; see [Remember local permissions](local-consent.md).
+For `role-based-data`, this approval can be reviewed and recorded before
+`role-based-data.json`, DAB entities and procedures are complete. The coordinator
+may then restore dependencies, build and initialize the workspace, but it keeps
+the launch stage blocked with the specific configuration diagnostic until those
+domain inputs are valid.
 
 After a stop or a new session, resume without another approval:
 

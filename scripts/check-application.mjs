@@ -4,10 +4,12 @@ import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
 const sampleMarkers = [
-  /\b(?:Todo|Todos|TodoExampleClient|TodoOwnerPredicate|TodoOwnerPolicy)\b/,
+  /\b(?:TodoExampleClient|TodoOwnerPredicate|TodoOwnerPolicy)\b/,
   /\b(?:listTodos|createTodo|updateTodo|deleteTodo|parseTodo)\b/,
   /(?:todo-form|id=["']todos["']|No Todos yet|001-todos\.sql)/,
   /\btodos\s*[:({]/,
+  /(?:\bdbo\s*\.\s*Todos\b|\[\s*dbo\s*\]\s*\.\s*\[\s*Todos\s*\])/i,
+  /\/api\/Todo\b/,
   /examples[\\/]+todo/,
 ];
 
