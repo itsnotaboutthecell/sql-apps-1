@@ -21,7 +21,6 @@ test('compiled minimal foundation has reviewed SQL sizing, narrow networking and
   const resources = template.resources;
   assert.deepEqual(resources.map(resource => resource.type).sort(), [
     'Microsoft.App/managedEnvironments',
-    'Microsoft.Authorization/roleAssignments',
     'Microsoft.ContainerRegistry/registries',
     'Microsoft.ManagedIdentity/userAssignedIdentities',
     'Microsoft.Network/virtualNetworks',
@@ -55,11 +54,13 @@ test('compiled minimal foundation has reviewed SQL sizing, narrow networking and
   assert.equal(rule.properties.ignoreMissingVnetServiceEndpoint, false);
   const registry = resources.find(resource => resource.type === 'Microsoft.ContainerRegistry/registries');
   assert.equal(registry.sku.name, 'Basic', 'Cost review must reflect the actual fixed-charge registry');
-  assert.match(registry.name, /sqlappsdemo/);
+  assert.equal(registry.name, "[parameters('registryName')]");
+  assert.equal(Object.hasOwn(template.parameters.registryName, 'defaultValue'), false);
   for (const key of ['sql-apps-deployment', 'sql-apps-application', 'sql-apps-profile']) {
     assert.ok(JSON.stringify(template.variables.ownedTags).includes(key), `Missing ownership tag ${key}`);
   }
-  assert.equal(registry.properties.adminUserEnabled, false);
+  assert.equal(registry.properties.adminUserEnabled, true);
+  assert.equal(resources.some(resource => resource.type === 'Microsoft.Authorization/roleAssignments'), false);
   assert.equal(registry.properties.policies.azureADAuthenticationAsArmPolicy.status, 'enabled');
   const environment = resources.find(resource => resource.type === 'Microsoft.App/managedEnvironments');
   assert.deepEqual(environment.properties.workloadProfiles, [{ name: 'Consumption', workloadProfileType: 'Consumption' }]);
@@ -94,6 +95,20 @@ test('compiled runtime exposes an SWA-linked HTTPS gateway with internal DAB and
   assert.equal(app.properties.configuration.ingress.targetPort, 8080);
   assert.equal(Object.hasOwn(app.properties.configuration.ingress, 'additionalPortMappings'), false);
   assert.equal(app.properties.configuration.activeRevisionsMode, 'Single');
+  assert.deepEqual(template.parameters.securityPosture.allowedValues, ['starter', 'hardened']);
+  assert.equal(template.variables.starterRegistry, "[equals(parameters('securityPosture'), 'starter')]");
+  const registryConfiguration = JSON.stringify({
+    secrets: app.properties.configuration.secrets,
+    registries: app.properties.configuration.registries,
+  });
+  assert.match(registryConfiguration, /listCredentials/);
+  assert.match(registryConfiguration, /registry-password/);
+  assert.match(registryConfiguration, /passwordSecretRef/);
+  assert.match(registryConfiguration, /runtimeIdentity/);
+  assert.match(app.properties.configuration.registries,
+    /starterRegistry.*passwordSecretRef.*registry-password.*identity.*runtimeIdentityName/);
+  assert.doesNotMatch(JSON.stringify(template.parameters), /password|credential/i);
+  assert.doesNotMatch(JSON.stringify(template.outputs), /password|credential/i);
   assert.equal(app.properties.template.scale.minReplicas, 0);
   assert.equal(app.properties.template.scale.maxReplicas, 1);
   assert.deepEqual(app.properties.template.containers.map(container => container.name), ['gateway', 'data']);
@@ -133,5 +148,5 @@ test('compiled runtime exposes an SWA-linked HTTPS gateway with internal DAB and
   for (const key of ['publicUrl', 'backendUrl', 'staticWebAppName']) {
     assert.ok(template.outputs[key], `Missing runtime output ${key}`);
   }
-  assert.doesNotMatch(JSON.stringify(template), /passwordSecretRef|Simulator|Microsoft\.Graph|functionsImage/);
+  assert.doesNotMatch(JSON.stringify(template), /Simulator|Microsoft\.Graph|functionsImage/);
 });

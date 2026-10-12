@@ -2,11 +2,13 @@ import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { checkSelectedApplication, type ApplicationBuildManifest } from './application-build.js';
 import { preflightDemo } from './azure-preflight.js';
 import { reviewDemoCost } from './demo-cost.js';
+import {
+  acceptDemoRuntime, demoRuntimeSchema, deployDemoRuntime, verifyDemoRuntime,
+} from './demo-runtime.js';
 import { saveJson, withDeploymentLock } from './deployment.js';
 import type { Run } from './process.js';
 
@@ -25,6 +27,7 @@ const sku = z.strictObject({
 export const demoPublicationSchema = z.strictObject({
   version: z.literal(1),
   profile: z.literal('public-demo'),
+  securityPosture: z.literal('starter'),
   hosting: z.literal('static-web-apps'),
   name: z.string().regex(/^[a-z][a-z0-9-]{2,15}$/),
   subscriptionId: guid,
@@ -71,8 +74,10 @@ export const demoPublicationSchema = z.strictObject({
 });
 export type DemoPublicationConfig = z.infer<typeof demoPublicationSchema>;
 
-export const demoPublicationStages = ['artifacts', 'infrastructure', 'schema', 'backend', 'static', 'ready'] as const;
+export const demoPublicationStages = ['infrastructure', 'artifacts', 'schema', 'backend', 'static', 'ready'] as const;
 export type DemoPublicationStage = typeof demoPublicationStages[number];
+const demoPublicationStateStages = ['planned', ...demoPublicationStages] as const;
+type DemoPublicationStateStage = typeof demoPublicationStateStages[number];
 
 const infrastructureSchema = z.strictObject({
   environmentId: z.string().startsWith('/subscriptions/'),
@@ -96,15 +101,6 @@ const infrastructureSchema = z.strictObject({
   ownershipTags: z.record(z.string(), z.string()),
   sqlBillingMode: z.enum(['free-paused', 'paid-reviewed']),
 });
-const runtimeOutputSchema = z.strictObject({
-  applicationId: z.string().startsWith('/subscriptions/'),
-  publicUrl: z.string().url().refine(value => new URL(value).protocol === 'https:'),
-  backendUrl: z.string().url().refine(value => new URL(value).protocol === 'https:'),
-  staticWebAppName: z.string().min(1),
-});
-const runtimeSchema = runtimeOutputSchema.extend({
-  staticWebAppId: z.string().startsWith('/subscriptions/'),
-});
 const pinnedImagesSchema = z.strictObject({
   gatewayImage: z.string().regex(/@sha256:[a-f0-9]{64}$/),
   dabImage: z.string().regex(/@sha256:[a-f0-9]{64}$/),
@@ -113,16 +109,21 @@ const pinnedImagesSchema = z.strictObject({
 export const demoPublicationStateSchema = z.strictObject({
   version: z.literal(1),
   profile: z.literal('public-demo'),
-  stage: z.enum(demoPublicationStages),
+  securityPosture: z.enum(['starter', 'hardened', 'partially-hardened']),
+  registryAuthentication: z.enum(['credential', 'managed-identity']),
+  acrAdminEnabled: z.boolean(),
+  stage: z.enum(demoPublicationStateStages),
   workspaceHome: z.string().min(1),
   configHash: z.string().regex(/^[a-f0-9]{64}$/),
   artifactHash: z.string().regex(/^[a-f0-9]{64}$/),
   pinnedImages: pinnedImagesSchema.nullable(),
   infrastructure: infrastructureSchema.nullable(),
-  runtime: runtimeSchema.nullable(),
+  runtime: demoRuntimeSchema.nullable(),
   updatedAt: z.iso.datetime(),
 });
 export type DemoPublicationState = z.infer<typeof demoPublicationStateSchema>;
+export type DemoInfrastructure = z.infer<typeof infrastructureSchema>;
+export type DemoPinnedImages = z.infer<typeof pinnedImagesSchema>;
 
 export interface PublicationPlan {
   approval: string;
@@ -136,10 +137,12 @@ export interface PublicationPlan {
 
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 const parsedConfig = (input: DemoPublicationConfig) => demoPublicationSchema.parse(input);
-const stageIndex = (stage: DemoPublicationStage) => demoPublicationStages.indexOf(stage);
+const stageIndex = (stage: DemoPublicationStateStage) => demoPublicationStateStages.indexOf(stage);
 
-function currentBinding(config: DemoPublicationConfig) {
-  const parsed = parsedConfig(config);
+export type DemoPublicationPlanningInput =
+  Omit<DemoPublicationConfig, 'securityPosture'> & { securityPosture: 'starter' | 'hardened' };
+
+function currentBinding(parsed: DemoPublicationPlanningInput) {
   const workspaceHome = realpathSync('.');
   const artifact = resolve(parsed.selectedArtifact);
   const artifactManifest = readFileSync(join(artifact, 'application-build.json'));
@@ -161,20 +164,33 @@ function matchingState(state: DemoPublicationState | undefined, binding: ReturnT
     state.artifactHash === binding.artifactHash ? state : undefined;
 }
 
+function approvalId(binding: ReturnType<typeof currentBinding>, state?: DemoPublicationState) {
+  const matched = matchingState(state, binding);
+  const pending = demoPublicationStages.slice(matched ? stageIndex(matched.stage) : 0);
+  return hash(JSON.stringify({
+    version: 1, securityPosture: binding.parsed.securityPosture,
+    configHash: binding.configHash, artifactHash: binding.artifactHash,
+    workspaceHome: binding.workspaceHome, pending,
+  })).slice(0, 24);
+}
+
+export function demoPublicationApprovalId(
+  input: DemoPublicationPlanningInput, state?: DemoPublicationState,
+): string {
+  return approvalId(currentBinding(input), state);
+}
+
 export function planDemoPublication(
   config: DemoPublicationConfig, state?: DemoPublicationState,
 ): PublicationPlan {
-  const binding = currentBinding(config);
+  const binding = currentBinding(parsedConfig(config));
   const matched = matchingState(state, binding);
-  const pending = demoPublicationStages.slice(matched ? stageIndex(matched.stage) + 1 : 0);
-  const approval = hash(JSON.stringify({
-    version: 1, configHash: binding.configHash, artifactHash: binding.artifactHash,
-    workspaceHome: binding.workspaceHome, pending,
-  })).slice(0, 24);
+  const pending = demoPublicationStages.slice(matched ? stageIndex(matched.stage) : 0);
   return {
-    approval, pending: [...pending],
+    approval: approvalId(binding, state), pending: [...pending],
     review: [
       `Target: subscription ${binding.parsed.subscriptionId}, resource group ${binding.parsed.resourceGroup}, backend ${binding.parsed.location}, Static Web Apps ${binding.parsed.staticWebAppLocation}`,
+      'Security posture: Starter; ACR image pulls use an Azure-managed Container App secret until separately approved hardening',
       'Costs: paid fixed charges are acknowledged for review; actual regional/account pricing and grant consumption still require operator confirmation',
       `Images: publish or verify ${binding.parsed.gatewayImage} and ${binding.parsed.dabImage} from ${realpathSync(binding.parsed.selectedArtifact)}, then deploy immutable digests`,
       'Resources: managed identity, VNet/subnet, Container Apps environment, ACR Basic, Azure SQL, Static Web Apps Standard, and one linked two-container app',
@@ -182,7 +198,7 @@ export function planDemoPublication(
       'Cleanup: no automatic teardown; export required synthetic data, then separately approve deletion of only resources tagged with this deployment ID',
     ],
     excluded: [
-      'No real/customer data, production SLA, custom domain, paid SQL fallback, role assignment, or default-hosting change',
+      'No real/customer data, production SLA, custom domain, paid SQL fallback, production hardening, or default-hosting change',
       'No deployment token is accepted, printed, or persisted',
     ],
     warning: 'PUBLIC SYNTHETIC DEMO ONLY. Azure Static Web Apps Standard, ACR, networking, SQL, and runtime usage can incur charges.',
@@ -191,8 +207,8 @@ export function planDemoPublication(
 }
 
 export async function readDemoPublicationState(config: DemoPublicationConfig): Promise<DemoPublicationState> {
-  const binding = currentBinding(config);
-  const state = demoPublicationStateSchema.parse(JSON.parse(await readFile(demoPublicationStatePath(binding.parsed), 'utf8')));
+  const binding = currentBinding(parsedConfig(config));
+  const state = demoPublicationStateSchema.parse(JSON.parse(await readFile(demoPublicationStatePath(config), 'utf8')));
   if (!matchingState(state, binding)) {
     throw new Error('Publication state belongs to another workspace, configuration, or selected artifact');
   }
@@ -304,93 +320,6 @@ ${grants}
   if (manifest.name !== config.selectedApplication) throw new Error('Selected artifact application does not match publication configuration');
 }
 
-async function waitForBackend(publicUrl: string, backendUrl: string, fetcher: typeof fetch) {
-  for (let attempt = 0; attempt < 12; attempt++) {
-    try {
-      const response = await fetcher(new URL('/api/health/ready', publicUrl),
-        { signal: AbortSignal.timeout(5_000), redirect: 'error' });
-      if (response.ok) break;
-      if (![502, 503, 504].includes(response.status)) throw new Error(`Backend readiness returned ${response.status}`);
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith('Backend readiness returned')) throw error;
-      if (attempt === 11) throw new Error('Backend readiness did not become reachable');
-    }
-    if (attempt === 11) throw new Error('Backend readiness did not pass');
-    await new Promise(done => setTimeout(done, 5_000));
-  }
-  const denied = await fetcher(new URL('/api/session', backendUrl), {
-    method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://direct.invalid' },
-    body: JSON.stringify({ synthetic: true }), signal: AbortSignal.timeout(5_000), redirect: 'error',
-  });
-  if (![401, 403].includes(denied.status)) throw new Error(`Direct backend API was not denied (${denied.status})`);
-}
-
-async function verifyStaticContent(
-  publicUrl: string, artifact: string, fetcher: typeof fetch,
-) {
-  const expected = hash(await readFile(join(resolve(artifact), 'static', 'app.js')));
-  for (let attempt = 0; attempt < 12; attempt++) {
-    try {
-      const url = new URL('/app.js', publicUrl);
-      url.searchParams.set('sql-apps-verify', expected);
-      const response = await fetcher(url, { signal: AbortSignal.timeout(5_000), redirect: 'error' });
-      if (response.ok && hash(Buffer.from(await response.arrayBuffer())) === expected) return;
-      if (![404, 502, 503, 504].includes(response.status)) {
-        throw new Error(`Static content verification returned ${response.status}`);
-      }
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith('Static content verification returned')) throw error;
-      if (attempt === 11) throw new Error('Static content did not become reachable');
-    }
-    if (attempt === 11) throw new Error('Static content did not match the reviewed artifact');
-    await new Promise(done => setTimeout(done, 5_000));
-  }
-}
-
-async function publicAcceptance(
-  runtime: z.infer<typeof runtimeSchema>, artifact: string, fetcher: typeof fetch,
-) {
-  const origin = new URL(runtime.publicUrl).origin;
-  const request = (path: string, init: RequestInit = {}) => fetcher(new URL(path, origin), {
-    ...init, headers: { origin, ...init.headers }, signal: AbortSignal.timeout(10_000), redirect: 'error',
-  });
-  const home = await request('/');
-  if (!home.ok) throw new Error(`Static application returned ${home.status}`);
-  const started = await request('/api/session', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ synthetic: true }),
-  });
-  if (started.status !== 201) throw new Error(`Public session creation returned ${started.status}`);
-  const setCookie = started.headers.get('set-cookie');
-  const cookie = setCookie?.split(';', 1)[0];
-  if (!cookie || !/^__Host-sql_apps_session=/.test(cookie) ||
-      !setCookie || !/;\s*secure(?:;|$)/i.test(setCookie) || !/;\s*httponly(?:;|$)/i.test(setCookie) ||
-      !/;\s*samesite=strict(?:;|$)/i.test(setCookie) || !/;\s*path=\/(?:;|$)/i.test(setCookie)) {
-    throw new Error('Public session did not issue the expected secure cookie');
-  }
-  const foreignOrigin = await fetcher(new URL('/api/session', origin), {
-    method: 'POST', headers: { 'content-type': 'application/json', cookie, origin: 'https://foreign.invalid' },
-    body: JSON.stringify({ synthetic: true }), signal: AbortSignal.timeout(10_000), redirect: 'error',
-  });
-  if (foreignOrigin.status !== 403) throw new Error(`Foreign-origin mutation was not rejected (${foreignOrigin.status})`);
-  const forgedIdentity = await request('/api/session', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', cookie, 'x-ms-client-principal': 'forged', 'x-ms-api-role': 'anonymous' },
-    body: JSON.stringify({ synthetic: true }),
-  });
-  if (forgedIdentity.status !== 403) throw new Error(`Forged platform identity headers were not rejected (${forgedIdentity.status})`);
-  const ended = await request('/api/session', { method: 'DELETE', headers: { cookie } });
-  if (ended.status !== 204) throw new Error(`Public session cleanup returned ${ended.status}`);
-  const expired = await request('/api/session', { headers: { cookie } });
-  if (expired.status !== 401) throw new Error(`Deleted public session remained usable (${expired.status})`);
-  const acceptance = z.object({
-    acceptPublicApplication: z.custom<(origin: string, fetcher: typeof fetch) => Promise<void>>(
-      value => typeof value === 'function',
-    ),
-  }).parse(await import(pathToFileURL(join(resolve(artifact), 'acceptance', 'public.mjs')).href));
-  await acceptance.acceptPublicApplication(origin, fetcher);
-  await waitForBackend(runtime.publicUrl, runtime.backendUrl, fetcher);
-}
-
 export async function validateDemoPublication(
   config: DemoPublicationConfig,
 ): Promise<{ config: DemoPublicationConfig; manifest: ApplicationBuildManifest }> {
@@ -438,6 +367,7 @@ export async function publishDemo(
       profile: config.profile, tenantId: config.tenantId, subscriptionId: config.subscriptionId,
       resourceGroup: config.resourceGroup, location: config.location,
       staticWebAppLocation: config.staticWebAppLocation,
+      securityPosture: config.securityPosture,
     }, runner, fetcher);
     await runner('az', ['bicep', 'version']);
     await runner('dotnet', ['tool', 'run', 'sqlpackage', '--', '/Version']);
@@ -446,7 +376,9 @@ export async function publishDemo(
     });
 
     let state = matchingState(previous, binding) ?? demoPublicationStateSchema.parse({
-      version: 1, profile: 'public-demo', stage: 'artifacts', workspaceHome: binding.workspaceHome,
+      version: 1, profile: 'public-demo', securityPosture: 'starter',
+      registryAuthentication: 'credential', acrAdminEnabled: true,
+      stage: 'planned', workspaceHome: binding.workspaceHome,
       configHash: binding.configHash, artifactHash: binding.artifactHash,
       pinnedImages: null, infrastructure: null, runtime: null, updatedAt: new Date().toISOString(),
     });
@@ -454,15 +386,10 @@ export async function publishDemo(
       state = demoPublicationStateSchema.parse({ ...next, updatedAt: new Date().toISOString() });
       await saveJson(path, state);
     };
-    if (!previous) {
-      const pinnedImages = await publishImages(config, runner);
-      await assertArtifact();
-      await persist({ ...state, stage: 'artifacts', pinnedImages });
-    }
-    if (stageIndex(state.stage) < stageIndex('infrastructure')) {
-      if (!state.pinnedImages) throw new Error('Pinned image state is required before infrastructure');
+    if (state.stage === 'planned') {
       const parameters = {
         name: config.name, selectedApplication: config.selectedApplication, deploymentId: config.deploymentId,
+        registryName: config.registryServer.split('.')[0]!,
         location: config.location, tenantId: config.tenantId, tags: config.tags,
         sqlAdminObjectId: config.sqlAdminObjectId, sqlAdminName: config.sqlAdminName,
         sqlBillingMode: config.sqlBillingMode, sqlSku: config.sqlSku,
@@ -476,12 +403,18 @@ export async function publishDemo(
         '--query', 'properties.outputs', '-o', 'json',
       ]), infrastructureSchema);
       if (infrastructure.applicationName !== config.applicationName ||
+          infrastructure.registryName !== config.registryServer.split('.')[0] ||
           infrastructure.registryServer !== config.registryServer ||
           infrastructure.runtimeIdentityTenantId !== config.tenantId ||
           infrastructure.sqlBillingMode !== config.sqlBillingMode) {
         throw new Error('Provisioned foundation outputs do not match the reviewed publication target');
       }
       await persist({ ...state, stage: 'infrastructure', infrastructure });
+    }
+    if (stageIndex(state.stage) < stageIndex('artifacts')) {
+      const pinnedImages = await publishImages(config, runner);
+      await assertArtifact();
+      await persist({ ...state, stage: 'artifacts', pinnedImages });
     }
     if (stageIndex(state.stage) < stageIndex('schema')) {
       if (!state.infrastructure) throw new Error('Infrastructure state is required before schema publication');
@@ -491,30 +424,11 @@ export async function publishDemo(
     }
     if (stageIndex(state.stage) < stageIndex('backend')) {
       if (!state.infrastructure || !state.pinnedImages) throw new Error('Foundation and pinned images are required before backend deployment');
-      const parameters = {
-        applicationName: config.applicationName, selectedApplication: config.selectedApplication,
-        deploymentId: config.deploymentId, location: config.location,
-        staticWebAppLocation: config.staticWebAppLocation, tags: config.tags,
-        environmentName: state.infrastructure.environmentName,
-        runtimeIdentityName: state.infrastructure.runtimeIdentityName,
-        registryName: state.infrastructure.registryName, sqlServerName: state.infrastructure.sqlServerName,
-        databaseName: state.infrastructure.databaseName, staticWebAppName: config.staticWebAppName,
-        gatewayImage: state.pinnedImages.gatewayImage, dabImage: state.pinnedImages.dabImage,
-      };
-      const deployed = outputs(await runner('az', ['deployment', 'group', 'create',
-        '--subscription', config.subscriptionId, '--resource-group', config.resourceGroup,
-        '--name', `${config.name}-${config.deploymentId.slice(0, 8)}-runtime`,
-        '--template-file', 'infra/demo-runtime.bicep',
-        '--parameters', `@${await parameterFile(config, 'runtime', parameters)}`,
-        '--query', 'properties.outputs', '-o', 'json',
-      ]), runtimeOutputSchema);
-      const runtime = runtimeSchema.parse({
-        ...deployed,
-        staticWebAppId: `/subscriptions/${config.subscriptionId}/resourceGroups/${config.resourceGroup}` +
-          `/providers/Microsoft.Web/staticSites/${deployed.staticWebAppName}`,
-      });
-      if (runtime.staticWebAppName !== config.staticWebAppName) throw new Error('Runtime output selected another Static Web App');
-      await waitForBackend(runtime.publicUrl, runtime.backendUrl, fetcher);
+      const runtime = await deployDemoRuntime(
+        config, state.infrastructure, state.pinnedImages, config.securityPosture, runner,
+        parameters => parameterFile(config, 'runtime', parameters),
+      );
+      await verifyDemoRuntime(runtime, fetcher);
       await persist({ ...state, stage: 'backend', runtime });
     }
     if (stageIndex(state.stage) < stageIndex('static')) {
@@ -535,12 +449,12 @@ export async function publishDemo(
         },
         redact: [deploymentToken],
       });
-      await verifyStaticContent(state.runtime.publicUrl, config.selectedArtifact, fetcher);
+      await verifyDemoRuntime(state.runtime, fetcher, config.selectedArtifact);
       await persist({ ...state, stage: 'static' });
     }
     if (stageIndex(state.stage) < stageIndex('ready')) {
       if (!state.runtime) throw new Error('Static acceptance requires saved runtime outputs');
-      await publicAcceptance(state.runtime, config.selectedArtifact, fetcher);
+      await acceptDemoRuntime(state.runtime, config.selectedArtifact, fetcher);
       await persist({ ...state, stage: 'ready' });
     }
     return state;

@@ -6,6 +6,7 @@ import { run } from '../src/process.js';
 
 const target = {
   profile: 'public-demo' as const,
+  securityPosture: 'starter' as const,
   tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   subscriptionId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   resourceGroup: 'sql-apps-demo', location: 'eastus',
@@ -82,6 +83,33 @@ test('public demo preflight accepts actual tenant-scoped ARM access despite an e
   assert.ok(fake.calls.every(call => !call.includes('ad') && !call.includes('set') && !call.includes('login')));
 });
 
+test('starter preflight does not require role-assignment writes', async () => {
+  const fake = harness({ permissions: [{ actions: ['*'], notActions: ['Microsoft.Authorization/roleAssignments/write'] }] });
+  const result = await preflightDemo(target, fake.runner, fake.fetcher);
+  assert.equal(result.securityPosture, 'starter');
+  assert.equal(result.authorization.status, 'eligible-for-what-if');
+  assert.ok(!fake.requests.some(request => request.includes('/providers/Microsoft.Authorization?')));
+});
+
+test('starter preflight requires ACR credential listing', async () => {
+  const fake = harness({
+    permissions: [{ actions: ['*'], notActions: ['Microsoft.ContainerRegistry/registries/listCredentials/action'] }],
+  });
+  await assert.rejects(preflightDemo(target, fake.runner, fake.fetcher), error =>
+    error instanceof DemoPreflightError && error.code === 'WRITE_AUTHORIZATION_MISSING' &&
+    /listCredentials/.test(error.message));
+});
+
+test('hardened preflight requires role-assignment writes', async () => {
+  const fake = harness({ permissions: [{ actions: ['*'], notActions: ['Microsoft.Authorization/roleAssignments/write'] }] });
+  await assert.rejects(preflightDemo(
+    { ...target, securityPosture: 'hardened' },
+    fake.runner,
+    fake.fetcher,
+  ), error => error instanceof DemoPreflightError && error.code === 'WRITE_AUTHORIZATION_MISSING' &&
+    /roleAssignments/.test(error.message));
+});
+
 test('default-tenant discovery/Graph errors are separate evidence, not a revoked-login conclusion', async () => {
   const fake = harness({ cacheFailure: true, missingGroup: true });
   const result = await preflightDemo(target, fake.runner, fake.fetcher);
@@ -113,7 +141,6 @@ test('policy, ARM denial, provider availability, region and write authorization 
     [{ provider: 'Microsoft.Sql' }, 'PROVIDER_REGISTRATION_REQUIRED'],
     [{ wrongRegion: true }, 'REGION_UNSUPPORTED'],
     [{ permissions: [{ actions: ['*/read'], notActions: [] }] }, 'WRITE_AUTHORIZATION_MISSING'],
-    [{ permissions: [{ actions: ['*'], notActions: ['Microsoft.Authorization/roleAssignments/write'] }] }, 'WRITE_AUTHORIZATION_MISSING'],
     [{ permissions: [{ actions: ['*'], notActions: ['Microsoft.Sql/servers/firewallRules/delete'] }] }, 'WRITE_AUTHORIZATION_MISSING'],
     [{ permissions: [{ actions: ['*'], notActions: ['Microsoft.ManagedIdentity/userAssignedIdentities/assign/action'] }] }, 'WRITE_AUTHORIZATION_MISSING'],
     [{ permissions: [{ actions: ['*'], notActions: ['Microsoft.Network/virtualNetworks/subnets/joinViaServiceEndpoint/action'] }] }, 'WRITE_AUTHORIZATION_MISSING'],
@@ -130,6 +157,7 @@ test('profile and unknown target settings are rejected before Azure operations',
   for (const value of [
     { ...target, profile: 'authenticated-application' }, { ...target, location: 'eastus;injected' },
     { ...target, graph: true }, { ...target, subscriptionId: 'not-a-subscription' },
+    { ...target, securityPosture: 'automatic' },
   ]) {
     assert.equal(demoTargetSchema.safeParse(value).success, false);
     await assert.rejects(preflightDemo(value, fake.runner, fake.fetcher));

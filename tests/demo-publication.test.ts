@@ -4,7 +4,7 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildSelectedApplication } from '../src/application-build.js';
 import {
-  demoPublicationSchema, demoPublicationStatePath, planDemoPublication, publishDemo,
+  demoPublicationApprovalId, demoPublicationSchema, demoPublicationStatePath, planDemoPublication, publishDemo,
   readDemoPublicationState, validateDemoPublication, type DemoPublicationConfig,
 } from '../src/demo-publication.js';
 import type { Run } from '../src/process.js';
@@ -26,6 +26,7 @@ after(async () => {
 const base = {
   version: 1 as const,
   profile: 'public-demo' as const,
+  securityPosture: 'starter' as const,
   hosting: 'static-web-apps' as const,
   name: 'sqlapps',
   subscriptionId: '11111111-1111-4111-8111-111111111111',
@@ -66,17 +67,39 @@ test('publication configuration is strict, SWA-only, ACR-bound and carries compl
   ]) assert.equal(demoPublicationSchema.safeParse(value).success, false);
 });
 
+test('publication accepts only explicit Starter posture', () => {
+  const artifact = process.cwd();
+  assert.equal(demoPublicationSchema.safeParse({
+    ...base, selectedArtifact: artifact, securityPosture: 'starter',
+  }).success, true);
+  for (const securityPosture of [undefined, 'hardened', 'automatic']) {
+    assert.equal(demoPublicationSchema.safeParse({
+      ...base, selectedArtifact: artifact, securityPosture,
+    }).success, false);
+  }
+});
+
 test('review is read-only and approval binds configuration, artifact manifest and pending stages', async t => {
   const built = await buildSelectedApplication('.', 'todo', 'public-demo');
   t.after(() => rm(built.directory, { recursive: true, force: true }));
   const config = demoPublicationSchema.parse({ ...base, selectedArtifact: built.directory });
   await validateDemoPublication(config);
   const first = planDemoPublication(config);
-  assert.deepEqual(first.pending, ['artifacts', 'infrastructure', 'schema', 'backend', 'static', 'ready']);
+  assert.deepEqual(first.pending, ['infrastructure', 'artifacts', 'schema', 'backend', 'static', 'ready']);
   assert.match(first.warning, /PUBLIC SYNTHETIC DEMO ONLY/);
   assert.match(first.review.join('\n'), /Static Web Apps eastus2/);
+  assert.ok(first.review.includes(
+    'Security posture: Starter; ACR image pulls use an Azure-managed Container App secret until separately approved hardening',
+  ));
+  assert.ok(first.excluded.includes(
+    'No real/customer data, production SLA, custom domain, paid SQL fallback, production hardening, or default-hosting change',
+  ));
   assert.match(first.review.join('\n'), /temporarily allow only 203\.0\.113\.10/);
   assert.notEqual(first.approval, planDemoPublication({ ...config, staticWebAppName: 'sqlapps-demo-other' }).approval);
+  assert.notEqual(
+    demoPublicationApprovalId(config),
+    demoPublicationApprovalId({ ...config, securityPosture: 'hardened' }),
+  );
   const manifest = join(built.directory, 'application-build.json');
   const original = await readFile(manifest, 'utf8');
   await writeFile(manifest, `${original}\n`);
@@ -84,8 +107,9 @@ test('review is read-only and approval binds configuration, artifact manifest an
   await writeFile(manifest, original);
 });
 
-function harness(config: DemoPublicationConfig, failure?: 'schema' | 'backend' | 'static') {
+function harness(config: DemoPublicationConfig, failure?: 'image' | 'schema' | 'backend' | 'static') {
   const calls: string[][] = [];
+  const requests: string[] = [];
   const swaEnvironments: NodeJS.ProcessEnv[] = [];
   let sessions = 0;
   const deletedSessions = new Set<string>();
@@ -125,6 +149,7 @@ function harness(config: DemoPublicationConfig, failure?: 'schema' | 'backend' |
       return JSON.stringify({ accessToken: 'sql-sensitive-token' });
     }
     if (args[0] === 'acr' && args[1] === 'repository') return digest;
+    if (failure === 'image' && args[0] === 'acr' && args[1] === 'build') throw new Error('image rejected');
     if (args[0] === 'staticwebapp' && args[1] === 'secrets') return 'static-deployment-token-for-tests';
     if (args[0] === 'deployment' && args.includes('infra/demo.bicep')) return envelope(infrastructure);
     if (args[0] === 'deployment' && args.includes('infra/demo-runtime.bicep')) return envelope(runtime);
@@ -133,6 +158,7 @@ function harness(config: DemoPublicationConfig, failure?: 'schema' | 'backend' |
   };
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
+    requests.push(url.href);
     if (url.origin === 'https://management.azure.com') {
       if (url.pathname.endsWith('/locations')) return Response.json({ value: [
         { name: config.location, displayName: 'East US' },
@@ -201,7 +227,7 @@ function harness(config: DemoPublicationConfig, failure?: 'schema' | 'backend' |
     if (init?.method === 'DELETE') return new Response(null, { status: 204 });
     throw new Error(`Unexpected fetch ${url} ${init?.method ?? 'GET'}`);
   };
-  return { runner, fetcher, calls, swaEnvironments };
+  return { runner, fetcher, calls, requests, swaEnvironments };
 }
 
 async function cleanup(config: DemoPublicationConfig) {
@@ -221,13 +247,20 @@ test('publication is ordered, resumable, atomic, token-free and uses the local S
   const approval = planDemoPublication(config).approval;
   const state = await publishDemo(config, fake.runner, fake.fetcher, approval);
   assert.equal(state.stage, 'ready');
+  assert.equal(state.securityPosture, 'starter');
+  assert.equal(state.runtime?.staticWebAppName, config.staticWebAppName);
+  assert.equal(state.registryAuthentication, 'credential');
+  assert.equal(state.acrAdminEnabled, true);
+  assert.ok(fake.requests.some(request => new URL(request).pathname === '/api/todos'));
+  assert.ok(fake.requests.some(request => new URL(request).pathname === '/api/health/ready'));
   assert.deepEqual(planDemoPublication(config, state).pending, []);
+  assert.equal(fake.requests.some(request => request.includes('/providers/Microsoft.Authorization?')), false);
   const image = fake.calls.findIndex(call => call.includes('acr') && call.includes('build'));
   const infrastructure = fake.calls.findIndex(call => call.includes('infra/demo.bicep'));
   const schema = fake.calls.findIndex(call => call.includes('/Action:Publish'));
   const backend = fake.calls.findIndex(call => call.includes('infra/demo-runtime.bicep'));
   const staticDeploy = fake.calls.findIndex(call => call.includes('swa') && call.includes('deploy'));
-  assert.ok(image < infrastructure && infrastructure < schema && schema < backend && backend < staticDeploy);
+  assert.ok(infrastructure < image && image < schema && schema < backend && backend < staticDeploy);
   const firewallCreate = fake.calls.findIndex(call => call.includes('firewall-rule') && call.includes('create'));
   const firewallDelete = fake.calls.findIndex(call => call.includes('firewall-rule') && call.includes('delete'));
   assert.ok(firewallCreate < schema && schema < firewallDelete && firewallDelete < backend);
@@ -245,20 +278,64 @@ test('publication is ordered, resumable, atomic, token-free and uses the local S
     AZURE_SUBSCRIPTION_ID: '',
   }]);
   const saved = await readFile(demoPublicationStatePath(config), 'utf8');
-  assert.doesNotMatch(saved, /token|credential/i);
+  assert.doesNotMatch(saved, /token|password|static-deployment-token-for-tests/i);
   assert.equal((await readDemoPublicationState(config)).workspaceHome, process.cwd());
+  const infrastructureParameters = JSON.parse(
+    await readFile(`${demoPublicationStatePath(config)}.infrastructure.parameters.json`, 'utf8'),
+  );
+  assert.equal(infrastructureParameters.parameters.registryName.value, 'example');
   const runtimeParameters = JSON.parse(await readFile(`${demoPublicationStatePath(config)}.runtime.parameters.json`, 'utf8'));
+  assert.deepEqual(Object.fromEntries(Object.entries(runtimeParameters.parameters)
+    .filter(([name]) => ['applicationName', 'environmentName', 'runtimeIdentityName', 'registryName',
+      'sqlServerName', 'databaseName', 'staticWebAppName'].includes(name))
+    .map(([name, parameter]) => [name, (parameter as { value: unknown }).value])), {
+    applicationName: config.applicationName,
+    environmentName: 'env',
+    runtimeIdentityName: 'runtime',
+    registryName: 'example',
+    sqlServerName: 'server',
+    databaseName: 'app',
+    staticWebAppName: config.staticWebAppName,
+  });
   assert.equal(runtimeParameters.parameters.staticWebAppLocation.value, config.staticWebAppLocation);
+  assert.equal(runtimeParameters.parameters.securityPosture.value, 'starter');
+  assert.equal(JSON.stringify(runtimeParameters).includes('password'), false);
+  assert.equal(JSON.stringify(runtimeParameters).includes('credential'), false);
   const before = fake.calls.length;
   await publishDemo(config, fake.runner, fake.fetcher, planDemoPublication(config, state).approval);
   assert.equal(fake.calls.slice(before).some(call => call.includes('deployment') || call.includes('build')), false);
+});
+
+test('image failure retains infrastructure and resumes without redeploying the foundation', async t => {
+  const built = await buildSelectedApplication('.', 'todo', 'public-demo');
+  t.after(() => rm(built.directory, { recursive: true, force: true }));
+  const config = demoPublicationSchema.parse({ ...base, selectedArtifact: built.directory,
+    deploymentId: '14141414-1414-4141-8141-141414141414' });
+  t.after(() => cleanup(config));
+  const failed = harness(config, 'image');
+  await assert.rejects(
+    publishDemo(config, failed.runner, failed.fetcher, planDemoPublication(config).approval),
+    /image rejected/,
+  );
+  const infrastructureState = await readDemoPublicationState(config);
+  assert.equal(infrastructureState.stage, 'infrastructure');
+  assert.ok(infrastructureState.infrastructure);
+  assert.equal(infrastructureState.pinnedImages, null);
+
+  const resumed = harness(config);
+  const state = await publishDemo(
+    config, resumed.runner, resumed.fetcher, planDemoPublication(config, infrastructureState).approval,
+  );
+  assert.equal(state.stage, 'ready');
+  assert.equal(resumed.calls.some(call => call.includes('infra/demo.bicep')), false);
+  assert.equal(resumed.calls.some(call => call.includes('acr') && call.includes('build')), true);
 });
 
 test('schema, backend, and static verification failures block all later publication stages', async t => {
   const built = await buildSelectedApplication('.', 'todo', 'public-demo');
   t.after(() => rm(built.directory, { recursive: true, force: true }));
   for (const [failure, deploymentId, lastStage] of [
-    ['schema', '99999999-9999-4999-8999-999999999999', 'infrastructure'],
+    ['schema', '99999999-9999-4999-8999-999999999999', 'artifacts'],
     ['backend', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'schema'],
     ['static', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'backend'],
   ] as const) {
