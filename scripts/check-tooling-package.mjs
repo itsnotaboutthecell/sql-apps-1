@@ -8,6 +8,27 @@ const execute = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const staged = join(root, 'dist', 'tooling-package');
 const excluded = new Set(['.git', '.sql-apps', 'examples', 'tests', 'node_modules', 'plugins']);
+const requiredTrees = ['bin', 'dist', 'assets'];
+
+async function validateRequiredTrees(pkg, directory) {
+  if (!Array.isArray(pkg.files) ||
+      pkg.files.length !== requiredTrees.length ||
+      requiredTrees.some(tree => !pkg.files.includes(tree))) {
+    throw new Error(`Invalid package files: expected ${requiredTrees.join(', ')}.`);
+  }
+  for (const tree of pkg.files) {
+    let info;
+    try {
+      info = await lstat(join(directory, tree));
+    } catch (error) {
+      if (error.code === 'ENOENT') throw new Error(`Missing required package tree: ${tree}`);
+      throw error;
+    }
+    if (!info.isDirectory() || info.isSymbolicLink()) {
+      throw new Error(`Invalid required package tree: ${tree}`);
+    }
+  }
+}
 
 export async function validatePackageTree(directory = staged) {
   const paths = [];
@@ -40,6 +61,7 @@ export async function checkToolingPackage() {
   if (pkg.name !== '@microsoft/sql-apps' || pkg.private !== undefined) {
     throw new Error('Invalid staged tooling package metadata.');
   }
+  await validateRequiredTrees(pkg, staged);
   await validatePackageTree(staged);
 
   await execute(process.execPath, [join(staged, 'bin', 'sql-apps.mjs'), '--help'], {

@@ -54,6 +54,7 @@ export async function main(args = process.argv.slice(2), cwd = process.cwd()) {
   const target = await commandTarget(command);
   const { findProjectHome } = await import('../dist/src/project-contract.mjs');
   const projectHome = await findProjectHome(cwd);
+  process.chdir(projectHome);
   await runTarget(target, commandArgs, projectHome, specifier => import(specifier));
 }
 

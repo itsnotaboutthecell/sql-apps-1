@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { lstat, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -138,6 +138,44 @@ test('bin help is project-independent and its validated command map targets pack
   }
 });
 
+test('bin dispatches from the project root when invoked in a nested directory', async t => {
+  const fixture = await mkdtemp(join(tmpdir(), 'sql-apps-bin-project-'));
+  t.after(() => rm(fixture, { recursive: true, force: true }));
+  const packageRoot = join(fixture, 'package');
+  const project = join(fixture, 'project');
+  const nested = join(project, 'one', 'two');
+  await Promise.all([
+    mkdir(join(packageRoot, 'bin'), { recursive: true }),
+    mkdir(join(packageRoot, 'dist', 'src'), { recursive: true }),
+    mkdir(join(packageRoot, 'dist', 'scripts'), { recursive: true }),
+    mkdir(nested, { recursive: true }),
+  ]);
+  await Promise.all([
+    copyFile(join(staged, 'bin', 'sql-apps.mjs'), join(packageRoot, 'bin', 'sql-apps.mjs')),
+    copyFile(
+      join(staged, 'dist', 'src', 'project-contract.mjs'),
+      join(packageRoot, 'dist', 'src', 'project-contract.mjs'),
+    ),
+    writeFile(
+      join(packageRoot, 'dist', 'scripts', 'setup.mjs'),
+      'console.log(JSON.stringify({ cwd: process.cwd(), home: process.env.SQL_APPS_PROJECT_HOME }));\n',
+    ),
+    writeFile(join(project, '.sql-apps-project.json'), `${JSON.stringify({
+      version: 1,
+      id: 'b91d4857-9570-4d4b-a740-918471ca7e26',
+      name: 'Nested Project',
+      slug: 'nested-project',
+      starter: 'data',
+      profile: 'role-based-data',
+      scaffoldVersion: 1,
+      tooling: { package: '@microsoft/sql-apps', version: '0.1.1' },
+    })}\n`),
+  ]);
+
+  const result = await runNode([join(packageRoot, 'bin', 'sql-apps.mjs'), 'setup'], { cwd: nested });
+  assert.deepEqual(JSON.parse(result.stdout), { cwd: project, home: project });
+});
+
 test('package tree validation rejects links', async t => {
   const fixture = await mkdtemp(join(tmpdir(), 'sql-apps-package-link-'));
   t.after(() => rm(fixture, { recursive: true, force: true }));
@@ -171,4 +209,20 @@ test('tooling:check rejects an unexpected staged file without removing it', asyn
     return true;
   });
   assert.equal(await readFile(unexpected, 'utf8'), 'unexpected');
+});
+
+test('tooling:check rejects missing package.json files trees without rebuilding', async () => {
+  for (const tree of ['bin', 'dist', 'assets']) {
+    const source = join(staged, tree);
+    const held = `${staged}-${tree}-${Date.now()}`;
+    await rename(source, held);
+    try {
+      await assert.rejects(runNpm(['run', 'tooling:check']), error => {
+        assert.match(`${error.stdout}\n${error.stderr}`, new RegExp(`Missing required package tree: ${tree}`));
+        return true;
+      });
+    } finally {
+      await rename(held, source);
+    }
+  }
 });
