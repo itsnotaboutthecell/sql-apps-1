@@ -36,6 +36,7 @@ async function commandTarget(command) {
 
 async function runTarget(target, commandArgs, projectHome, load) {
   process.env.SQL_APPS_PROJECT_HOME = projectHome;
+  process.env.SQL_APPS_TOOLING_HOME = packageHome;
   process.argv = [process.execPath, target, ...commandArgs];
   await load(pathToFileURL(target).href);
 }

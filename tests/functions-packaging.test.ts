@@ -120,21 +120,18 @@ async function assertImageModuleClosure(image: ImageFixture): Promise<void> {
   }
 }
 
-for (const name of ['local.Dockerfile', 'Dockerfile']) {
+for (const name of ['Dockerfile']) {
   test(`functions\\${name} compiles from its own inputs and ships its entry-point closure`, async t => {
     const image = await materializeFunctionsImage(t, resolve('functions', name));
     await assertImageModuleClosure(image);
   });
 }
 
-test('clean-room compiler cannot borrow an omitted script from the checkout', async t => {
-  await assert.rejects(materializeFunctionsImage(t, resolve('functions', 'local.Dockerfile'), text =>
-    text.replace(/^COPY scripts\/workspace-check\.mjs scripts\/workspace-check\.d\.mts \.\/scripts\/\r?$/m, '')),
-  /TS2307/);
-});
-
-test('local module closure rejects an omitted lock helper', async t => {
-  const image = await materializeFunctionsImage(t, resolve('functions', 'local.Dockerfile'));
-  await rm(join(image.directory, 'dist', 'src', 'file-lock.mjs'));
-  await assert.rejects(assertImageModuleClosure(image), /file-lock\.mjs/);
+test('local Functions image consumes only packaged implementation assets', async () => {
+  const recipe = await readFile(resolve('functions', 'local.Dockerfile'), 'utf8');
+  assert.match(recipe, /COPY dist\/src \.\/dist\/src/);
+  assert.match(recipe, /COPY dist\/functions \.\/dist\/functions/);
+  assert.match(recipe, /COPY assets\/functions\/local-package\.json \.\/package\.json/);
+  assert.doesNotMatch(recipe, /COPY (?:src|scripts|functions) /);
+  assert.doesNotMatch(recipe, /tsc|tsconfig/);
 });

@@ -8,6 +8,7 @@ import { main as consentRun } from './local-consent.mjs';
 import { planConsent, planBundle, grantBundle } from '../src/local-consent.mjs';
 import { readLocalAuthentication, localAuthenticationMatches } from '../src/local-auth.mjs';
 import { runtimeFor, proposeWorkspace } from '../src/workspace.mjs';
+import { projectHome, toolingHome } from '../src/tooling-context.mjs';
 
 const profiles = ['foundation', 'role-based-data'];
 
@@ -215,8 +216,13 @@ export async function launchSetup(home, operation, container, runtime, profile, 
   if (!source.ready || !source.build.ready) throw new Error('Local startup requires verified current build provenance.');
   const environment = injected.environment ?? process.env;
   const authentication = readLocalAuthentication(environment);
-  const child = (injected.spawn ?? spawn)(process.execPath, [join(home, 'dist', 'src', 'local-cli.js'), operation, ...(container ? [container] : [])],
-    { cwd: home, shell: false, windowsHide: true, stdio: ['inherit', 2, 2], env: environment });
+  const tools = source.toolingHome ?? home;
+  const childEnvironment = source.toolingHome
+    ? { ...environment, SQL_APPS_PROJECT_HOME: home, SQL_APPS_TOOLING_HOME: tools }
+    : environment;
+  const child = (injected.spawn ?? spawn)(process.execPath, [join(tools, 'dist', 'src', 'local-cli.js'), operation, ...(container ? [container] : [])],
+    { cwd: home, shell: false, windowsHide: true, stdio: ['inherit', 2, 2],
+      env: childEnvironment });
   let stopped = false;
   const completion = new Promise((done, reject) => {
     child.once('error', error => { stopped = true; reject(error); });
@@ -316,7 +322,15 @@ export function renderSetup(report) {
   return lines;
 }
 
-export async function main(args = process.argv.slice(2), home = process.cwd()) {
+export async function main(args = process.argv.slice(2), home) {
+  if (home === undefined) {
+    try { home = await projectHome(); }
+    catch (error) {
+      const tools = await toolingHome(import.meta.url);
+      if (error.code !== 'PROJECT_NOT_FOUND' || tools !== resolve(join(import.meta.dirname, '..'))) throw error;
+      home = process.cwd();
+    }
+  }
   const { command, options, selection } = parseSetupArguments(args);
   if (command === 'help') {
     console.log('SQL Apps setup: plan|status|run|resume [--profile foundation|role-based-data] [--workspace <base-port|legacy>] [--container <name>] [--json]');

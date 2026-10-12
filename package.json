@@ -20,7 +20,7 @@
     "workspace:check": "node scripts/workspace-check.mjs",
     "consent": "node scripts/local-consent.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && tsc && npm run app:check && node --test dist/tests/*.test.js tests/setup.test.mjs tests/setup-install.test.mjs tests/setup-journey.test.mjs tests/guide.test.mjs tests/workspace.test.mjs tests/workspace-runtime.test.mjs tests/local-consent.test.mjs tests/project-contract.test.mjs tests/tooling-package.test.mjs && node scripts/test-examples.mjs",
+    "test": "npm run build && tsc && npm run app:check && node --test dist/tests/*.test.js tests/setup.test.mjs tests/setup-install.test.mjs tests/setup-journey.test.mjs tests/guide.test.mjs tests/workspace.test.mjs tests/workspace-runtime.test.mjs tests/local-consent.test.mjs tests/project-contract.test.mjs tests/tooling-package.test.mjs tests/tooling-project-runtime.test.mjs && node scripts/test-examples.mjs",
     "start": "node dist/src/server.js",
     "azure": "node dist/src/cli.js",
     "local": "node dist/src/local-cli.js",

@@ -65,7 +65,7 @@ async function deliveryFiles(home: string): Promise<string[]> {
 export async function checkSelectedApplication(
   home: string, directory: string, profile: ApplicationProfile,
 ): Promise<ApplicationBuildManifest> {
-  const source = await inspectSource(home);
+  const source = await inspectSource(home, { foundation: true });
   const runtime = runtimeFor(undefined, source.home);
   const manifest = manifestSchema.parse(JSON.parse(await checkedFile(directory, 'application-build.json').then(value => value.toString('utf8'))));
   const base = join(runtime.stateDirectory, 'applications');
@@ -84,7 +84,7 @@ export async function checkSelectedApplication(
 
 export async function buildSelectedApplication(home: string, name: string, profile: ApplicationProfile) {
   if (!selection.safeParse(name).success) throw new Error('Invalid application selection');
-  const source = await inspectSource(home);
+  const source = await inspectSource(home, { foundation: true });
   if (!source.ready || !source.fingerprint) throw new Error(`Selected source preflight failed: ${source.code}`);
   home = source.home;
   const runtime = runtimeFor(undefined, home);
@@ -234,7 +234,7 @@ USER node
 EXPOSE 8080
 CMD ["node","server/start.mjs"]
 `);
-      const current = await inspectSource(home);
+      const current = await inspectSource(home, { foundation: true });
       if (current.fingerprint !== source.fingerprint || JSON.stringify(await snapshots(home, sources.map(item => item.path))) !== JSON.stringify(sources)) {
         throw new Error('Selected source changed during build; no artifact was published');
       }

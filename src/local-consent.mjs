@@ -3,6 +3,8 @@ import { lstat, readFile, realpath, readdir, mkdir, writeFile, rename, unlink } 
 import { join, isAbsolute, relative } from 'node:path';
 import { runtimeFor, readWorkspace, describeWorkspace } from './workspace.mjs';
 import { withFileLock } from './file-lock.mjs';
+import { readProjectManifest } from './project-contract.mjs';
+import { toolingHome } from './tooling-context.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const launchOperations = { foundation: 'app', 'role-based-data': 'role-based-app' };
@@ -119,6 +121,27 @@ async function inputHashes(home, paths) {
   return hashes;
 }
 
+async function consentInputs(home) {
+  try {
+    const project = await readProjectManifest(home);
+    const tools = await toolingHome(import.meta.url);
+    const pkg = JSON.parse(await regularFile(join(tools, 'package.json')));
+    return { generated: true, tools, packaged: pkg.name === '@microsoft/sql-apps', version: project.tooling.version };
+  } catch (error) {
+    if (!['PROJECT_MANIFEST_INVALID', 'PROJECT_PATH_UNSAFE'].includes(error.code)) throw error;
+    return { generated: false, tools: home, packaged: false, version: null };
+  }
+}
+
+function toolingInput(path, packaged) {
+  if (!packaged) return path;
+  if (path.startsWith('src/') && path.endsWith('.ts')) return `dist/${path.slice(0, -3)}.js`;
+  if (path === 'functions/src') return 'dist/functions/src';
+  if (path.startsWith('functions/')) return `assets/${path}`;
+  if (path.startsWith('scripts/')) return `dist/${path}`;
+  return path;
+}
+
 async function requirementsFor(home, request, proposed) {
   object(request, ['operation', 'selection'], 'consent request');
   const { operation, selection } = request;
@@ -132,9 +155,22 @@ async function requirementsFor(home, request, proposed) {
     throw new Error('app-test takes no container selection; it tests the selected workspace gateway');
   }
   const requirements = [];
+  const context = await consentInputs(home);
   let artifact;
   const add = async (scope, target, effects, paths = [], reusable = true, artifactPaths = []) => {
-    const inputs = await inputHashes(home, paths);
+    const projectPaths = context.generated
+      ? paths.filter(path => !path.startsWith('src/') && !path.startsWith('scripts/') && !path.startsWith('functions/'))
+      : paths;
+    const implementationPaths = context.generated
+      ? paths.filter(path => path.startsWith('src/') || path.startsWith('scripts/') || path.startsWith('functions/'))
+        .map(path => toolingInput(path, context.packaged))
+      : [];
+    const inputs = await inputHashes(home, projectPaths);
+    if (context.generated) {
+      inputs.push(['tooling/version', digest(context.version)]);
+      inputs.push(...(await inputHashes(context.tools, ['package.json', ...implementationPaths]))
+        .map(([name, hash]) => [`tooling/${name}`, hash]));
+    }
     if (artifactPaths.length) {
       inputs.push(['artifact-contract', digest(JSON.stringify({
         name: artifact.name, profile: artifact.profile, capabilities: artifact.capabilities,
@@ -148,7 +184,7 @@ async function requirementsFor(home, request, proposed) {
   const restore = () => add('restore', home, ['Restore npm and SQL tool dependencies; downloads and local disk writes.'],
     ['package.json', 'package-lock.json', '.config/dotnet-tools.json']);
   const build = () => add('build', home, ['Compile project runtime, browser and SQL artifacts; local disk writes.'],
-    ['package.json', 'scripts/build-provenance.mjs', 'tsconfig.runtime.json']);
+    ['package.json', 'scripts/build-provenance.mjs', context.generated ? 'tsconfig.json' : 'tsconfig.runtime.json']);
   if (operation === 'restore' || operation === 'build') {
     if (selection !== undefined) throw new Error(`${operation} takes no selection`);
     await (operation === 'restore' ? restore() : build());

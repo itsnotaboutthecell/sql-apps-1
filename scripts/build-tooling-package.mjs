@@ -2,6 +2,7 @@ import { lstat, mkdir, readdir, realpath, rm, copyFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inspectSource } from './workspace-check.mjs';
+import { withFileLock } from '../src/file-lock.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, 'dist', 'tooling-package');
@@ -49,13 +50,15 @@ async function copyEntry(source, destination) {
   await copyFile(source, destination);
 }
 
-export async function buildToolingPackage() {
+async function stageToolingPackage(destination) {
   const canonicalRoot = await realpath(root);
-  const expected = join(canonicalRoot, 'dist', 'tooling-package');
-  if (resolve(output) !== expected) throw new Error('Tooling package output path changed unexpectedly.');
+  const expected = resolve(destination);
+  if (dirname(expected) !== join(canonicalRoot, 'dist')) {
+    throw new Error('Tooling package output must be a direct child of dist.');
+  }
   assertContained(canonicalRoot, expected);
 
-  const source = await inspectSource(canonicalRoot);
+  const source = await inspectSource(canonicalRoot, { toolingHome: canonicalRoot, foundation: true });
   if (!source.ready || !source.build?.ready) {
     throw new Error(`A successful current root build is required (${source.build?.code ?? source.code}).`);
   }
@@ -80,6 +83,11 @@ export async function buildToolingPackage() {
     await copyEntry(join(canonicalRoot, asset), join(expected, 'assets', asset));
   }
   console.log(`Tooling package staged at ${expected}`);
+}
+
+export async function buildToolingPackage(destination = output) {
+  const target = resolve(destination);
+  return withFileLock(`${target}-build.lock`, () => stageToolingPackage(target), 600);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

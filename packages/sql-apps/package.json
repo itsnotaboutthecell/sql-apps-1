@@ -10,7 +10,8 @@
     "sql-apps": "bin/sql-apps.mjs"
   },
   "exports": {
-    "./project-contract": "./dist/src/project-contract.mjs"
+    "./project-contract": "./dist/src/project-contract.mjs",
+    "./tooling-context": "./dist/src/tooling-context.mjs"
   },
   "files": [
     "bin",

@@ -53,7 +53,10 @@ export async function readState(config: DeploymentConfig): Promise<DeploymentSta
 
 export async function deploymentConfigHash(config: DeploymentConfig): Promise<string> {
   const hash = createHash('sha256').update(JSON.stringify(config));
-  if (config.profile === 'role-based-data') hash.update(await realpath('.')).update(await roleBasedSchemaFingerprint());
+  if (config.profile === 'role-based-data') {
+    const home = await realpath(process.env.SQL_APPS_PROJECT_HOME ?? '.');
+    hash.update(home).update(await roleBasedSchemaFingerprint(home));
+  }
   return hash.digest('hex');
 }
 

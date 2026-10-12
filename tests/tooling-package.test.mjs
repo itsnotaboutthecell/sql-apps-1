@@ -83,6 +83,7 @@ test('stages publishable package metadata with synchronized exact runtime depend
     assert.deepEqual(candidate.engines, { node: '>=22 <23 || >=24 <25' });
     assert.deepEqual(candidate.exports, {
       './project-contract': './dist/src/project-contract.mjs',
+      './tooling-context': './dist/src/tooling-context.mjs',
     });
     assert.deepEqual(candidate.dependencies, expectedDependencies);
     for (const version of Object.values(candidate.dependencies)) {

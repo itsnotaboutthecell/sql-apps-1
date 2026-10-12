@@ -1,6 +1,7 @@
 import { deploymentSchema, type DeploymentConfig } from './config.js';
 import type { Run } from './process.js';
 import { roleBasedSchemaFingerprint } from './role-based-profile.js';
+import { realpath } from 'node:fs/promises';
 
 export const imageFields = ['gatewayImage', 'dabImage', 'functionsImage'] as const;
 export function deploymentImageFields(config: DeploymentConfig) {
@@ -21,7 +22,8 @@ export async function imageDigest(image: string, config: DeploymentConfig, run: 
 
 export async function buildArtifacts(config: DeploymentConfig, run: Run): Promise<DeploymentConfig> {
   const fields = deploymentImageFields(config);
-  const source = config.profile === 'role-based-data' ? await roleBasedSchemaFingerprint() : undefined;
+  const root = await realpath(process.env.SQL_APPS_PROJECT_HOME ?? '.');
+  const source = config.profile === 'role-based-data' ? await roleBasedSchemaFingerprint(root) : undefined;
   if (fields.some(field => config[field].includes('@'))) {
     throw new Error('Artifact builds require new version tags for every selected image, not digests');
   }
@@ -38,7 +40,7 @@ export async function buildArtifacts(config: DeploymentConfig, run: Run): Promis
       '--file', dockerfiles[index]!, '.']);
     pinned[field] = await imageDigest(config[field], config, run);
   }
-  if (source !== undefined && source !== await roleBasedSchemaFingerprint()) {
+  if (source !== undefined && source !== await roleBasedSchemaFingerprint(root)) {
     throw new Error('Role-based SQL/DAB source changed during artifact publication; published images may exist but configuration was not updated');
   }
   return deploymentSchema.parse(pinned);

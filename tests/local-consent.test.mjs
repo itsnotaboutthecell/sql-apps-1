@@ -337,7 +337,7 @@ test('guarded execution denies before the runner and passes only approved operat
   await main(['run', 'build'], home, runner);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, process.execPath);
-  assert.deepEqual(calls[0].args, [join(home, 'scripts', 'build-provenance.mjs')]);
+  assert.deepEqual(calls[0].args, [join(resolve(), 'dist', 'scripts', 'build-provenance.mjs')]);
   await assert.rejects(main(['run', 'azure'], home, runner), /Unsupported/);
 });
 
