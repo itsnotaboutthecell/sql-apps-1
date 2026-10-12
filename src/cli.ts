@@ -12,7 +12,7 @@ import {
   demoPublicationSchema, demoPublicationStatus, planDemoPublication, publishDemo,
   readDemoPublicationState, validateDemoPublication, type DemoPublicationState,
 } from './demo-publication.js';
-import { initDemoPublication } from './demo-init.js';
+import { createDemoPublicationFile } from './demo-init.js';
 import { reviewRoleBasedCost } from './role-based-cost.js';
 import { assignApplicationRole, applicationRegistrationRole } from './role-based-identity.js';
 import { roleBasedSmoke } from './role-based-smoke.js';
@@ -66,7 +66,7 @@ async function main() {
     ]) {
       if (!flags[key]) throw new Error(`demo-init needs --${key}.`);
     }
-    const publication = await initDemoPublication({
+    await createDemoPublicationFile(outputPath, {
       subscriptionId: flags.subscription!,
       resourceGroup: flags['resource-group']!,
       location: flags.location!,
@@ -75,7 +75,6 @@ async function main() {
       selectedArtifact: flags.artifact!,
       owner: flags.owner!,
     }, run);
-    await saveJson(outputPath, publication);
     console.log(`Wrote ${outputPath} for Starter public-demo publication. Nothing was created in Azure.`);
     console.log(`Next (read-only): demo-preflight <target>, then demo-publish ${outputPath}.`);
     return;

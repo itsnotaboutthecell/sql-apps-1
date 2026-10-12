@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { initDemoPublication } from '../src/demo-init.js';
+import { createDemoPublicationFile, initDemoPublication } from '../src/demo-init.js';
 import { demoPublicationSchema } from '../src/demo-publication.js';
 import { run, type Run, type RunOptions } from '../src/process.js';
 
@@ -147,4 +147,34 @@ test('demo-init CLI refuses to overwrite before Azure discovery', async t => {
       '--application', options.selectedApplication, '--artifact', '.', '--owner', 'Demo Owner']),
     /already exists.*never overwrites/i,
   );
+});
+
+test('demo-init does not overwrite a configuration created during discovery', async t => {
+  const directory = resolve('.task-demo-init-race-test');
+  const path = resolve(directory, 'publication.json');
+  const concurrent = '{"concurrent":true}';
+  await mkdir(directory, { recursive: true });
+  t.after(() => rm(directory, { recursive: true, force: true }));
+
+  const fake = harness();
+  let discoveryStarted!: () => void;
+  const started = new Promise<void>(resolve => { discoveryStarted = resolve; });
+  let finishDiscovery!: () => void;
+  const blocked = new Promise<void>(resolve => { finishDiscovery = resolve; });
+  const fetcher: typeof fetch = async (input, init) => {
+    discoveryStarted();
+    await blocked;
+    return fake.fetcher(input, init);
+  };
+
+  const initializing = createDemoPublicationFile(path, options, fake.runner, fetcher, () => deploymentId);
+  const rejected = assert.rejects(
+    initializing,
+    (error: NodeJS.ErrnoException) => error.code === 'EEXIST',
+  );
+  await started;
+  await writeFile(path, concurrent);
+  finishDiscovery();
+  await rejected;
+  assert.equal(await readFile(path, 'utf8'), concurrent);
 });

@@ -3,6 +3,7 @@ import { isIP } from 'node:net';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import { demoPublicationSchema, type DemoPublicationConfig } from './demo-publication.js';
+import { createJsonFile } from './deployment.js';
 import type { Run } from './process.js';
 
 const guid = z.string().uuid().transform(value => value.toLowerCase());
@@ -126,4 +127,16 @@ export async function initDemoPublication(
     sqlBackupRedundancy: 'Local',
     tags: { environment: 'synthetic-demo', owner: options.owner },
   });
+}
+
+export async function createDemoPublicationFile(
+  path: string,
+  input: DemoInitOptions,
+  runner: Run,
+  fetcher: typeof fetch = fetch,
+  newId: () => string = randomUUID,
+): Promise<DemoPublicationConfig> {
+  const publication = await initDemoPublication(input, runner, fetcher, newId);
+  await createJsonFile(path, publication);
+  return publication;
 }
