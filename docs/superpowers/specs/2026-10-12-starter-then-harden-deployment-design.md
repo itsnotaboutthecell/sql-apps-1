@@ -83,10 +83,9 @@ hardening request as permission to deploy or retain Starter automatically.
 The security posture participates in the publication configuration hash and
 approval ID. Changing posture invalidates an earlier approval.
 
-Secrets are not configuration fields. Registry credentials are acquired during
-the approved publication stage and passed to Azure only through redacted
-process arguments, secure deployment parameters, or Container App secret
-operations.
+Secrets are not configuration fields. The local publication process never
+receives registry credentials. The approved runtime deployment resolves them
+inside ARM and writes them directly to the Container App secret.
 
 ## Guided User Journey
 
@@ -112,7 +111,7 @@ not have to hand-author:
 - image names and immutable digests;
 - signed-in SQL administrator object ID and display name;
 - schema runner public IPv4 address;
-- generated ACR credentials.
+- ACR credential use without revealing either credential.
 
 Every derived value that affects resource writes is shown in the approval plan
 or represented by its approval-bound hash. Secret values are never shown.
@@ -146,20 +145,16 @@ deployment.
 ## Publication and Secret Handling
 
 Starter publication creates the owned ACR with administrator access enabled.
-The publication process retrieves the credentials only after infrastructure
-creation and before runtime deployment.
+The runtime Bicep deployment calls `listCredentials()` on that exact owned
+registry and uses the result only in the Container App secret and registry
+configuration.
 
-The runtime template accepts a registry username and password through secure
-parameters and writes them into a Container App secret. The registry entry
-references that secret. Neither the Bicep outputs nor the publication state
-contain the password.
+The registry entry references that secret. Neither the local process, Bicep
+parameters, Bicep outputs, deployment approval, nor publication state contains
+the password.
 
-The process runner must redact:
-
-- registry usernames when included in sensitive command contexts;
-- both ACR passwords;
-- deployment parameter material that contains a registry password;
-- Azure deployment errors that echo secure parameter values.
+The template must not output the result of `listCredentials()` or place it in
+tags, environment variables, deployment names, or diagnostic strings.
 
 Publication state records only non-secret posture evidence, such as:
 
@@ -169,9 +164,9 @@ Publication state records only non-secret posture evidence, such as:
 - whether ACR administrator access is enabled;
 - the last completed stage.
 
-If credential retrieval or secret injection fails, publication stops without
-writing a success state. Existing completed infrastructure remains owned and
-resumable.
+If server-side credential resolution or secret injection fails, publication
+stops without writing a success state. Existing completed infrastructure
+remains owned and resumable.
 
 ## Hardening Operation
 
@@ -285,7 +280,8 @@ Implementation is test-driven.
 
 ### Secret-safety tests
 
-- Registry passwords are passed only through secure/redacted channels.
+- Registry passwords never enter the local publication process or parameter
+  files.
 - Publication state, JSON output, approval text, thrown errors, and logs contain
   no registry password.
 - Interrupted publication leaves no plaintext secret file.
