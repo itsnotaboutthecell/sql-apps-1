@@ -438,6 +438,7 @@ export async function publishDemo(
       profile: config.profile, tenantId: config.tenantId, subscriptionId: config.subscriptionId,
       resourceGroup: config.resourceGroup, location: config.location,
       staticWebAppLocation: config.staticWebAppLocation,
+      securityPosture: 'starter',
     }, runner, fetcher);
     await runner('az', ['bicep', 'version']);
     await runner('dotnet', ['tool', 'run', 'sqlpackage', '--', '/Version']);
