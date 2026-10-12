@@ -100,7 +100,7 @@ export async function readBoundedManifestText(handle) {
   return buffer.toString('utf8', 0, offset);
 }
 
-export async function readProjectManifest(root) {
+export async function readProjectManifest(root, { openFile = open } = {}) {
   const home = await canonicalDirectory(root);
   const path = join(home, PROJECT_MANIFEST);
   const inspected = await inspectManifest(path);
@@ -108,10 +108,13 @@ export async function readProjectManifest(root) {
 
   let handle;
   try {
-    handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    handle = await openFile(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     const opened = await handle.stat();
+    const current = await lstat(path);
     if (!opened.isFile() || opened.size > MAX_MANIFEST_BYTES ||
-        opened.dev !== inspected.dev || opened.ino !== inspected.ino) {
+        opened.dev !== inspected.dev || opened.ino !== inspected.ino ||
+        current.isSymbolicLink() || !current.isFile() ||
+        current.dev !== opened.dev || current.ino !== opened.ino) {
       throw projectError('PROJECT_PATH_UNSAFE', 'Project manifest changed while it was being opened.');
     }
     const text = await readBoundedManifestText(handle);

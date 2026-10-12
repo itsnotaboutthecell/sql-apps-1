@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { mkdtemp, mkdir, open, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -160,6 +161,32 @@ test('rejects linked manifests when the host supports links', async t => {
   }
   await assert.rejects(readProjectManifest(root), { code: 'PROJECT_PATH_UNSAFE' });
   await assert.rejects(findProjectHome(root), { code: 'PROJECT_PATH_UNSAFE' });
+});
+
+test('rejects a manifest replaced by a link between inspection and open', async t => {
+  const root = await fixture(t);
+  const manifest = join(root, PROJECT_MANIFEST);
+  const target = join(root, 'manifest-target.json');
+  await writeManifest(root);
+
+  const openAfterLinkSwap = async (path, flags) => {
+    await rename(manifest, target);
+    try {
+      await symlink(target, manifest, 'file');
+    } catch (error) {
+      if (['EPERM', 'EACCES', 'ENOSYS'].includes(error.code)) {
+        t.skip(`links unavailable: ${error.code}`);
+        return open(target, flags);
+      }
+      throw error;
+    }
+    return open(path, flags & ~(constants.O_NOFOLLOW ?? 0));
+  };
+
+  await assert.rejects(
+    readProjectManifest(root, { openFile: openAfterLinkSwap }),
+    { code: 'PROJECT_PATH_UNSAFE' },
+  );
 });
 
 test('canonicalizes a linked starting directory when the host supports links', async t => {
