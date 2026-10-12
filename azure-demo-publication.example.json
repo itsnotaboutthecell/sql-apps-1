@@ -1,6 +1,7 @@
 {
   "version": 1,
   "profile": "public-demo",
+  "securityPosture": "starter",
   "hosting": "static-web-apps",
   "name": "sqlapps",
   "subscriptionId": "11111111-1111-4111-8111-111111111111",

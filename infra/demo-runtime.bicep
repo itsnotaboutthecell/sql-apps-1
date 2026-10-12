@@ -11,6 +11,11 @@ param runtimeIdentityName string
 param registryName string
 param sqlServerName string
 param databaseName string
+@allowed([
+  'starter'
+  'hardened'
+])
+param securityPosture string
 @description('Explicit supported Azure Static Web Apps resource location. This can differ from the Container Apps backend region.')
 param staticWebAppLocation string
 @minLength(3)
@@ -40,6 +45,9 @@ resource sql 'Microsoft.Sql/servers@2023-08-01' existing = {
   name: sqlServerName
 }
 
+var starterRegistry = securityPosture == 'starter'
+var registryCredentials = starterRegistry ? registry.listCredentials() : null
+
 resource staticSite 'Microsoft.Web/staticSites@2023-12-01' = {
   name: staticWebAppName
   location: staticWebAppLocation
@@ -67,7 +75,24 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: { external: true, targetPort: 8080, transport: 'http', allowInsecure: false }
-      registries: [{ server: registry.properties.loginServer, identity: runtimeIdentity.id }]
+      secrets: starterRegistry ? [
+        {
+          name: 'registry-password'
+          value: registryCredentials!.passwords[0].value
+        }
+      ] : []
+      registries: starterRegistry ? [
+        {
+          server: registry.properties.loginServer
+          username: registryCredentials!.username
+          passwordSecretRef: 'registry-password'
+        }
+      ] : [
+        {
+          server: registry.properties.loginServer
+          identity: runtimeIdentity.id
+        }
+      ]
     }
     template: {
       scale: {

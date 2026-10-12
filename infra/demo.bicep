@@ -9,6 +9,9 @@ param deploymentId string
 param location string
 param tenantId string
 param tags object
+@minLength(5)
+@maxLength(50)
+param registryName string
 param sqlAdminObjectId string
 param sqlAdminName string
 @description('Explicit policy for a new database. free-paused uses the free tier and never enables paid continuation; paid-reviewed requires separate cost approval. No existing-database conversion is authorized.')
@@ -28,7 +31,6 @@ var ownedTags = union(tags, {
   'sql-apps-application': selectedApplication
   'sql-apps-profile': 'public-demo'
 })
-var acrPull = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 var freeSql = sqlBillingMode == 'free-paused'
 var freeSqlSku = { name: 'GP_S_Gen5_2', tier: 'GeneralPurpose', family: 'Gen5', capacity: 2 }
 
@@ -39,24 +41,14 @@ resource runtimeIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
 }
 
 resource registry 'Microsoft.ContainerRegistry/registries@2025-04-01' = {
-  name: 'sqlappsdemo${suffix}'
+  name: registryName
   location: location
   tags: ownedTags
   sku: { name: 'Basic' }
   properties: {
-    adminUserEnabled: false
+    adminUserEnabled: true
     publicNetworkAccess: 'Enabled'
     policies: { azureADAuthenticationAsArmPolicy: { status: 'enabled' } }
-  }
-}
-
-resource pullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(registry.id, runtimeIdentity.id, acrPull)
-  scope: registry
-  properties: {
-    roleDefinitionId: acrPull
-    principalId: runtimeIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
   }
 }
 
