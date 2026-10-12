@@ -8,6 +8,7 @@ import { type Run } from './process.js';
 import { imageDigest, deploymentImageFields } from './artifacts.js';
 import { validateRoleBasedCloudDab, roleBasedProcedureGrants, roleBasedSchemaFingerprint } from './role-based-profile.js';
 import { withFileLock } from './file-lock.mjs';
+import { toolingAsset } from './runtime-roots.js';
 
 const outputSchema = z.object({
   sqlServer: z.string().regex(/^[a-z0-9-]+\.database\.windows\.net$/),
@@ -25,6 +26,9 @@ export type DeploymentOutputs = z.infer<typeof outputSchema>;
 export const functionRoleId = '15d91b1c-83c7-4cb6-b349-d7b8fd4b1425';
 export const delegatedScopeId = '6bb296dd-f397-4dcc-a69b-d37dfce3c555';
 export const applicationRoleId = '530d74b7-cf30-41f4-a44c-9f594cba7c63';
+export const deploymentTemplatePath = () => toolingAsset('infra', 'main.bicep');
+const deploymentProjectRoot = () => process.env.SQL_APPS_PROJECT_HOME ?? process.cwd();
+const deploymentProjectPath = (...parts: string[]) => resolve(deploymentProjectRoot(), ...parts);
 
 export interface DeploymentState {
   environmentKey: string;
@@ -45,7 +49,7 @@ export const deploymentStateSchema = z.strictObject({
 export async function readState(config: DeploymentConfig): Promise<DeploymentState> {
   const state = deploymentStateSchema.parse(JSON.parse(await readFile(statePath(config), 'utf8')));
   if (state.environmentKey !== environmentKey(config)) throw new Error('Deployment state belongs to a different environment');
-  if (config.profile === 'role-based-data' && state.applicationHome !== await realpath('.')) {
+  if (config.profile === 'role-based-data' && state.applicationHome !== await realpath(deploymentProjectRoot())) {
     throw new Error('Role-based deployment state belongs to a different application checkout; discovery or copied state is not reuse approval');
   }
   return state;
@@ -54,7 +58,7 @@ export async function readState(config: DeploymentConfig): Promise<DeploymentSta
 export async function deploymentConfigHash(config: DeploymentConfig): Promise<string> {
   const hash = createHash('sha256').update(JSON.stringify(config));
   if (config.profile === 'role-based-data') {
-    const home = await realpath(process.env.SQL_APPS_PROJECT_HOME ?? '.');
+    const home = await realpath(deploymentProjectRoot());
     hash.update(home).update(await roleBasedSchemaFingerprint(home));
   }
   return hash.digest('hex');
@@ -73,7 +77,7 @@ export function parseOutputs(text: string): DeploymentOutputs {
 }
 
 export function statePath(config: DeploymentConfig): string {
-  return resolve('.sql-apps', `${createHash('sha256').update(environmentKey(config)).digest('hex').slice(0, 20)}.json`);
+  return deploymentProjectPath('.sql-apps', `${createHash('sha256').update(environmentKey(config)).digest('hex').slice(0, 20)}.json`);
 }
 
 export async function saveState(path: string, state: DeploymentState): Promise<void> {
@@ -131,7 +135,7 @@ export async function preflight(config: DeploymentConfig, run: Run, checkImages 
   if (checkImages) {
     for (const field of deploymentImageFields(config)) await imageDigest(config[field], config, run);
   }
-  if (config.profile === 'role-based-data') validateRoleBasedCloudDab(JSON.parse(await readFile('dab/dab-config.json', 'utf8')), {
+  if (config.profile === 'role-based-data') validateRoleBasedCloudDab(JSON.parse(await readFile(deploymentProjectPath('dab', 'dab-config.json'), 'utf8')), {
     profile: 'role-based-data', requiredRole: config.requiredRole!, readinessPath: config.readinessPath!,
   });
   const providers = ['Microsoft.App', 'Microsoft.Sql', 'Microsoft.Network', 'Microsoft.ManagedIdentity',
@@ -159,7 +163,7 @@ export async function provision(config: DeploymentConfig, run: Run): Promise<Dep
   }
   const outputs = parseOutputs(await run('az', [
     'deployment', 'group', 'create', '--subscription', config.subscriptionId, '--resource-group', config.resourceGroup,
-    '--name', `${config.name}-${config.environment}-infrastructure`, '--template-file', 'infra/main.bicep',
+    '--name', `${config.name}-${config.environment}-infrastructure`, '--template-file', deploymentTemplatePath(),
     '--parameters', `@${await parametersFile(config, false)}`, '--query', 'properties.outputs', '-o', 'json',
   ]));
   return {
@@ -180,15 +184,15 @@ export async function parametersFile(config: DeploymentConfig, enabled: boolean)
 
 export async function publishSchema(config: DeploymentConfig, outputs: DeploymentOutputs, run: Run) {
   const roleBasedGrants = config.profile === 'role-based-data' ? roleBasedProcedureGrants(
-    JSON.parse(await readFile('dab/dab-config.json', 'utf8')),
+    JSON.parse(await readFile(deploymentProjectPath('dab', 'dab-config.json'), 'utf8')),
     { profile: 'role-based-data', requiredRole: config.requiredRole!, readinessPath: config.readinessPath! }, 'sql_apps_dab',
   ) : '';
-  await run('dotnet', ['build', 'sql/database.sqlproj', '--output', 'dist/sql']);
+  await run('dotnet', ['build', deploymentProjectPath('sql', 'database.sqlproj'), '--output', deploymentProjectPath('dist', 'sql')]);
   const { accessToken } = z.object({ accessToken: z.string().min(1) }).parse(JSON.parse(await run('az', [
     'account', 'get-access-token', '--subscription', config.subscriptionId, '--resource', 'https://database.windows.net/', '-o', 'json',
   ])));
   await run('dotnet', ['tool', 'run', 'sqlpackage', '--',
-    '/Action:Publish', '/SourceFile:dist/sql/database.dacpac',
+    '/Action:Publish', `/SourceFile:${deploymentProjectPath('dist', 'sql', 'database.dacpac')}`,
     `/TargetConnectionString:Server=tcp:${outputs.sqlServer},1433;Database=app;Encrypt=True;TrustServerCertificate=False;`,
     `/AccessToken:${accessToken}`,
     `/v:DabPrincipalId=${outputs.dabPrincipalId}`,
@@ -206,7 +210,7 @@ export async function deploy(
   const deployResources = async (enabled: boolean) => parseOutputs(await run('az', [
     'deployment', 'group', 'create', '--subscription', config.subscriptionId, '--resource-group', config.resourceGroup,
     '--name', `${config.name}-${config.environment}-${enabled ? 'runtime' : 'infrastructure'}`,
-    '--template-file', 'infra/main.bicep', '--parameters', `@${await parametersFile(config, enabled)}`,
+    '--template-file', deploymentTemplatePath(), '--parameters', `@${await parametersFile(config, enabled)}`,
     '--query', 'properties.outputs', '-o', 'json',
   ]));
   let previous: DeploymentState | undefined;

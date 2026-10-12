@@ -13,12 +13,15 @@ const load = () => import('../scripts/workspace-check.mjs');
 async function fixture(t) {
   const home = await mkdtemp(join(tmpdir(), 'sql-apps workspace-'));
   t.after(() => rm(home, { recursive: true, force: true }));
-  for (const folder of ['src', 'sql', 'public', 'dab', 'dist/src', 'scripts']) {
+  for (const folder of ['src', 'sql', 'public', 'dab', 'dist/src', 'scripts', '.config']) {
     await mkdir(join(home, folder), { recursive: true });
   }
   await writeFile(join(home, 'package.json'), JSON.stringify({
     name: 'fixture', version: '0.1.0', dependencies: { '@microsoft/sql-apps': '0.1.1' },
   }));
+  await writeFile(join(home, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3 }));
+  await writeFile(join(home, 'tsconfig.json'), JSON.stringify({ compilerOptions: {} }));
+  await writeFile(join(home, '.config', 'dotnet-tools.json'), JSON.stringify({ version: 1, tools: {} }));
   await writeFile(join(home, '.sql-apps-project.json'), JSON.stringify({
     version: 1,
     id: 'b91d4857-9570-4d4b-a740-918471ca7e26',
@@ -80,6 +83,35 @@ test('missing generated project contract in an active project is reported, not c
   assert.equal(report.executionAllowed, false);
   assert.equal(report.active.source.code, 'SOURCE_INCOMPLETE');
   await assert.rejects(readFile(join(active, '.sql-apps-project.json')), { code: 'ENOENT' });
+});
+
+test('generated project reports every required package and tool input when missing', async t => {
+  const { inspectSource } = await load();
+  for (const name of ['package-lock.json', 'tsconfig.json', '.config/dotnet-tools.json']) {
+    const home = await fixture(t);
+    await rm(join(home, name));
+    const report = await inspectSource(home);
+    assert.equal(report.ready, false, name);
+    assert.equal(report.code, 'SOURCE_INCOMPLETE', name);
+  }
+});
+
+test('generated project validates required file and directory types', async t => {
+  const { inspectSource } = await load();
+  for (const [name, replacement] of [
+    ['src', 'file'],
+    ['package-lock.json', 'directory'],
+    ['tsconfig.json', 'directory'],
+    ['.config/dotnet-tools.json', 'directory'],
+  ]) {
+    const home = await fixture(t);
+    await rm(join(home, name), { recursive: true, force: true });
+    if (replacement === 'directory') await mkdir(join(home, name), { recursive: true });
+    else await writeFile(join(home, name), 'not a directory');
+    const report = await inspectSource(home);
+    assert.equal(report.ready, false, name);
+    assert.equal(report.code, 'SOURCE_INVALID', name);
+  }
 });
 
 test('build provenance detects missing, changed source and tampered artifacts', async t => {

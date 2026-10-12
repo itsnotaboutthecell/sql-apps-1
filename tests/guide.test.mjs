@@ -26,10 +26,13 @@ test('SQL Apps entry guidance keeps project selection in the coordinator', async
 async function fixture(t) {
   const home = await mkdtemp(join(tmpdir(), 'sql-apps-guide-'));
   t.after(() => rm(home, { recursive: true, force: true }));
-  for (const folder of ['src', 'sql', 'public', 'dab']) await mkdir(join(home, folder), { recursive: true });
+  for (const folder of ['src', 'sql', 'public', 'dab', '.config']) await mkdir(join(home, folder), { recursive: true });
   await writeFile(join(home, 'package.json'), JSON.stringify({
     name: 'fixture', dependencies: { '@microsoft/sql-apps': '0.1.1' },
   }));
+  await writeFile(join(home, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3 }));
+  await writeFile(join(home, 'tsconfig.json'), JSON.stringify({ compilerOptions: {} }));
+  await writeFile(join(home, '.config', 'dotnet-tools.json'), JSON.stringify({ version: 1, tools: {} }));
   await writeFile(join(home, '.sql-apps-project.json'), JSON.stringify({
     version: 1, id: 'b91d4857-9570-4d4b-a740-918471ca7e26', name: 'Fixture',
     slug: 'fixture', starter: 'data', profile: 'role-based-data', scaffoldVersion: 1,

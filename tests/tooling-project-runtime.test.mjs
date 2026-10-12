@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -107,10 +107,20 @@ async function projectFixture(t) {
     'sql/local/acceptance.sql': 'SELECT 1;\n',
     'sql/local/application-acceptance.sql': 'SELECT 1;\n',
     'dab/dab-config.json': {
+      runtime: {
+        rest: { enabled: true, path: '/api' },
+        host: {
+          mode: 'production',
+          authentication: {
+            provider: 'AzureAD',
+            jwt: { audience: "@env('API_CLIENT_ID')", issuer: "@env('ENTRA_ISSUER')" },
+          },
+        },
+      },
       entities: {
         Ready: {
           source: { type: 'stored-procedure', object: 'dbo.Ready' },
-          rest: { enabled: true, path: 'Ready', methods: ['get'] },
+          rest: { enabled: true, methods: ['get'] },
           permissions: [{ role: 'CustomerReader', actions: ['execute'] }],
         },
       },
@@ -126,7 +136,11 @@ async function projectFixture(t) {
 }
 
 before(async () => {
-  await execute(process.execPath, [join(root, 'scripts', 'build-provenance.mjs')], { cwd: root });
+  const { inspectSource } = await import('../scripts/workspace-check.mjs');
+  const source = await inspectSource(root, { toolingHome: root, foundation: true });
+  if (!source.build?.ready) {
+    await execute(process.execPath, [join(root, 'scripts', 'build-provenance.mjs')], { cwd: root });
+  }
   await rm(staged, { recursive: true, force: true });
   const { buildToolingPackage } = await import('../scripts/build-tooling-package.mjs');
   await buildToolingPackage(staged);
@@ -173,6 +187,135 @@ test('packaged project commands run from nested paths without using the foundati
   assert.equal(JSON.parse(setupCheck.stdout).home, project);
   for (const output of [workspace.stdout, build.stdout, guide.stdout, setupCheck.stdout, setupCheck.stderr]) {
     assert.doesNotMatch(output, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+  }
+});
+
+test('project rebuild removes generated output whose source was deleted', async t => {
+  const { project, tooling } = await projectFixture(t);
+  const bin = join(tooling, 'bin', 'sql-apps.mjs');
+  const source = join(project, 'src', 'removed.ts');
+  const output = join(project, 'dist', 'src', 'removed.js');
+  const unrelatedDist = join(project, 'dist', 'customer-note.txt');
+  const unrelatedPublic = join(project, 'public', 'customer.js');
+  await writeFile(source, 'export const removed = true;\n');
+  await writeFile(unrelatedPublic, 'preserve\n');
+  let result = await run(process.execPath, [bin, 'build'], project);
+  assert.equal(result.code, undefined, result.stderr);
+  assert.equal(await readFile(output, 'utf8').then(Boolean), true);
+  await writeFile(unrelatedDist, 'preserve\n');
+
+  await rm(source);
+  result = await run(process.execPath, [bin, 'build'], project);
+  assert.equal(result.code, undefined, result.stderr);
+  await assert.rejects(readFile(output), { code: 'ENOENT' });
+  assert.equal(await readFile(unrelatedDist, 'utf8'), 'preserve\n');
+  assert.equal(await readFile(unrelatedPublic, 'utf8'), 'preserve\n');
+});
+
+test('project rebuild refuses to clean a linked generated output', async t => {
+  const { project, tooling } = await projectFixture(t);
+  const bin = join(tooling, 'bin', 'sql-apps.mjs');
+  const result = await run(process.execPath, [bin, 'build'], project);
+  assert.equal(result.code, undefined, result.stderr);
+
+  const external = join(dirname(project), 'external-output');
+  await mkdir(external);
+  await writeFile(join(external, 'sentinel.txt'), 'preserve\n');
+  await rm(join(project, 'dist', 'src'), { recursive: true });
+  await symlink(external, join(project, 'dist', 'src'), process.platform === 'win32' ? 'junction' : 'dir');
+
+  const rejected = await run(process.execPath, [bin, 'build'], project);
+  assert.notEqual(rejected.code, undefined);
+  assert.match(rejected.stderr, /Runtime inputs must not be symlinks/);
+  assert.equal(await readFile(join(external, 'sentinel.txt'), 'utf8'), 'preserve\n');
+});
+
+test('packaged deployment resolves immutable assets from tooling while retaining project inputs', async t => {
+  const { project, tooling } = await projectFixture(t);
+  const originalProject = process.env.SQL_APPS_PROJECT_HOME;
+  const originalTooling = process.env.SQL_APPS_TOOLING_HOME;
+  process.env.SQL_APPS_PROJECT_HOME = project;
+  process.env.SQL_APPS_TOOLING_HOME = tooling;
+  try {
+    const config = {
+      ...JSON.parse(await readFile(join(root, 'azure-role-based.example.json'), 'utf8')),
+      requiredRole: 'CustomerReader',
+      readinessPath: '/api/Ready',
+    };
+    const calls = [];
+    const digest = `sha256:${'a'.repeat(64)}`;
+    const artifacts = await import(`${pathToFileURL(join(root, 'dist', 'src', 'artifacts.js')).href}?assets=${Date.now()}`);
+    await artifacts.buildArtifacts(config, async (command, args) => {
+      calls.push([command, ...args]);
+      return args[1] === 'repository' ? digest : '';
+    });
+    const builds = calls.filter(call => call.includes('build'));
+    assert.deepEqual(
+      builds.map(call => call[call.indexOf('--file') + 1]),
+      [join(tooling, 'assets', 'Dockerfile'), join(tooling, 'assets', 'dab', 'Dockerfile')],
+    );
+    assert.deepEqual(builds.map(call => call.at(-1)), [project, project]);
+
+    const deployment = await import(`${pathToFileURL(join(root, 'dist', 'src', 'deployment.js')).href}?deployment=${Date.now()}`);
+    const runner = async (_command, args) => {
+      calls.push(['az', ...args]);
+      if (args[0] === 'account' && args.includes('--subscription')) {
+        return JSON.stringify({ id: config.subscriptionId, tenantId: config.tenantId, environmentName: 'AzureCloud' });
+      }
+      if (args[0] === 'account') return JSON.stringify({ tenantId: config.tenantId });
+      if (args[0] === 'ad' && args[1] === 'app') return JSON.stringify({
+        signInAudience: 'AzureADMyOrg',
+        api: { requestedAccessTokenVersion: 2, oauth2PermissionScopes: [{ value: 'access_as_user', isEnabled: true }] },
+        appRoles: [{ id: '11111111-1111-4111-8111-111111111111', value: config.requiredRole,
+          isEnabled: true, allowedMemberTypes: ['User'] }],
+      });
+      if (args[0] === 'provider') return 'Registered';
+      if (args[0] === 'acr' && args[1] === 'repository') return digest;
+      if (args[0] === 'deployment') return JSON.stringify({
+        sqlServer: { value: 'example.database.windows.net' },
+        databaseName: { value: 'app' },
+        dabPrincipalId: { value: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        gatewayPrincipalId: { value: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+        gatewayName: { value: 'gateway' },
+        gatewayUrl: { value: 'https://example.invalid' },
+        functionsName: { value: 'functions' },
+        networkId: { value: '/network' },
+        storageAccount: { value: 'storage' },
+        vaultName: { value: 'vault' },
+      });
+      return '';
+    };
+    await deployment.provision(config, runner);
+    const infrastructure = calls.find(call => call.includes(`${config.name}-${config.environment}-infrastructure`));
+    assert.equal(infrastructure[infrastructure.indexOf('--template-file') + 1],
+      join(tooling, 'assets', 'infra', 'main.bicep'));
+  } finally {
+    if (originalProject === undefined) delete process.env.SQL_APPS_PROJECT_HOME;
+    else process.env.SQL_APPS_PROJECT_HOME = originalProject;
+    if (originalTooling === undefined) delete process.env.SQL_APPS_TOOLING_HOME;
+    else process.env.SQL_APPS_TOOLING_HOME = originalTooling;
+  }
+});
+
+test('packaged selected-example validation rejects generated projects before foundation inspection', async t => {
+  const { project, tooling } = await projectFixture(t);
+  const originalProject = process.env.SQL_APPS_PROJECT_HOME;
+  const originalTooling = process.env.SQL_APPS_TOOLING_HOME;
+  process.env.SQL_APPS_PROJECT_HOME = project;
+  process.env.SQL_APPS_TOOLING_HOME = tooling;
+  try {
+    const applicationBuild = await import(
+      `${pathToFileURL(join(root, 'dist', 'src', 'application-build.js')).href}?application=${Date.now()}`,
+    );
+    await assert.rejects(
+      applicationBuild.checkSelectedApplication(project, join(project, 'missing-artifact'), 'local-simulation'),
+      /foundation-only selected-example/,
+    );
+  } finally {
+    if (originalProject === undefined) delete process.env.SQL_APPS_PROJECT_HOME;
+    else process.env.SQL_APPS_PROJECT_HOME = originalProject;
+    if (originalTooling === undefined) delete process.env.SQL_APPS_TOOLING_HOME;
+    else process.env.SQL_APPS_TOOLING_HOME = originalTooling;
   }
 });
 

@@ -14,7 +14,7 @@ const excluded = new Set(['node_modules', 'obj', 'bin', '.git', '.sql-apps']);
 const projectDirectories = ['src', 'public', 'sql', 'dab'];
 const projectFiles = [
   '.sql-apps-project.json', 'package.json', 'package-lock.json', 'application.json',
-  'role-based-data.json', 'tsconfig.json',
+  'role-based-data.json', 'tsconfig.json', '.config/dotnet-tools.json',
 ];
 
 async function fingerprint(home, directories, files = [], { source = false, prefix = '' } = {}) {
@@ -58,6 +58,22 @@ function validContract(value) {
     value.capabilities.every(item => ['local', 'setup-check'].includes(item)) &&
     new Set(value.capabilities).size === value.capabilities.length &&
     Object.keys(value).every(key => ['version', 'capabilities'].includes(key));
+}
+
+async function validateProjectInput(home, name, expectedType) {
+  const parts = name.split(/[\\/]/);
+  let current = home;
+  for (const [index, part] of parts.entries()) {
+    current = join(current, part);
+    const info = await lstat(current);
+    if (info.isSymbolicLink()) {
+      throw Object.assign(new Error('Project inputs must not be links.'), { code: 'SOURCE_INVALID' });
+    }
+    const expected = index === parts.length - 1 ? expectedType : 'directory';
+    if ((expected === 'directory' && !info.isDirectory()) || (expected === 'file' && !info.isFile())) {
+      throw Object.assign(new Error(`Project input has the wrong type: ${name}`), { code: 'SOURCE_INVALID' });
+    }
+  }
 }
 
 async function gitEvidence(home) {
@@ -170,13 +186,19 @@ export async function inspectSource(value, options = {}) {
         nextAction: 'Review the project manifest, exact tooling dependency, application and runtime contract.' };
     }
     const required = [
-      'src', 'public/index.html', 'public/style.css', 'sql/database.sqlproj', 'dab/dab-config.json',
-      ...(project.profile === 'role-based-data' ? ['role-based-data.json'] : []),
+      ['src', 'directory'],
+      ['public/index.html', 'file'],
+      ['public/style.css', 'file'],
+      ['sql/database.sqlproj', 'file'],
+      ['dab/dab-config.json', 'file'],
+      ['package.json', 'file'],
+      ['package-lock.json', 'file'],
+      ['application.json', 'file'],
+      ['tsconfig.json', 'file'],
+      ['.config/dotnet-tools.json', 'file'],
+      ...(project.profile === 'role-based-data' ? [['role-based-data.json', 'file']] : []),
     ];
-    for (const name of required) {
-      const info = await lstat(join(home, name));
-      if (info.isSymbolicLink()) throw Object.assign(new Error('Project inputs must not be links.'), { code: 'SOURCE_INVALID' });
-    }
+    for (const [name, type] of required) await validateProjectInput(home, name, type);
     const inputs = await fingerprint(home, projectDirectories, projectFiles, { source: true });
     const implementation = await toolingFingerprint(tools);
     return {

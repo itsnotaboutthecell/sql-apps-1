@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { deploymentSchema } from '../src/config.js';
 import { buildArtifacts, imageDigest, imageFields } from '../src/artifacts.js';
 import type { Run } from '../src/process.js';
@@ -17,7 +18,10 @@ test('artifact builds use ACR for all services and return immutable validated co
   const result = await buildArtifacts(config, run);
   const builds = calls.filter(call => call.includes('build'));
   assert.equal(builds.length, 3);
-  assert.deepEqual(builds.map(call => call[call.indexOf('--file') + 1]), ['Dockerfile', 'dab/Dockerfile', 'functions/Dockerfile']);
+  assert.deepEqual(builds.map(call => call[call.indexOf('--file') + 1]), [
+    resolve('Dockerfile'), resolve('dab', 'Dockerfile'), resolve('functions', 'Dockerfile'),
+  ]);
+  assert.deepEqual(builds.map(call => call.at(-1)), [resolve('.'), resolve('.'), resolve('.')]);
   for (const field of imageFields) {
     assert.equal(result[field], `${config[field].split(':')[0]}@${digest}`);
   }

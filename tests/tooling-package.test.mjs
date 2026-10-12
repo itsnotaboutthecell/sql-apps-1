@@ -48,7 +48,9 @@ async function pathsBelow(directory) {
 }
 
 before(async () => {
-  await runNode([join(root, 'scripts', 'build-provenance.mjs')]);
+  const { inspectSource } = await import('../scripts/workspace-check.mjs');
+  const source = await inspectSource(root, { toolingHome: root, foundation: true });
+  if (!source.build?.ready) await runNode([join(root, 'scripts', 'build-provenance.mjs')]);
   await runNode([join(root, 'scripts', 'build-tooling-package.mjs')]);
 });
 

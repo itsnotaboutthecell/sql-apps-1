@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
-import { cp, copyFile, lstat, mkdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { cp, copyFile, lstat, mkdir, rm } from 'node:fs/promises';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { projectHome, toolingHome } from '../src/tooling-context.mjs';
 import { inspectSource, recordBuild } from './workspace-check.mjs';
@@ -12,6 +12,43 @@ const execute = promisify(execFile);
 async function exists(path) {
   try { await lstat(path); return true; }
   catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+}
+
+const generatedOutputs = [
+  'dist/src',
+  'dist/functions',
+  'dist/scripts',
+  'public/app.js',
+  'public/auth/redirect.js',
+];
+
+async function cleanGeneratedOutputs(home) {
+  for (const name of generatedOutputs) {
+    const target = resolve(home, name);
+    const contained = relative(home, target);
+    if (!contained || contained.startsWith('..') || isAbsolute(contained)) {
+      throw new Error(`Refusing to clean generated output outside the project: ${name}`);
+    }
+    const parts = contained.split(/[\\/]/);
+    let parent = home;
+    let reachable = true;
+    for (const part of parts.slice(0, -1)) {
+      parent = join(parent, part);
+      try {
+        const info = await lstat(parent);
+        if (info.isSymbolicLink() || !info.isDirectory()) {
+          throw new Error(`Refusing to clean generated output through an unsafe directory: ${name}`);
+        }
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          reachable = false;
+          break;
+        }
+        throw error;
+      }
+    }
+    if (reachable) await rm(target, { recursive: true, force: true });
+  }
 }
 
 async function compileTypeScript(project, tools, config) {
@@ -103,6 +140,7 @@ export async function main() {
   }
   const source = await inspectSource(project, { toolingHome: tools, foundation });
   if (!source.ready) throw new Error(`Source preflight failed: ${source.code}`);
+  await cleanGeneratedOutputs(project);
   if (foundation) await buildFoundation(project);
   else await buildProject(project, tools);
   await recordBuild(project, source.fingerprint, source.toolingFingerprint, { toolingHome: tools, foundation });

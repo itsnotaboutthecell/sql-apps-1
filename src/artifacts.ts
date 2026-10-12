@@ -2,6 +2,7 @@ import { deploymentSchema, type DeploymentConfig } from './config.js';
 import type { Run } from './process.js';
 import { roleBasedSchemaFingerprint } from './role-based-profile.js';
 import { realpath } from 'node:fs/promises';
+import { toolingAsset } from './runtime-roots.js';
 
 export const imageFields = ['gatewayImage', 'dabImage', 'functionsImage'] as const;
 export function deploymentImageFields(config: DeploymentConfig) {
@@ -22,7 +23,7 @@ export async function imageDigest(image: string, config: DeploymentConfig, run: 
 
 export async function buildArtifacts(config: DeploymentConfig, run: Run): Promise<DeploymentConfig> {
   const fields = deploymentImageFields(config);
-  const root = await realpath(process.env.SQL_APPS_PROJECT_HOME ?? '.');
+  const root = await realpath(process.env.SQL_APPS_PROJECT_HOME ?? process.cwd());
   const source = config.profile === 'role-based-data' ? await roleBasedSchemaFingerprint(root) : undefined;
   if (fields.some(field => config[field].includes('@'))) {
     throw new Error('Artifact builds require new version tags for every selected image, not digests');
@@ -32,12 +33,16 @@ export async function buildArtifacts(config: DeploymentConfig, run: Run): Promis
   }
   await run('az', ['acr', 'show', '--subscription', config.subscriptionId,
     '--resource-group', config.resourceGroup, '--name', config.registryServer.split('.')[0]!, '-o', 'none']);
-  const dockerfiles = ['Dockerfile', 'dab/Dockerfile', 'functions/Dockerfile'];
+  const dockerfiles = [
+    toolingAsset('Dockerfile'),
+    toolingAsset('dab', 'Dockerfile'),
+    toolingAsset('functions', 'Dockerfile'),
+  ];
   const pinned = { ...config };
   for (const [index, field] of fields.entries()) {
     await run('az', ['acr', 'build', '--subscription', config.subscriptionId,
       '--registry', config.registryServer.split('.')[0]!, '--image', config[field].slice(config.registryServer.length + 1),
-      '--file', dockerfiles[index]!, '.']);
+      '--file', dockerfiles[index]!, root]);
     pinned[field] = await imageDigest(config[field], config, run);
   }
   if (source !== undefined && source !== await roleBasedSchemaFingerprint(root)) {
