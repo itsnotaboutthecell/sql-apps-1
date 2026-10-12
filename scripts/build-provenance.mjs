@@ -27,6 +27,7 @@ await copyFile(resolve(home, 'src', 'file-lock.mjs'), resolve(home, 'dist', 'src
 await copyFile(resolve(home, 'src', 'local-consent.mjs'), resolve(home, 'dist', 'src', 'local-consent.mjs'));
 await copyFile(resolve(home, 'src', 'local-auth.mjs'), resolve(home, 'dist', 'src', 'local-auth.mjs'));
 await copyFile(resolve(home, 'src', 'role-based-rules.mjs'), resolve(home, 'dist', 'src', 'role-based-rules.mjs'));
+await copyFile(resolve(home, 'src', 'project-contract.mjs'), resolve(home, 'dist', 'src', 'project-contract.mjs'));
 await mkdir(resolve(home, 'dist', 'scripts'), { recursive: true });
 await copyFile(resolve(home, 'scripts', 'workspace-check.mjs'), resolve(home, 'dist', 'scripts', 'workspace-check.mjs'));
 await build({ absWorkingDir: home, entryPoints: { app: 'src/web/app.ts', 'auth/redirect': 'src/web/auth-redirect.ts' },
