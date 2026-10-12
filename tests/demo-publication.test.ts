@@ -72,6 +72,7 @@ test('review is read-only and approval binds configuration, artifact manifest an
 
 function harness(config: DemoPublicationConfig, failure?: 'schema' | 'backend' | 'static') {
   const calls: string[][] = [];
+  const requests: string[] = [];
   const swaEnvironments: NodeJS.ProcessEnv[] = [];
   let sessions = 0;
   const deletedSessions = new Set<string>();
@@ -119,6 +120,7 @@ function harness(config: DemoPublicationConfig, failure?: 'schema' | 'backend' |
   };
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
+    requests.push(url.href);
     if (url.origin === 'https://management.azure.com') {
       if (url.pathname.endsWith('/locations')) return Response.json({ value: [
         { name: config.location, displayName: 'East US' },
@@ -187,7 +189,7 @@ function harness(config: DemoPublicationConfig, failure?: 'schema' | 'backend' |
     if (init?.method === 'DELETE') return new Response(null, { status: 204 });
     throw new Error(`Unexpected fetch ${url} ${init?.method ?? 'GET'}`);
   };
-  return { runner, fetcher, calls, swaEnvironments };
+  return { runner, fetcher, calls, requests, swaEnvironments };
 }
 
 async function cleanup(config: DemoPublicationConfig) {
@@ -208,6 +210,7 @@ test('publication is ordered, resumable, atomic, token-free and uses the local S
   const state = await publishDemo(config, fake.runner, fake.fetcher, approval);
   assert.equal(state.stage, 'ready');
   assert.deepEqual(planDemoPublication(config, state).pending, []);
+  assert.ok(fake.requests.some(request => request.includes('/providers/Microsoft.Authorization?')));
   const image = fake.calls.findIndex(call => call.includes('acr') && call.includes('build'));
   const infrastructure = fake.calls.findIndex(call => call.includes('infra/demo.bicep'));
   const schema = fake.calls.findIndex(call => call.includes('/Action:Publish'));
