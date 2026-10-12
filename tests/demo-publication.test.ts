@@ -234,8 +234,11 @@ test('publication is ordered, resumable, atomic, token-free and uses the local S
   const state = await publishDemo(config, fake.runner, fake.fetcher, approval);
   assert.equal(state.stage, 'ready');
   assert.equal(state.securityPosture, 'starter');
+  assert.equal(state.runtime?.staticWebAppName, config.staticWebAppName);
   assert.equal(state.registryAuthentication, 'credential');
   assert.equal(state.acrAdminEnabled, true);
+  assert.ok(fake.requests.some(request => new URL(request).pathname === '/api/todos'));
+  assert.ok(fake.requests.some(request => new URL(request).pathname === '/api/health/ready'));
   assert.deepEqual(planDemoPublication(config, state).pending, []);
   assert.equal(fake.requests.some(request => request.includes('/providers/Microsoft.Authorization?')), false);
   const image = fake.calls.findIndex(call => call.includes('acr') && call.includes('build'));
@@ -268,6 +271,18 @@ test('publication is ordered, resumable, atomic, token-free and uses the local S
   );
   assert.equal(infrastructureParameters.parameters.registryName.value, 'example');
   const runtimeParameters = JSON.parse(await readFile(`${demoPublicationStatePath(config)}.runtime.parameters.json`, 'utf8'));
+  assert.deepEqual(Object.fromEntries(Object.entries(runtimeParameters.parameters)
+    .filter(([name]) => ['applicationName', 'environmentName', 'runtimeIdentityName', 'registryName',
+      'sqlServerName', 'databaseName', 'staticWebAppName'].includes(name))
+    .map(([name, parameter]) => [name, (parameter as { value: unknown }).value])), {
+    applicationName: config.applicationName,
+    environmentName: 'env',
+    runtimeIdentityName: 'runtime',
+    registryName: 'example',
+    sqlServerName: 'server',
+    databaseName: 'app',
+    staticWebAppName: config.staticWebAppName,
+  });
   assert.equal(runtimeParameters.parameters.staticWebAppLocation.value, config.staticWebAppLocation);
   assert.equal(runtimeParameters.parameters.securityPosture.value, 'starter');
   assert.equal(JSON.stringify(runtimeParameters).includes('password'), false);
