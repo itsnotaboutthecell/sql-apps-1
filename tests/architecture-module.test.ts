@@ -4,6 +4,7 @@ import {
   architectureModuleSchema,
   validateModuleCatalog,
   type ArchitectureModule,
+  type ArchitectureModuleCatalog,
 } from '../src/architecture-module.js';
 
 function moduleFixture(overrides: Partial<ArchitectureModule> = {}): ArchitectureModule {
@@ -24,13 +25,131 @@ function moduleFixture(overrides: Partial<ArchitectureModule> = {}): Architectur
 }
 
 test('validateModuleCatalog returns a catalog sorted by module ID', () => {
-  const catalog = validateModuleCatalog([
-    moduleFixture({ id: 'core' }),
-    moduleFixture({ id: 'api', requiresModules: ['core'] }),
-  ]);
+  const descriptors: unknown[] = [
+    { ...moduleFixture({ id: 'core' }) },
+    { ...moduleFixture({ id: 'api', requiresModules: ['core'] }) },
+  ];
+  const catalog: ArchitectureModuleCatalog = validateModuleCatalog(descriptors);
 
   assert.deepEqual([...catalog.keys()], ['api', 'core']);
   assert.equal(catalog.get('api')?.requiresModules[0], 'core');
+});
+
+test('validateModuleCatalog rejects a malformed raw descriptor', () => {
+  const descriptors: unknown[] = [
+    { ...moduleFixture(), version: 0 },
+  ];
+
+  assert.throws(() => validateModuleCatalog(descriptors));
+});
+
+test('architectureModuleSchema rejects invalid module IDs', () => {
+  for (const id of ['', 'a', 'Core', 'core_api', '-core', 'core-', 'core--api', 'a'.repeat(65)]) {
+    assert.equal(
+      architectureModuleSchema.safeParse(moduleFixture({ id })).success,
+      false,
+      `expected module ID ${JSON.stringify(id)} to be rejected`,
+    );
+  }
+});
+
+test('architectureModuleSchema requires positive integer versions', () => {
+  for (const version of [0, -1, 1.5]) {
+    assert.equal(
+      architectureModuleSchema.safeParse(moduleFixture({ version })).success,
+      false,
+      `expected version ${version} to be rejected`,
+    );
+  }
+});
+
+test('architectureModuleSchema requires nonnegative integer surfaces', () => {
+  for (const surface of [-1, 1.5]) {
+    assert.equal(
+      architectureModuleSchema.safeParse(moduleFixture({ surface })).success,
+      false,
+      `expected surface ${surface} to be rejected`,
+    );
+  }
+});
+
+test('architectureModuleSchema rejects empty provides', () => {
+  assert.equal(
+    architectureModuleSchema.safeParse(moduleFixture({ provides: [] })).success,
+    false,
+  );
+});
+
+test('architectureModuleSchema rejects duplicate acceptance checks', () => {
+  assert.equal(
+    architectureModuleSchema.safeParse(moduleFixture({
+      acceptanceChecks: ['api-health-check', 'api-health-check'],
+    })).success,
+    false,
+  );
+});
+
+test('architectureModuleSchema rejects duplicate name-list entries', () => {
+  const duplicate = ['duplicate-name', 'duplicate-name'];
+  const fields: Array<keyof Pick<
+    ArchitectureModule,
+    | 'provides'
+    | 'requiresCapabilities'
+    | 'requiresModules'
+    | 'incompatibleModules'
+    | 'guarantees'
+    | 'growthTransitions'
+  >> = [
+    'provides',
+    'requiresCapabilities',
+    'requiresModules',
+    'incompatibleModules',
+    'guarantees',
+    'growthTransitions',
+  ];
+
+  for (const field of fields) {
+    assert.equal(
+      architectureModuleSchema.safeParse({ ...moduleFixture(), [field]: duplicate }).success,
+      false,
+      `expected duplicate ${field} to be rejected`,
+    );
+  }
+});
+
+test('architectureModuleSchema accepts a resource without a sku', () => {
+  const result = architectureModuleSchema.safeParse(moduleFixture({
+    resources: [{ type: 'Microsoft.Web/sites', purpose: 'Hosts the application API' }],
+  }));
+
+  assert.equal(result.success, true);
+});
+
+test('architectureModuleSchema rejects empty resource fields', () => {
+  for (const resources of [
+    [{ type: '', purpose: 'Hosts the application API' }],
+    [{ type: 'Microsoft.Web/sites', purpose: '' }],
+    [{ type: 'Microsoft.Web/sites', sku: '', purpose: 'Hosts the application API' }],
+  ]) {
+    assert.equal(
+      architectureModuleSchema.safeParse(moduleFixture({ resources })).success,
+      false,
+    );
+  }
+});
+
+test('architectureModuleSchema rejects unknown resource fields', () => {
+  assert.equal(
+    architectureModuleSchema.safeParse({
+      ...moduleFixture(),
+      resources: [{
+        type: 'Microsoft.Web/sites',
+        purpose: 'Hosts the application API',
+        region: 'westus',
+      }],
+    }).success,
+    false,
+  );
 });
 
 test('validateModuleCatalog rejects duplicate module IDs', () => {
@@ -74,13 +193,9 @@ test('architectureModuleSchema rejects empty acceptance checks', () => {
   );
 });
 
-test('architectureModuleSchema is strict and enforces unique slug names', () => {
+test('architectureModuleSchema is strict and enforces slug names', () => {
   assert.equal(
     architectureModuleSchema.safeParse({ ...moduleFixture(), unexpected: true }).success,
-    false,
-  );
-  assert.equal(
-    architectureModuleSchema.safeParse(moduleFixture({ provides: ['application-api', 'application-api'] })).success,
     false,
   );
   assert.equal(
