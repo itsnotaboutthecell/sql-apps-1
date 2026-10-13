@@ -50,9 +50,8 @@ test('help describes architecture-plan as offline read-only review, not approval
   const output = await run(process.execPath, [cli, 'help']);
 
   assert.match(output, /architecture-plan/);
-  assert.match(output, /offline/i);
-  assert.match(output, /read-only/i);
-  assert.match(output, /no Azure (?:calls or )?writes/i);
+  assert.match(output, /offline.*read-only.*no Azure writes/i);
+  assert.match(output, /no Azure calls/i);
   assert.match(output, /not deployment approval/i);
 });
 

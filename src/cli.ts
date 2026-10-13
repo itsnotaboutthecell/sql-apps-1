@@ -41,7 +41,7 @@ function parseFlags(args: string[], allowed: string[]): Record<string, string | 
 async function main() {
   if (command === 'help' || !command) {
     console.log('Usage: npm run azure -- <validate|artifacts|identity|plan|provision|deploy|status|schema|static|redirect|smoke|gateway|functions|secret-set|demo-init|demo-publish|demo-status|hosting-compare|architecture-plan> [config.json] [options]\nRequires a current build (after approval, consent-run build). Azure CLI, Bicep, .NET, SqlPackage and the local pinned SWA CLI are used directly.');
-    console.log('Architecture recommendation: architecture-plan <architecture-intent.json> compiles an offline/read-only recommendation. It performs no Azure calls or writes and is not deployment approval.');
+    console.log('Architecture recommendation: architecture-plan <architecture-intent.json> compiles an offline/read-only recommendation with no Azure writes. It performs no Azure calls and is not deployment approval.');
     console.log('Public-demo diagnostics: demo-preflight <explicit target configuration>. Read-only cache/tenant/ARM/provider/region/permission evidence; no Graph, app registration, login reset or resource writes. Not deployment readiness.');
     console.log('Public-demo starter: demo-init <new-publication.json> --subscription <id> --resource-group <name> --location <region> --static-web-app-location <region> --application <name> --artifact <path> --owner <owner>. Discovery only; creates no Azure resources.');
     console.log('Public-demo costs: demo-cost <explicit cost configuration>. Offline free-allowance/fixed-charge review; no Azure login, network requests or resource writes. Exit 2 means cost intent is blocked or acknowledgement is missing; exit 1 means invalid input.');
