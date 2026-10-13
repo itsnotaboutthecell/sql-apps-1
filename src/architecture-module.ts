@@ -28,7 +28,7 @@ export type ArchitectureModule = z.infer<typeof architectureModuleSchema>;
 export type ArchitectureModuleCatalog = Map<string, ArchitectureModule>;
 
 export function validateModuleCatalog(input: readonly unknown[]): ArchitectureModuleCatalog {
-  const modules = input.map(module => architectureModuleSchema.parse(module));
+  const modules = z.array(architectureModuleSchema).parse(input);
   const byId = new Map<string, ArchitectureModule>();
 
   for (const module of modules) {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { ZodError } from 'zod';
 import {
   architectureModuleSchema,
   validateModuleCatalog,
@@ -37,10 +38,18 @@ test('validateModuleCatalog returns a catalog sorted by module ID', () => {
 
 test('validateModuleCatalog rejects a malformed raw descriptor', () => {
   const descriptors: unknown[] = [
-    { ...moduleFixture(), version: 0 },
+    moduleFixture(),
+    { ...moduleFixture({ id: 'api' }), version: 0 },
   ];
 
-  assert.throws(() => validateModuleCatalog(descriptors));
+  assert.throws(
+    () => validateModuleCatalog(descriptors),
+    error => {
+      assert.ok(error instanceof ZodError);
+      assert.deepEqual(error.issues[0]?.path, [1, 'version']);
+      return true;
+    },
+  );
 });
 
 test('architectureModuleSchema accepts module IDs matching the contract regex', () => {
