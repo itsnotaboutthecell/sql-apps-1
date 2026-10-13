@@ -22,6 +22,15 @@ Use Azure CLI for container revisions, logs, identities, role assignments, and r
 - Runtime rollback does not reverse schema changes. Use expand/contract changes and operator-reviewed recovery.
 - Do not run deployment from two unrelated machines simultaneously. CI provides concurrency grouping; a distributed lock service is not implemented.
 
+### Live Azure deployment lessons
+
+- A newly created ACR can exist in ARM before its login-server DNS record is consistently resolvable. If preflight reports `CONNECTIVITY_DNS_ERROR`, verify the configured login server with `az acr show`, run `az acr check-health`, and test DNS/HTTPS. Retry after DNS is healthy; do not create a replacement registry or republish images merely because DNS has not propagated.
+- ARM deployments are not transactions. A failed `provision` can leave SQL, Storage, Key Vault, Functions, identities, private endpoints, and monitoring resources running and billing even though no local infrastructure stage was saved. Use `az deployment operation group list` and `az resource list` to inventory the partial result before retrying or making cleanup decisions.
+- Container Apps managed-environment creation can fail with `ManagedEnvironmentCapacityHeavyUsageError` / `AKSCapacityHeavyUsage` while other resources succeed. First retry the same declarative deployment in the approved region. A region change creates a different placement and cost decision; never switch regions automatically.
+- Managed-environment retries can remain in `Running` / `Updating` for tens of minutes. Check the ARM deployment and environment provisioning states rather than starting a concurrent deployment. The CLI process can legitimately remain quiet while ARM is still working.
+- Ordinary provisioning no longer creates Azure role assignments. After it succeeds, an authorized administrator runs `rbac-plan` and `rbac-deploy`; the ordinary deployer then verifies exact live principal/role/scope assignments before SQL or runtime publication.
+- Query Cost Management after deployment, but expect billing data to lag and the API to throttle with HTTP 429. A zero or unavailable same-day result is not proof that the environment is free. Use the declared SKUs and current Retail Prices API as the pre-deployment floor, then reconcile against actual and forecast cost when data arrives.
+
 ## Durable data
 
 SQL owns application data and row-level security. Blob owns user files. Files are addressed by tenant/object-ID/name; deleting the application does not require deleting its data. The gateway returns at most 100 files per storage response with an opaque continuation token. The browser loads one page initially and follows a token only when the user selects **Load more files**.

@@ -16,6 +16,38 @@ Azure SQL and Container Apps have free allowances, but the current demo template
 
 The Static Web Apps candidate does not remove that stack. Static Web Apps Standard serves the static website, while one linked Container App still runs the Node API and internal DAB. ACR, networking, SQL and Container Apps can still charge, and Standard adds its own plan. It is therefore likely not cheaper and must not be presented as a cost-saving default without current, same-basis evidence.
 
+## Do not confuse the deployment profiles
+
+The profiles have very different idle cost floors. None is a general-purpose
+"cheap Azure" profile:
+
+| Profile | Intended use | Main idle cost drivers |
+| --- | --- | --- |
+| Local | Build and single-machine evaluation | No Azure resources |
+| Public demo | Small disposable browser demo | ACR Basic and custom-network Container Apps infrastructure remain paid even when app replicas scale to zero; SQL can use the eligible free-paused offer |
+| Role-based data | Private SQL/DAB app without files or Functions | Paid S0 SQL, ACR Basic, SQL private endpoint, two Container Apps with one minimum replica each, and Log Analytics |
+| Foundation | Full production-oriented validation | Everything in role-based data plus an always-billed Functions EP1 plan, Storage, Key Vault, five additional private endpoints, Application Insights, and their data/telemetry usage |
+
+The full foundation profile is deliberately secure and capability-complete,
+but it is an expensive way to run a demo. In East US on 2026-10-13, the
+public Azure Retail Prices API listed Premium Functions compute at
+USD 0.173/vCPU-hour plus USD 0.0123/GiB-hour, S0 SQL at USD 0.48/day, and
+ACR Basic at USD 0.1666/day before storage and build usage. Microsoft
+documents that every Functions Premium plan keeps at least one billed
+instance. Those three choices alone create a substantial monthly floor before
+Container Apps allocation, private endpoints, logs, storage, backup, or data
+transfer. Treat foundation as a production-validation profile, not a starter
+cost profile.
+
+The offline `demo-cost` command prices the public-demo contract, and
+`role-based-cost` describes the reduced role-based-data contract. There is
+currently no offline command that quotes or approves the full foundation
+profile. Before provisioning foundation, inventory the generated resources
+and obtain a current account/region estimate for EP1, S0, both minimum
+Container Apps replicas, six private endpoints, ACR, Log Analytics,
+Application Insights, Storage, Key Vault, backup, and transfer. A cost
+acknowledgement for a smaller profile does not approve foundation.
+
 ## Lowest-cost POC path
 
 The lowest-cost path is not "pick any free tier and deploy". For this repo, a zero-dollars or near-zero-dollars proof-of-concept should stay local unless a reviewed design is explicit about which services are in scope, what is still paid, and which grants are being consumed.
