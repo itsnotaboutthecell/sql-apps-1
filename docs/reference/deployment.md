@@ -50,9 +50,9 @@ npm run azure -- artifacts sql-apps.json
 Alternatively use the underlying standard Azure CLI commands:
 
 ```powershell
-az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps:0.1.1 --file Dockerfile .
-az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps-dab:0.1.1 --file dab/Dockerfile .
-az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps-functions:0.1.1 --file functions/Dockerfile .
+az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps:0.1.2 --file Dockerfile .
+az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps-dab:0.1.2 --file dab/Dockerfile .
+az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps-functions:0.1.2 --file functions/Dockerfile .
 ```
 
 ACR tasks require suitable Azure permissions and may have region/subscription restrictions. Images are not built by `deploy`. Use immutable digests for release, not tags that are overwritten. Publishing code to a registry is an explicit operator action.

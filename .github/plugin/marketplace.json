@@ -1,6 +1,6 @@
 {
   "name": "sql-apps-skills",
   "owner": { "name": "Microsoft", "url": "https://www.microsoft.com" },
-  "metadata": { "description": "Independent Azure-native application development", "version": "0.1.1" },
-  "plugins": [{ "name": "sql-apps", "description": "Subscription-free local Azure application workflows and diagnostics", "version": "0.1.1", "source": "./plugins/sql-apps" }]
+  "metadata": { "description": "Independent Azure-native application development", "version": "0.1.2" },
+  "plugins": [{ "name": "sql-apps", "description": "Subscription-free local Azure application workflows and diagnostics", "version": "0.1.2", "source": "./plugins/sql-apps" }]
 }

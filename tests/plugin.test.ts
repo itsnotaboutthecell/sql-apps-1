@@ -30,7 +30,7 @@ test('SQL Apps identity is consistent across packages, platform manifests and ma
     assert.equal(manifest.name, 'sql-apps', path);
     assert.equal(manifest.homepage, repository, path);
     assert.equal(manifest.repository, repository, path);
-    assert.equal(manifest.version, '0.1.1', path);
+    assert.equal(manifest.version, '0.1.2', path);
     assert.deepEqual(manifest.author, { name: 'Microsoft SQL team (mssql)', url: 'https://github.com/microsoft' }, path);
     if (manifest.interface) {
       assert.equal(manifest.interface.displayName, 'SQL Apps');

@@ -28,7 +28,7 @@ async function fixture(t) {
   t.after(() => rm(home, { recursive: true, force: true }));
   for (const folder of ['src', 'sql', 'public', 'dab', '.config']) await mkdir(join(home, folder), { recursive: true });
   await writeFile(join(home, 'package.json'), JSON.stringify({
-    name: 'fixture', dependencies: { '@microsoft/sql-apps': '0.1.1' },
+    name: 'fixture', dependencies: { '@microsoft/sql-apps': '0.1.2' },
   }));
   await writeFile(join(home, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3 }));
   await writeFile(join(home, 'tsconfig.json'), JSON.stringify({ compilerOptions: {} }));
@@ -36,7 +36,7 @@ async function fixture(t) {
   await writeFile(join(home, '.sql-apps-project.json'), JSON.stringify({
     version: 1, id: 'b91d4857-9570-4d4b-a740-918471ca7e26', name: 'Fixture',
     slug: 'fixture', starter: 'data', profile: 'role-based-data', scaffoldVersion: 1,
-    tooling: { package: '@microsoft/sql-apps', version: '0.1.1' },
+    tooling: { package: '@microsoft/sql-apps', version: '0.1.2' },
   }));
   await writeFile(join(home, 'application.json'), JSON.stringify({ name: 'fixture', selectedExamples: [] }));
   await writeFile(join(home, 'role-based-data.json'), JSON.stringify({

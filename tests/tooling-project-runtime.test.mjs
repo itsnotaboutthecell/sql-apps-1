@@ -282,6 +282,9 @@ test('packaged deployment resolves immutable assets from tooling while retaining
         networkId: { value: '/network' },
         storageAccount: { value: 'storage' },
         vaultName: { value: 'vault' },
+        sqlBackupRetentionDays: { value: 7 },
+        sqlBackupRedundancy: { value: 'Geo' },
+        sqlAuditWorkspaceName: { value: 'logs' },
       });
       return '';
     };

@@ -6,6 +6,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { withFileLock } from '../src/file-lock.mjs';
+import { readProjectManifest } from '../src/project-contract.mjs';
 
 const execute = promisify(execFile);
 const projectDirectories = ['.config', 'content', 'dab', 'docs', 'functions', 'infra', 'public', 'scripts', 'sql', 'src'];
@@ -113,18 +114,33 @@ async function copyProjectSource(source, target) {
   }
 }
 
-async function customizeProject(target, name, slug) {
+async function customizeProject(target, name, slug, toolingVersion) {
   await writeFile(join(target, 'application.json'), `${JSON.stringify({ name: slug, selectedExamples: [] }, null, 2)}\n`);
+  await writeFile(join(target, '.sql-apps-project.json'), `${JSON.stringify({
+    version: 1,
+    id: randomUUID(),
+    name,
+    slug,
+    starter: 'data',
+    profile: 'role-based-data',
+    scaffoldVersion: 1,
+    tooling: { package: '@microsoft/sql-apps', version: toolingVersion },
+  }, null, 2)}\n`);
+  await writeFile(join(target, 'role-based-data.json'),
+    await readFile(join(target, 'role-based-data.example.json'), 'utf8'));
   const pkgPath = join(target, 'package.json');
   const pkg = JSON.parse(await readFile(pkgPath, 'utf8'));
   pkg.name = `sql-apps-${slug}`;
   pkg.sqlApps = { project: true };
-  if (pkg.scripts) {
-    delete pkg.scripts['plugin:check'];
-    delete pkg.scripts['plugin:install'];
-    delete pkg.scripts.projects;
-    pkg.scripts.test = 'npm run build && npm run typecheck && npm run app:check';
-  }
+  pkg.dependencies = { ...pkg.dependencies, '@microsoft/sql-apps': toolingVersion };
+  pkg.scripts = {
+    build: 'sql-apps build',
+    guide: 'sql-apps guide',
+    local: 'sql-apps local',
+    setup: 'sql-apps setup',
+    'setup:check': 'sql-apps setup-check',
+    'workspace:check': 'sql-apps workspace-check',
+  };
   await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
   const lockPath = join(target, 'package-lock.json');
   const lock = JSON.parse(await readFile(lockPath, 'utf8'));
@@ -132,10 +148,10 @@ async function customizeProject(target, name, slug) {
   if (lock.packages?.['']) {
     lock.packages[''].name = pkg.name;
     lock.packages[''].sqlApps = { project: true };
-    if (lock.packages[''].scripts) {
-      delete lock.packages[''].scripts['plugin:check'];
-      delete lock.packages[''].scripts['plugin:install'];
-    }
+    lock.packages[''].dependencies = {
+      ...lock.packages[''].dependencies,
+      '@microsoft/sql-apps': toolingVersion,
+    };
   }
   await writeFile(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
   await writeFile(join(target, 'README.md'), `# ${name}\n\nA SQL Apps project.\n\n## Local development\n\n\`\`\`powershell\nnpm ci\nnpm run build\nnpm run setup -- plan --profile role-based-data\n\`\`\`\n`);
@@ -153,7 +169,9 @@ async function validateProject(path) {
   const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
   const application = JSON.parse(await readFile(join(root, 'application.json'), 'utf8'));
   const contract = JSON.parse(await readFile(join(root, 'runtime-contract.json'), 'utf8'));
-  if (pkg.sqlApps?.project !== true || pkg.scripts?.local !== 'node dist/src/local-cli.js' ||
+  const manifest = await readProjectManifest(root);
+  if (pkg.sqlApps?.project !== true || pkg.scripts?.local !== 'sql-apps local' ||
+      pkg.dependencies?.['@microsoft/sql-apps'] !== manifest.tooling.version ||
       typeof application.name !== 'string' || application.selectedExamples?.length !== 0 ||
       contract.version !== 1) throw new Error('The selected directory is not a SQL Apps project.');
   for (const file of ['src/local-cli.ts', 'sql/database.sqlproj']) await lstat(join(root, file));
@@ -162,6 +180,7 @@ async function validateProject(path) {
 
 export async function createProject(sourceValue, name, options = {}) {
   const source = await realpath(sourceValue);
+  const toolingVersion = JSON.parse(await readFile(join(source, 'packages', 'sql-apps', 'package.json'), 'utf8')).version;
   const userHome = resolve(options.userHome ?? homedir());
   return withProjectsLock(userHome, async () => {
     const state = await readProjectsState({ userHome });
@@ -181,7 +200,7 @@ export async function createProject(sourceValue, name, options = {}) {
     await mkdir(temporary, { mode: 0o700 });
     try {
       await copyProjectSource(source, temporary);
-      await customizeProject(temporary, name.trim(), slug);
+      await customizeProject(temporary, name.trim(), slug, toolingVersion);
       if (options.initializeGit !== false) await initializeRepository(temporary, options.runner);
       await rename(temporary, destination);
     } catch (error) {

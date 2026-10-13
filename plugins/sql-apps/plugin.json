@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "sql-apps",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Build and design standalone SQL Apps applications, and start, inspect, troubleshoot and validate them locally.",
   "author": { "name": "Microsoft SQL team (mssql)", "url": "https://github.com/microsoft" },
   "homepage": "https://github.com/microsoft/sql-apps",

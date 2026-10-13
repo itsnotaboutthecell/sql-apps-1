@@ -21,12 +21,16 @@ async function sourceFixture(t) {
     'functions/src/index.ts': 'export {};',
     'infra/main.bicep': '',
     'public/index.html': '<h1>SQL Apps</h1>',
+    'public/style.css': '',
     'scripts/build-provenance.mjs': '',
     'scripts/check-application.mjs': '',
     'scripts/workspace-check.mjs': await readFile(join(process.cwd(), 'scripts', 'workspace-check.mjs'), 'utf8'),
     'sql/database.sqlproj': '<Project />',
     'src/local-cli.ts': '',
+    'src/project-contract.mjs': await readFile(join(process.cwd(), 'src', 'project-contract.mjs'), 'utf8'),
+    'src/tooling-context.mjs': await readFile(join(process.cwd(), 'src', 'tooling-context.mjs'), 'utf8'),
     'src/workspace.mjs': await readFile(join(process.cwd(), 'src', 'workspace.mjs'), 'utf8'),
+    'packages/sql-apps/package.json': JSON.stringify({ name: '@microsoft/sql-apps', version: '1.2.3' }),
     '.dockerignore': '.sql-apps\n',
     '.env.example': '',
     '.gitignore': '.sql-apps/\n',
@@ -51,6 +55,9 @@ async function sourceFixture(t) {
       packages: { '': { name: 'sql-apps', version: '1.2.3' } },
     }),
     'runtime-contract.json': '{"version":1,"capabilities":["local","setup-check"]}',
+    'role-based-data.example.json': JSON.stringify({
+      profile: 'role-based-data', requiredRole: 'AppUser', readinessPath: '/api/AppReady',
+    }),
     'tsconfig.json': '{}',
     'tsconfig.runtime.json': '{}',
   };
@@ -83,8 +90,9 @@ test('create scaffolds an independent named project and records it as active', a
   const pkg = JSON.parse(await readFile(join(created.path, 'package.json'), 'utf8'));
   assert.equal(pkg.name, 'sql-apps-to-do');
   assert.deepEqual(pkg.sqlApps, { project: true });
-  assert.equal(pkg.scripts['plugin:install'], undefined);
-  assert.equal(pkg.scripts.projects, undefined);
+  assert.equal(pkg.dependencies['@microsoft/sql-apps'], '1.2.3');
+  assert.equal(pkg.scripts.local, 'sql-apps local');
+  assert.equal(JSON.parse(await readFile(join(created.path, '.sql-apps-project.json'), 'utf8')).tooling.version, '1.2.3');
   await assert.rejects(access(join(created.path, 'plugins')), { code: 'ENOENT' });
   await assert.rejects(access(join(created.path, 'examples')), { code: 'ENOENT' });
   await assert.rejects(access(join(created.path, 'scripts', 'projects.mjs')), { code: 'ENOENT' });
@@ -136,7 +144,7 @@ test('open registers an existing SQL Apps project and list reports all projects'
   const first = await projects.createProject(source, 'First App', { userHome, initializeGit: false });
   const external = join(userHome, 'elsewhere', 'second-app');
   await mkdir(external, { recursive: true });
-  for (const file of ['package.json', 'application.json', 'runtime-contract.json']) {
+  for (const file of ['.sql-apps-project.json', 'package.json', 'application.json', 'runtime-contract.json']) {
     await writeFile(join(external, file), await readFile(join(first.path, file)));
   }
   await mkdir(join(external, 'src'), { recursive: true });
@@ -180,7 +188,7 @@ test('generated projects pass source inspection without carrying plugin implemen
   const userHome = await mkdtemp(join(tmpdir(), 'sql-apps-project-inspection-'));
   t.after(() => rm(userHome, { recursive: true, force: true }));
   const created = await projects.createProject(source, 'Inspected App', { userHome, initializeGit: false });
-  const report = await workspace.inspectSource(created.path);
+  const report = await workspace.inspectSource(created.path, { toolingHome: source });
   assert.equal(report.ready, true);
   assert.equal(report.application.name, 'inspected-app');
 });

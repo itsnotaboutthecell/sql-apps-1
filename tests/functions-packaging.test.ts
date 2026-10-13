@@ -1,4 +1,4 @@
-import { test, type TestContext } from 'node:test';
+import { after, before, test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -12,6 +12,14 @@ import { z } from 'zod';
 const execute = promisify(execFile);
 const require = createRequire(import.meta.url);
 interface ImageFixture { directory: string; local: boolean; entry?: string }
+const packagedContext = resolve('dist', 'tooling-package');
+
+before(async () => {
+  await execute(process.execPath, [resolve('scripts', 'build-tooling-package.mjs'), packagedContext],
+    { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+});
+
+after(() => rm(packagedContext, { recursive: true, force: true }));
 
 const buildCommands = new Map<string, (builder: string) => Promise<void>>([
   ['RUN npx tsc --project tsconfig.runtime.json && npm prune --omit=dev', builder =>
@@ -46,7 +54,9 @@ async function dependencyLink(destination: string): Promise<void> {
 
 async function materializeFunctionsImage(
   t: TestContext, recipe: string, transform: (text: string) => string = text => text,
+  context = process.cwd(),
 ): Promise<ImageFixture> {
+  const local = basename(recipe) === 'local.Dockerfile';
   const root = await mkdtemp(join(tmpdir(), 'sql-apps-functions-package-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const builder = join(root, 'builder');
@@ -64,7 +74,7 @@ async function materializeFunctionsImage(
       assert.ok(stage <= 2, 'Update this bounded fixture explicitly for a new recipe stage');
     } else if (/^RUN\s/.test(line)) {
       assert.equal(stage, 1);
-      if (line === 'RUN npm ci') continue;
+      if (line === 'RUN npm ci' || line === 'RUN npm install --omit=dev --ignore-scripts') continue;
       const action = buildCommands.get(line);
       assert.ok(action, `Update this bounded fixture explicitly for the build command: ${line}`);
       await action(builder);
@@ -85,7 +95,7 @@ async function materializeFunctionsImage(
       const destinationRoot = stage === 1 ? builder : image;
       for (const source of args) {
         const input = fromBuild ? source.replace(/^\/app\//, '') : source;
-        const sourceRoot = fromBuild ? builder : process.cwd();
+        const sourceRoot = fromBuild ? builder : context;
         if (fromBuild && input === 'node_modules') {
           await dependencyLink(contained(destinationRoot, destination));
           continue;
@@ -106,9 +116,9 @@ async function materializeFunctionsImage(
       }
     }
   }
-  assert.equal(stage, 2);
-  assert.equal(compiled, true);
-  return { directory: image, local: basename(recipe) === 'local.Dockerfile', ...(entry ? { entry } : {}) };
+  assert.equal(stage, local ? 1 : 2);
+  assert.equal(compiled, !local);
+  return { directory: local ? builder : image, local, ...(entry ? { entry } : {}) };
 }
 
 async function assertImageModuleClosure(image: ImageFixture): Promise<void> {
@@ -164,14 +174,16 @@ test('the gateway clean room cannot borrow an omitted source directory from the 
     text.replace(/^COPY scripts \.\/scripts\r?$/m, '')), /Isolated image build failed/);
 });
 
-test('clean-room compiler cannot borrow an omitted script from the checkout', async t => {
-  await assert.rejects(materializeFunctionsImage(t, resolve('functions', 'local.Dockerfile'), text =>
-    text.replace(/^COPY scripts\/workspace-check\.mjs scripts\/workspace-check\.d\.mts \.\/scripts\/\r?$/m, '')),
-  /TS2307/);
+test('local image cannot borrow an omitted packaged runtime from the checkout', async t => {
+  const recipe = join(packagedContext, 'assets', 'functions', 'local.Dockerfile');
+  const image = await materializeFunctionsImage(t, recipe,
+    text => text.replace(/^COPY dist\/src \.\/dist\/src\r?$/m, ''), packagedContext);
+  await assert.rejects(assertImageModuleClosure(image), /dist[\\/]src/);
 });
 
 test('local module closure rejects an omitted lock helper', async t => {
-  const image = await materializeFunctionsImage(t, resolve('functions', 'local.Dockerfile'));
+  const recipe = join(packagedContext, 'assets', 'functions', 'local.Dockerfile');
+  const image = await materializeFunctionsImage(t, recipe, text => text, packagedContext);
   await rm(join(image.directory, 'dist', 'src', 'file-lock.mjs'));
   await assert.rejects(assertImageModuleClosure(image), /file-lock\.mjs/);
 });

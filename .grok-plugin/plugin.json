@@ -1,6 +1,6 @@
 {
   "name": "sql-apps",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Build and deploy this independent Azure-native TypeScript stack.",
   "author": { "name": "Microsoft SQL team (mssql)", "url": "https://github.com/microsoft" },
   "homepage": "https://github.com/microsoft/sql-apps",

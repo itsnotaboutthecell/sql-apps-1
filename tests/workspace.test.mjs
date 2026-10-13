@@ -17,7 +17,9 @@ async function fixture(t) {
     await mkdir(join(home, folder), { recursive: true });
   }
   await writeFile(join(home, 'package.json'), JSON.stringify({
-    name: 'fixture', version: '0.1.0', dependencies: { '@microsoft/sql-apps': '0.1.1' },
+    name: 'fixture', version: '0.1.0', sqlApps: { project: true },
+    scripts: { local: 'sql-apps local' },
+    dependencies: { '@microsoft/sql-apps': '0.1.2' },
   }));
   await writeFile(join(home, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3 }));
   await writeFile(join(home, 'tsconfig.json'), JSON.stringify({ compilerOptions: {} }));
@@ -30,7 +32,7 @@ async function fixture(t) {
     starter: 'data',
     profile: 'role-based-data',
     scaffoldVersion: 1,
-    tooling: { package: '@microsoft/sql-apps', version: '0.1.1' },
+    tooling: { package: '@microsoft/sql-apps', version: '0.1.2' },
   }));
   await writeFile(join(home, 'application.json'), JSON.stringify({ name: 'fixture', selectedExamples: [] }));
   await writeFile(join(home, 'role-based-data.json'), JSON.stringify({
@@ -42,6 +44,8 @@ async function fixture(t) {
   await writeFile(join(home, 'public', 'style.css'), 'body {}');
   await writeFile(join(home, 'dab', 'dab-config.json'), '{}');
   await writeFile(join(home, 'scripts', 'workspace-check.mjs'), await readFile(resolve('scripts', 'workspace-check.mjs')));
+  await writeFile(join(home, 'src', 'project-contract.mjs'), await readFile(resolve('src', 'project-contract.mjs')));
+  await writeFile(join(home, 'src', 'tooling-context.mjs'), await readFile(resolve('src', 'tooling-context.mjs')));
   await writeFile(join(home, 'dist', 'src', 'local-cli.js'), 'console.log("EXECUTED");');
   return realpath(home);
 }
@@ -207,7 +211,7 @@ test('current project takes precedence over the foundation binding and explicit 
   const active = await fixture(t);
   const profile = await mkdtemp(join(tmpdir(), 'sql-apps binding-'));
   t.after(() => rm(profile, { recursive: true, force: true }));
-  await writeFile(join(profile, 'sql-apps-local.json'), JSON.stringify({ version: 1, home }));
+  await writeFile(join(profile, 'sql-apps-local.json'), JSON.stringify({ version: 1, home: process.cwd() }));
   const { recordBuild } = await load();
   await recordBuild(home);
   await recordBuild(active);
@@ -221,14 +225,16 @@ test('current project takes precedence over the foundation binding and explicit 
   assert.match(selected.stdout, /EXECUTED/);
 });
 
-test('legacy checkout plugin does not claim generated projects as foundation checkouts', async t => {
+test('checkout plugin requires separate foundation tooling for generated projects', async t => {
   const home = await fixture(t);
+  const profile = await mkdtemp(join(tmpdir(), 'sql-apps no-binding-'));
+  t.after(() => rm(profile, { recursive: true, force: true }));
   await assert.rejects(
     execute(process.execPath, [launcher, 'verify'], {
       cwd: home,
-      env: { ...process.env, SQL_APPS_HOME: home },
+      env: { ...process.env, COPILOT_HOME: profile, SQL_APPS_HOME: home },
     }),
-    error => /not this SQL Apps application checkout/i.test(error.stderr) &&
+    error => /requires an installed foundation binding/i.test(error.stderr) &&
       !error.stdout.includes('EXECUTED'),
   );
 });

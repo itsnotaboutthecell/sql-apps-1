@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY application.json runtime-contract.json ./
+COPY packages ./packages
 COPY scripts ./scripts
 COPY plugins/sql-apps ./plugins/sql-apps
 COPY sql ./sql

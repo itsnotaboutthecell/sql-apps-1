@@ -25,7 +25,7 @@ Only [plugins/sql-apps](../../plugins/sql-apps) is the installed package: manife
 
 ## Use the GitHub Copilot App
 
-Restart the App or create a **fresh session** after installation. In **Customize -> Plugins**, look for **sql-apps**, marketplace **sql-apps-skills**, version **0.1.1**, enabled. Its skills should appear under **Skills**:
+Restart the App or create a **fresh session** after installation. In **Customize -> Plugins**, look for **sql-apps**, marketplace **sql-apps-skills**, version **0.1.2**, enabled. Its skills should appear under **Skills**:
 
 | Skill | Example prompt |
 | --- | --- |

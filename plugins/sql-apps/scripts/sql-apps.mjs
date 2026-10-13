@@ -13,7 +13,10 @@ export async function validateHome(value) {
   const root = await realpath(value);
   const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
   const foundation = pkg.name === 'sql-apps';
-  if ((!foundation && pkg.sqlApps?.project !== true) || pkg.scripts?.local !== 'node dist/src/local-cli.js') {
+  const validLocalScript = foundation ? pkg.scripts?.local === 'node dist/src/local-cli.js' :
+    pkg.scripts?.local === 'sql-apps local';
+  if ((!foundation && (pkg.sqlApps?.project !== true ||
+       typeof pkg.dependencies?.['@microsoft/sql-apps'] !== 'string')) || !validLocalScript) {
     throw new Error('The selected directory is not this SQL Apps application checkout');
   }
   for (const file of ['src/local-cli.ts', 'sql/database.sqlproj',
@@ -105,6 +108,30 @@ export async function workspaceReport(home, options = {}) {
   const { checkWorkspace } = await import(pathToFileURL(inspector).href);
   const environment = options.environment ?? process.env;
   const userHome = resolve(options.userHome ?? homedir());
+  const pkg = JSON.parse(await readFile(join(home, 'package.json'), 'utf8'));
+  let tools = home;
+  let foundation = true;
+  if (pkg.sqlApps?.project === true) {
+    foundation = false;
+    let candidate = resolve(options.cwd ?? process.cwd());
+    while (true) {
+      try {
+        const current = JSON.parse(await readFile(join(candidate, 'package.json'), 'utf8'));
+        if (current.name === 'sql-apps') {
+          tools = await validateHome(candidate);
+          break;
+        }
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+      const parent = dirname(candidate);
+      if (parent === candidate) {
+        tools = await resolveToolHome(options);
+        break;
+      }
+      candidate = parent;
+    }
+  }
   let source = 'checkout';
   let explicit = false;
   if (environment.SQL_APPS_HOME !== undefined) {
@@ -123,8 +150,8 @@ export async function workspaceReport(home, options = {}) {
     activeDirectory: options.cwd ?? process.cwd(),
     bindingSource: source,
     explicitHome: explicit,
-    tooling: home,
-    foundation: true,
+    tooling: tools,
+    foundation,
   });
 }
 
