@@ -45,6 +45,7 @@ that the repository cannot validate or support.
 - Automatically upgrading resources when usage grows.
 - Replacing live Azure eligibility, availability, quota, or cost review with an
   offline estimate.
+- Converting an existing paid database or deployment to the free tier.
 - Removing the existing deployment paths before equivalent compiled plans pass
   their current tests and live acceptance gates.
 
@@ -358,18 +359,22 @@ The user reviews and approves the new plan before changes occur.
 
 ## Compatibility baseline
 
-The first implementation preserves these current paths as compatibility
-compositions:
+The first implementation preserves the behavior of current paths as migration
+gates. Only `public-demo` currently shares the new compiler's free-tier SQL
+policy. `role-based-data` and `foundation` use paid SQL contracts today, so they
+remain legacy deployment paths until separately validated **new-target**
+free-tier compositions pass their behavioral gates.
 
-| Current path | Behavior that must remain covered |
-| --- | --- |
-| `public-demo` | Synthetic data only; visitor sessions; Azure SQL free-tier intent; DAB internal to the API boundary; same-origin browser access; session/data limits; immutable artifacts; staged publication; direct-backend denial; CRUD, cold-start, readiness, cleanup, and ownership acceptance. |
-| `role-based-data` | Entra delegated access; required human application role; gateway and DAB only; explicit stored-procedure entities and grants; no files, jobs, Functions, storage, or Key Vault; private SQL boundary; authorized/unauthorized token acceptance. |
-| `foundation` | Entra delegated access; gateway, DAB, files, and Functions; managed identity; restricted SQL access; private file ownership; two-user REST and GraphQL reads; file/function invocation; anonymous rejection; SQL audit and recovery outputs. |
+| Current path | Behavior that must remain covered | Billing migration boundary |
+| --- | --- | --- |
+| `public-demo` | Synthetic data only; visitor sessions; Azure SQL free-tier intent; DAB internal to the API boundary; same-origin browser access; session/data limits; immutable artifacts; staged publication; direct-backend denial; CRUD, cold-start, readiness, cleanup, and ownership acceptance. | Can become the first compiler compatibility composition because its new-database policy already requests free-tier enrollment. |
+| `role-based-data` | Entra delegated access; required human application role; gateway and DAB only; explicit stored-procedure entities and grants; no files, jobs, Functions, storage, or Key Vault; private SQL boundary; authorized/unauthorized token acceptance. | Existing paid configurations and databases are not adapted or converted. A new compiler target must request free-tier enrollment and independently pass these behavioral gates. |
+| `foundation` | Entra delegated access; gateway, DAB, files, and Functions; managed identity; restricted SQL access; private file ownership; two-user REST and GraphQL reads; file/function invocation; anonymous rejection; SQL audit and recovery outputs. | Existing paid configurations and databases are not adapted or converted. A new compiler target must request free-tier enrollment and independently pass these behavioral gates. |
 
-Existing commands and templates remain available until an equivalent compiled
-composition passes the original unit, infrastructure, deployment, smoke, and
-live acceptance gates.
+Existing commands and templates remain available. No adapter may represent a
+paid legacy configuration as a free-tier compiler plan. Promotion occurs only
+for new targets after the compiled composition passes the original unit,
+infrastructure, deployment, smoke, and live acceptance gates.
 
 ## Verification
 
@@ -431,11 +436,13 @@ live acceptance gates.
 3. Extract Azure SQL free-tier and DAB core modules without changing deployment.
 4. Extract optional modules behind the catalog contract.
 5. Add deterministic compilation and canonical plan review.
-6. Add the plan-driven orchestrator while retaining profile adapters.
+6. Add the plan-driven orchestrator while retaining legacy profile entry points.
 7. Route plugin guidance through brief, intent, compile, explain, and approve.
-8. Prove parity for current paths.
+8. Promote `public-demo` only after compiler parity is proven.
 9. Add and live-validate simpler starting compositions.
-10. Deprecate duplicated profile-specific orchestration only after parity and
+10. Add new-target free-tier authenticated compositions and prove their
+    behavioral parity without converting legacy deployments.
+11. Deprecate duplicated profile-specific orchestration only after parity and
     migration documentation are complete.
 
 The migration does not start by deleting current templates or deployment
