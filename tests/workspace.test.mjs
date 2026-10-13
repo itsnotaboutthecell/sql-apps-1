@@ -13,18 +13,34 @@ const load = () => import('../scripts/workspace-check.mjs');
 async function fixture(t) {
   const home = await mkdtemp(join(tmpdir(), 'sql-apps workspace-'));
   t.after(() => rm(home, { recursive: true, force: true }));
-  for (const folder of ['src', 'sql', 'plugins/sql-apps', 'public', 'dist/src', 'scripts']) {
+  for (const folder of ['src', 'sql', 'public', 'dab', 'dist/src', 'scripts', '.config']) {
     await mkdir(join(home, folder), { recursive: true });
   }
   await writeFile(join(home, 'package.json'), JSON.stringify({
-    name: 'sql-apps', version: '0.1.0', scripts: { local: 'node dist/src/local-cli.js' },
+    name: 'fixture', version: '0.1.0', dependencies: { '@microsoft/sql-apps': '0.1.1' },
   }));
-  await writeFile(join(home, 'runtime-contract.json'), JSON.stringify({ version: 1, capabilities: ['local', 'setup-check'] }));
+  await writeFile(join(home, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3 }));
+  await writeFile(join(home, 'tsconfig.json'), JSON.stringify({ compilerOptions: {} }));
+  await writeFile(join(home, '.config', 'dotnet-tools.json'), JSON.stringify({ version: 1, tools: {} }));
+  await writeFile(join(home, '.sql-apps-project.json'), JSON.stringify({
+    version: 1,
+    id: 'b91d4857-9570-4d4b-a740-918471ca7e26',
+    name: 'Fixture',
+    slug: 'fixture',
+    starter: 'data',
+    profile: 'role-based-data',
+    scaffoldVersion: 1,
+    tooling: { package: '@microsoft/sql-apps', version: '0.1.1' },
+  }));
   await writeFile(join(home, 'application.json'), JSON.stringify({ name: 'fixture', selectedExamples: [] }));
+  await writeFile(join(home, 'role-based-data.json'), JSON.stringify({
+    profile: 'role-based-data', requiredRole: 'AppUser', readinessPath: '/api/Ready',
+  }));
   await writeFile(join(home, 'src', 'local-cli.ts'), 'export const source = 1;');
-  await writeFile(join(home, 'src', 'workspace.mjs'), await readFile(resolve('src', 'workspace.mjs')));
   await writeFile(join(home, 'sql', 'database.sqlproj'), '<Project />');
-  await writeFile(join(home, 'plugins', 'sql-apps', 'plugin.json'), '{}');
+  await writeFile(join(home, 'public', 'index.html'), '<!doctype html>');
+  await writeFile(join(home, 'public', 'style.css'), 'body {}');
+  await writeFile(join(home, 'dab', 'dab-config.json'), '{}');
   await writeFile(join(home, 'scripts', 'workspace-check.mjs'), await readFile(resolve('scripts', 'workspace-check.mjs')));
   await writeFile(join(home, 'dist', 'src', 'local-cli.js'), 'console.log("EXECUTED");');
   return realpath(home);
@@ -58,15 +74,44 @@ test('explicit home selection permits intentional use of another checkout', asyn
   assert.equal(report.binding.mismatch, true);
 });
 
-test('missing uncommitted foundation in an active checkout is reported, not copied', async t => {
+test('missing generated project contract in an active project is reported, not copied', async t => {
   const home = await fixture(t);
   const active = await fixture(t);
-  await rm(join(active, 'runtime-contract.json'));
+  await rm(join(active, '.sql-apps-project.json'));
   const { checkWorkspace } = await load();
   const report = await checkWorkspace({ home, activeDirectory: active, bindingSource: 'installed-binding' });
   assert.equal(report.executionAllowed, false);
   assert.equal(report.active.source.code, 'SOURCE_INCOMPLETE');
-  await assert.rejects(readFile(join(active, 'runtime-contract.json')), { code: 'ENOENT' });
+  await assert.rejects(readFile(join(active, '.sql-apps-project.json')), { code: 'ENOENT' });
+});
+
+test('generated project reports every required package and tool input when missing', async t => {
+  const { inspectSource } = await load();
+  for (const name of ['package-lock.json', 'tsconfig.json', '.config/dotnet-tools.json']) {
+    const home = await fixture(t);
+    await rm(join(home, name));
+    const report = await inspectSource(home);
+    assert.equal(report.ready, false, name);
+    assert.equal(report.code, 'SOURCE_INCOMPLETE', name);
+  }
+});
+
+test('generated project validates required file and directory types', async t => {
+  const { inspectSource } = await load();
+  for (const [name, replacement] of [
+    ['src', 'file'],
+    ['package-lock.json', 'directory'],
+    ['tsconfig.json', 'directory'],
+    ['.config/dotnet-tools.json', 'directory'],
+  ]) {
+    const home = await fixture(t);
+    await rm(join(home, name), { recursive: true, force: true });
+    if (replacement === 'directory') await mkdir(join(home, name), { recursive: true });
+    else await writeFile(join(home, name), 'not a directory');
+    const report = await inspectSource(home);
+    assert.equal(report.ready, false, name);
+    assert.equal(report.code, 'SOURCE_INVALID', name);
+  }
 });
 
 test('build provenance detects missing, changed source and tampered artifacts', async t => {
@@ -174,4 +219,16 @@ test('current project takes precedence over the foundation binding and explicit 
     cwd: active, env: { ...env, SQL_APPS_HOME: home },
   });
   assert.match(selected.stdout, /EXECUTED/);
+});
+
+test('legacy checkout plugin does not claim generated projects as foundation checkouts', async t => {
+  const home = await fixture(t);
+  await assert.rejects(
+    execute(process.execPath, [launcher, 'verify'], {
+      cwd: home,
+      env: { ...process.env, SQL_APPS_HOME: home },
+    }),
+    error => /not this SQL Apps application checkout/i.test(error.stderr) &&
+      !error.stdout.includes('EXECUTED'),
+  );
 });

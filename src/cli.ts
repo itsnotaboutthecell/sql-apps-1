@@ -24,7 +24,7 @@ import { compileArchitecture } from './architecture-compiler.js';
 import {
   configureRedirect, delegatedScopeId, deploy, deploymentConfigHash, functionRoleId, parametersFile, preflight,
   publishSchema, readConfig, readState, saveJson, saveState, statePath, withDeploymentLock, provision,
-  type DeploymentState,
+  deploymentTemplatePath, type DeploymentState,
 } from './deployment.js';
 
 const [command, configPath = 'sql-apps.json', argument] = process.argv.slice(2);
@@ -248,7 +248,7 @@ async function main() {
   if (command === 'plan') {
     await preflight(config, run);
     console.log(await run('az', ['deployment', 'group', 'what-if', '--subscription', config.subscriptionId,
-      '--resource-group', config.resourceGroup, '--template-file', 'infra/main.bicep',
+      '--resource-group', config.resourceGroup, '--template-file', deploymentTemplatePath(),
       '--parameters', `@${await parametersFile(config, true)}`]));
     return;
   }

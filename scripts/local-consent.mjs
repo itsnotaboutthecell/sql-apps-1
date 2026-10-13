@@ -3,6 +3,7 @@ import { lstat, readFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { planConsent, grantConsent, assertConsent, revokeConsent, acknowledgeTerms } from '../src/local-consent.mjs';
+import { projectHome, toolingHome } from '../src/tooling-context.mjs';
 
 async function execute(command, args, home) {
   await new Promise((done, reject) => {
@@ -15,8 +16,18 @@ async function execute(command, args, home) {
   });
 }
 
-export async function main(args = process.argv.slice(2), value = process.cwd(), runner = execute) {
-  const home = await realpath(value);
+export async function main(args = process.argv.slice(2), value, runner = execute) {
+  const tools = await toolingHome(import.meta.url);
+  let selected = value;
+  if (selected === undefined) {
+    try { selected = await projectHome(); }
+    catch (error) {
+      const pkg = JSON.parse(await readFile(join(tools, 'package.json'), 'utf8'));
+      if (error.code !== 'PROJECT_NOT_FOUND' || pkg.name !== 'sql-apps') throw error;
+      selected = process.cwd();
+    }
+  }
+  const home = await realpath(selected);
   const [command = 'help', operation, selection] = args;
   if (command === 'help' && args.length <= 1) {
     console.log('Local consent: plan|status <operation> [selection] | grant|grant-once <absolute-plan.json> | grant|grant-once --plan-from <operation> [selection] | terms <absolute-reviewed-document> | revoke [scope|terms] | run <operation> [selection]');
@@ -30,7 +41,7 @@ export async function main(args = process.argv.slice(2), value = process.cwd(), 
     if (command !== 'run') { console.log(JSON.stringify(plan, null, 2)); return; }
     if (operation === 'build' || operation === 'restore') {
       await assertConsent(home, request);
-      if (operation === 'build') await runner(process.execPath, [join(home, 'scripts', 'build-provenance.mjs')], home);
+      if (operation === 'build') await runner(process.execPath, [join(tools, 'dist', 'scripts', 'build-provenance.mjs')], home);
       else {
         if (process.platform === 'win32') {
           const npm = process.env.npm_execpath ?? join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
@@ -42,7 +53,7 @@ export async function main(args = process.argv.slice(2), value = process.cwd(), 
     } else {
       // The runtime CLI rechecks and consumes one-operation grants immediately before dispatch.
       if (!plan.allowed) await assertConsent(home, request);
-      await runner(process.execPath, [join(home, 'dist', 'src', 'local-cli.js'), operation,
+      await runner(process.execPath, [join(tools, 'dist', 'src', 'local-cli.js'), operation,
         ...(selection === undefined ? [] : [selection])], home);
     }
     return;

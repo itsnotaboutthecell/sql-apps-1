@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm, unlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { deploymentSchema, environmentKey } from '../src/config.js';
 import { deploy, preflight, provision, saveState, statePath, armParameters, deploymentConfigHash, type DeploymentState } from '../src/deployment.js';
 import { buildArtifacts } from '../src/artifacts.js';
@@ -11,6 +11,7 @@ import { assignApplicationRole } from '../src/role-based-identity.js';
 import { roleBasedSmoke } from '../src/role-based-smoke.js';
 import type { Run } from '../src/process.js';
 
+const toolingRoot = resolve('.');
 const original = process.cwd();
 const config = deploymentSchema.parse(JSON.parse(await readFile('azure-role-based.example.json', 'utf8')));
 const directory = await mkdtemp(join(tmpdir(), 'sql-apps-role-based-deploy-'));
@@ -72,7 +73,7 @@ test('authorized artifacts publish only gateway and DAB images', async () => {
   const pinned = await buildArtifacts(config, run);
   assert.equal(pinned.functionsImage, '');
   assert.deepEqual(calls.filter(call => call.includes('build')).map(call => call[call.indexOf('--file') + 1]),
-    ['Dockerfile', 'dab/Dockerfile']);
+    [join(toolingRoot, 'Dockerfile'), join(toolingRoot, 'dab', 'Dockerfile')]);
 });
 test('authorized preflight and deployment omit excluded providers and function-role grants', async t => {
   const { run, calls } = runner();

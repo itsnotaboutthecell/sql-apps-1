@@ -14,6 +14,7 @@ To try something already implemented, use the [Todo reference app](../examples/t
 
 ## Command and configuration reference
 
+- [Independent projects](reference/projects.md): project manifest, packaged tooling and foundation boundaries.
 - [Local runtime](reference/local-development.md): services, workspace settings, diagnostics and recovery.
 - [Setup coordinator](reference/setup.md): connected first-run planning, approved tool installation and safe continuation.
 - [Remember local permissions](reference/local-consent.md): one setup approval covering restore, build, workspace, startup and SQL terms, reusable grants and revocation.

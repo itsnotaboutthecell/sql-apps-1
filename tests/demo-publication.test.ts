@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -8,6 +8,20 @@ import {
   readDemoPublicationState, validateDemoPublication, type DemoPublicationConfig,
 } from '../src/demo-publication.js';
 import type { Run } from '../src/process.js';
+import { initializeWorkspace, readWorkspace, workspaceFile } from '../src/workspace.mjs';
+
+let createdWorkspace = false;
+
+before(async () => {
+  if (!readWorkspace('.')) {
+    await initializeWorkspace('.', 59990, async () => 'free');
+    createdWorkspace = true;
+  }
+});
+
+after(async () => {
+  if (createdWorkspace) await rm(workspaceFile('.'), { force: true });
+});
 
 const base = {
   version: 1 as const,

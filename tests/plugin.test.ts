@@ -10,7 +10,7 @@ const launcher = resolve('plugins', 'sql-apps', 'scripts', 'sql-apps.mjs');
 const moduleUrl = pathToFileURL(launcher).href;
 const workspaceUrl = pathToFileURL(resolve('scripts', 'workspace-check.mjs')).href;
 const recordFixture = (home: string) => run(process.execPath, ['--input-type=module', '-e',
-  `import { recordBuild } from ${JSON.stringify(workspaceUrl)}; await recordBuild(process.env.SQL_APPS_HOME);`],
+  `import { recordBuild } from ${JSON.stringify(workspaceUrl)}; await recordBuild(process.env.SQL_APPS_HOME, undefined, undefined, { foundation: true, toolingHome: process.env.SQL_APPS_HOME });`],
 { env: { SQL_APPS_HOME: home } });
 const probe = async (code: string, env: NodeJS.ProcessEnv = {}) =>
   run(process.execPath, ['--input-type=module', '-e', `import { resolveHome, status, main } from ${JSON.stringify(moduleUrl)}; ${code}`], { env });
@@ -251,6 +251,8 @@ test('plugin dispatch uses checkout cwd, passes literal arguments and preserves 
   await writeFile(join(home, 'application.json'), JSON.stringify({ name: 'fixture', selectedExamples: [] }));
   await writeFile(join(home, 'runtime-contract.json'), JSON.stringify({ version: 1, capabilities: ['local', 'setup-check'] }));
   await writeFile(join(home, 'scripts', 'workspace-check.mjs'), await readFile(resolve('scripts', 'workspace-check.mjs')));
+  await writeFile(join(home, 'src', 'project-contract.mjs'), await readFile(resolve('src', 'project-contract.mjs')));
+  await writeFile(join(home, 'src', 'tooling-context.mjs'), await readFile(resolve('src', 'tooling-context.mjs')));
   await assert.rejects(run(process.execPath, [launcher, 'verify'], { env: { SQL_APPS_HOME: home } }), /not built/);
   await writeFile(join(home, 'dist/src/local-cli.js'),
     'console.log(JSON.stringify({cwd:process.cwd(),args:process.argv.slice(2)})); if(process.argv[2]==="test") process.exitCode=7;');

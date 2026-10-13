@@ -26,13 +26,26 @@ test('SQL Apps entry guidance keeps project selection in the coordinator', async
 async function fixture(t) {
   const home = await mkdtemp(join(tmpdir(), 'sql-apps-guide-'));
   t.after(() => rm(home, { recursive: true, force: true }));
-  for (const folder of ['src', 'sql', 'plugins/sql-apps']) await mkdir(join(home, folder), { recursive: true });
+  for (const folder of ['src', 'sql', 'public', 'dab', '.config']) await mkdir(join(home, folder), { recursive: true });
   await writeFile(join(home, 'package.json'), JSON.stringify({
-    name: 'sql-apps', scripts: { local: 'node dist/src/local-cli.js' },
+    name: 'fixture', dependencies: { '@microsoft/sql-apps': '0.1.1' },
+  }));
+  await writeFile(join(home, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3 }));
+  await writeFile(join(home, 'tsconfig.json'), JSON.stringify({ compilerOptions: {} }));
+  await writeFile(join(home, '.config', 'dotnet-tools.json'), JSON.stringify({ version: 1, tools: {} }));
+  await writeFile(join(home, '.sql-apps-project.json'), JSON.stringify({
+    version: 1, id: 'b91d4857-9570-4d4b-a740-918471ca7e26', name: 'Fixture',
+    slug: 'fixture', starter: 'data', profile: 'role-based-data', scaffoldVersion: 1,
+    tooling: { package: '@microsoft/sql-apps', version: '0.1.1' },
   }));
   await writeFile(join(home, 'application.json'), JSON.stringify({ name: 'fixture', selectedExamples: [] }));
-  await writeFile(join(home, 'runtime-contract.json'), JSON.stringify({ version: 1, capabilities: ['local', 'setup-check'] }));
-  for (const file of ['src/local-cli.ts', 'src/workspace.mjs', 'sql/database.sqlproj', 'plugins/sql-apps/plugin.json']) {
+  await writeFile(join(home, 'role-based-data.json'), JSON.stringify({
+    profile: 'role-based-data', requiredRole: 'AppUser', readinessPath: '/api/Ready',
+  }));
+  await writeFile(join(home, 'public', 'index.html'), '<!doctype html>');
+  await writeFile(join(home, 'public', 'style.css'), 'body {}');
+  await writeFile(join(home, 'dab', 'dab-config.json'), '{}');
+  for (const file of ['src/local-cli.ts', 'sql/database.sqlproj']) {
     await writeFile(join(home, file), '');
   }
   return home;
@@ -57,20 +70,22 @@ test('guide works before build and stays read-only without selecting an example 
 
 test('guide routes run-locally through setup plan and suggests the profile that matches the agreed capabilities', async t => {
   const home = await fixture(t);
-  assert.equal((await readGuide(home)).suggestedProfile, null, 'no profile is suggested before scope is agreed');
+  assert.equal((await readGuide(home)).suggestedProfile, 'role-based-data',
+    'the generated starter profile is explicit before scope is agreed');
   await saveBrief(home, brief());
   let report = await readGuide(home);
   assert.equal(report.nextStage, 'run-locally');
-  assert.equal(report.profile, null);
+  assert.equal(report.profile, 'role-based-data');
   assert.equal(report.suggestedProfile, 'role-based-data', 'a data-only brief must not be steered to the file/job foundation');
   assert.match(report.nextAction, /setup plan --profile role-based-data/);
   assert.doesNotMatch(report.nextAction, /setup-check/, 'the coordinator, not the raw readiness check, orders approvals');
   assert.match(report.cost.reviewCommand, /role-based-cost/);
   await saveBrief(home, { ...brief(), capabilities: ['data', 'files', 'background-jobs'] });
   report = await readGuide(home);
-  assert.equal(report.suggestedProfile, 'foundation');
-  assert.match(report.nextAction, /setup plan --profile foundation/);
-  assert.match(report.cost.reviewCommand, /demo-cost/);
+  assert.equal(report.suggestedProfile, 'role-based-data',
+    'the generated project profile remains authoritative when the brief outgrows its starter');
+  assert.match(report.nextAction, /setup plan --profile role-based-data/);
+  assert.match(report.cost.reviewCommand, /role-based-cost/);
   await writeFile(join(home, 'role-based-data.json'), '{}');
   report = await readGuide(home);
   assert.equal(report.profile, 'role-based-data');
@@ -197,13 +212,11 @@ test('sharing reveals cost blockers without converting a saved preference into s
 
 test('actual guide and plugin CLIs save/resume before build and reject invalid requests', async t => {
   const home = await fixture(t);
-  await mkdir(join(home, 'scripts'));
-  for (const file of ['scripts/guide.mjs', 'scripts/workspace-check.mjs', 'src/workspace.mjs']) {
-    await writeFile(join(home, file), await readFile(file));
-  }
-  const script = join(home, 'scripts', 'guide.mjs');
+  const script = resolve('scripts', 'guide.mjs');
   const invoke = args => spawnSync(process.execPath, args, {
-    cwd: home, encoding: 'utf8', env: { ...process.env, SQL_APPS_HOME: home }, timeout: 15000,
+    cwd: home, encoding: 'utf8',
+    env: { ...process.env, SQL_APPS_PROJECT_HOME: home },
+    timeout: 15000,
   });
   let result = invoke([script, '--json']);
   assert.equal(result.status, 0, result.stderr);
@@ -213,11 +226,10 @@ test('actual guide and plugin CLIs save/resume before build and reject invalid r
   result = invoke([script, '--save', input, '--json']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).brief.purpose, brief().purpose);
-  const launcher = join(process.cwd(), 'plugins', 'sql-apps', 'scripts', 'sql-apps.mjs');
-  result = invoke([launcher, 'guide']);
+  result = invoke([script, '--json']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).brief.nextChange, brief().nextChange);
-  result = invoke([launcher, 'guide-save', input]);
+  result = invoke([script, '--save', input, '--json']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).build.ready, false);
   const saved = await readFile(join(home, '.sql-apps', 'guide.json'), 'utf8');
@@ -227,7 +239,7 @@ test('actual guide and plugin CLIs save/resume before build and reject invalid r
     assert.match(result.stderr, /Usage/);
   }
   await writeFile(input, '{"purpose":"incomplete"}');
-  result = invoke([launcher, 'guide-save', input]);
+  result = invoke([script, '--save', input, '--json']);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Invalid project brief/);
   assert.equal(await readFile(join(home, '.sql-apps', 'guide.json'), 'utf8'), saved);

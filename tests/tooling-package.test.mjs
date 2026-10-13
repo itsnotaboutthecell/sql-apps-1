@@ -1,0 +1,239 @@
+import { execFile } from 'node:child_process';
+import assert from 'node:assert/strict';
+import { copyFile, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
+import { before, test } from 'node:test';
+
+const execute = promisify(execFile);
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const staged = join(root, 'dist', 'tooling-package');
+
+async function runNode(args, options = {}) {
+  return execute(process.execPath, args, {
+    cwd: root,
+    windowsHide: true,
+    maxBuffer: 8 * 1024 * 1024,
+    ...options,
+  });
+}
+
+async function runNpm(args, options = {}) {
+  const command = process.platform === 'win32' ? process.env.ComSpec : 'npm';
+  const commandArgs = process.platform === 'win32'
+    ? ['/d', '/s', '/c', `npm ${args.join(' ')}`]
+    : args;
+  return execute(command, commandArgs, {
+    cwd: root,
+    windowsHide: true,
+    maxBuffer: 8 * 1024 * 1024,
+    ...options,
+  });
+}
+
+async function pathsBelow(directory) {
+  const paths = [];
+  async function visit(current) {
+    for (const entry of await readdir(current)) {
+      const path = join(current, entry);
+      const stat = await lstat(path);
+      paths.push(relative(directory, path).replaceAll('\\', '/'));
+      if (stat.isDirectory()) await visit(path);
+    }
+  }
+  await visit(directory);
+  return paths.sort();
+}
+
+before(async () => {
+  const { inspectSource } = await import('../scripts/workspace-check.mjs');
+  const source = await inspectSource(root, { toolingHome: root, foundation: true });
+  if (!source.build?.ready) await runNode([join(root, 'scripts', 'build-provenance.mjs')]);
+  await runNode([join(root, 'scripts', 'build-tooling-package.mjs')]);
+});
+
+test('tooling:pack uses a POSIX-portable package path', async () => {
+  const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+  assert.equal(
+    pkg.scripts['tooling:pack'],
+    'npm run tooling:build && npm run tooling:check && npm pack ./dist/tooling-package',
+  );
+});
+
+test('stages publishable package metadata with synchronized exact runtime dependencies', async () => {
+  const [pkg, source, rootPackage] = await Promise.all([
+    readFile(join(staged, 'package.json'), 'utf8').then(JSON.parse),
+    readFile(join(root, 'packages', 'sql-apps', 'package.json'), 'utf8').then(JSON.parse),
+    readFile(join(root, 'package.json'), 'utf8').then(JSON.parse),
+  ]);
+  const expectedDependencies = {
+    ...rootPackage.dependencies,
+    esbuild: rootPackage.devDependencies.esbuild,
+    typescript: rootPackage.devDependencies.typescript,
+  };
+
+  for (const candidate of [source, pkg]) {
+    assert.equal(candidate.name, '@microsoft/sql-apps');
+    assert.equal(candidate.version, '0.1.1');
+    assert.equal(candidate.type, 'module');
+    assert.deepEqual(candidate.bin, { 'sql-apps': 'bin/sql-apps.mjs' });
+    assert.equal(Object.hasOwn(candidate, 'private'), false);
+    assert.deepEqual(candidate.files, ['bin', 'dist', 'assets']);
+    assert.equal(candidate.license, 'MIT');
+    assert.deepEqual(candidate.engines, { node: '>=22 <23 || >=24 <25' });
+    assert.deepEqual(candidate.exports, {
+      './project-contract': './dist/src/project-contract.mjs',
+      './tooling-context': './dist/src/tooling-context.mjs',
+    });
+    assert.deepEqual(candidate.dependencies, expectedDependencies);
+    for (const version of Object.values(candidate.dependencies)) {
+      assert.match(version, /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
+    }
+  }
+});
+
+test('staged tree contains only package files and immutable runtime assets', async () => {
+  const paths = await pathsBelow(staged);
+  const excluded = /(^|\/)(?:\.git|\.sql-apps|examples|tests|node_modules|plugins)(?:\/|$)|(^|\/)\.env[^/]*$/;
+  assert.equal(paths.some(path => excluded.test(path)), false, paths.join('\n'));
+  assert.equal(paths.some(path => path.startsWith('src/') || path.startsWith('scripts/')), false);
+  assert(paths.includes('LICENSE'));
+  assert(paths.includes('bin/sql-apps.mjs'));
+  assert(paths.includes('dist/src/project-contract.mjs'));
+  for (const path of paths) {
+    assert.equal((await lstat(join(staged, path))).isSymbolicLink(), false, path);
+  }
+});
+
+test('bin help is project-independent and its validated command map targets packaged modules', async () => {
+  const empty = await mkdtemp(join(tmpdir(), 'sql-apps-bin-'));
+  try {
+    const bin = join(staged, 'bin', 'sql-apps.mjs');
+    const result = await runNode([bin, '--help'], { cwd: empty });
+    assert.match(result.stdout, /Usage: sql-apps <command>/);
+    assert.equal(result.stderr, '');
+
+    const module = await import(`${pathToFileURL(bin).href}?test=${Date.now()}`);
+    assert.deepEqual(module.COMMANDS, {
+      build: 'dist/scripts/build-provenance.mjs',
+      setup: 'dist/scripts/setup.mjs',
+      'setup-check': 'dist/scripts/setup-check.mjs',
+      guide: 'dist/scripts/guide.mjs',
+      'workspace-check': 'dist/scripts/workspace-check.mjs',
+      consent: 'dist/scripts/local-consent.mjs',
+      local: 'dist/src/local-cli.js',
+      azure: 'dist/src/cli.js',
+      check: 'dist/scripts/check-application.mjs',
+    });
+    const originalArgv = process.argv;
+    const originalHome = process.env.SQL_APPS_PROJECT_HOME;
+    let imported;
+    try {
+      await module.dispatch('setup', ['status'], empty, async specifier => { imported = specifier; });
+      assert.equal(process.env.SQL_APPS_PROJECT_HOME, empty);
+      assert.deepEqual(process.argv.slice(2), ['status']);
+      assert.equal(fileURLToPath(imported), join(staged, 'dist', 'scripts', 'setup.mjs'));
+    } finally {
+      process.argv = originalArgv;
+      if (originalHome === undefined) delete process.env.SQL_APPS_PROJECT_HOME;
+      else process.env.SQL_APPS_PROJECT_HOME = originalHome;
+    }
+    await assert.rejects(runNode([bin, 'unknown'], { cwd: empty }), error => {
+      assert.match(error.stderr, /Unknown command/);
+      return true;
+    });
+  } finally {
+    await rm(empty, { recursive: true, force: true });
+  }
+});
+
+test('bin dispatches from the project root when invoked in a nested directory', async t => {
+  const fixture = await mkdtemp(join(tmpdir(), 'sql-apps-bin-project-'));
+  t.after(() => rm(fixture, { recursive: true, force: true }));
+  const packageRoot = join(fixture, 'package');
+  const project = join(fixture, 'project');
+  const nested = join(project, 'one', 'two');
+  await Promise.all([
+    mkdir(join(packageRoot, 'bin'), { recursive: true }),
+    mkdir(join(packageRoot, 'dist', 'src'), { recursive: true }),
+    mkdir(join(packageRoot, 'dist', 'scripts'), { recursive: true }),
+    mkdir(nested, { recursive: true }),
+  ]);
+  await Promise.all([
+    copyFile(join(staged, 'bin', 'sql-apps.mjs'), join(packageRoot, 'bin', 'sql-apps.mjs')),
+    copyFile(
+      join(staged, 'dist', 'src', 'project-contract.mjs'),
+      join(packageRoot, 'dist', 'src', 'project-contract.mjs'),
+    ),
+    writeFile(
+      join(packageRoot, 'dist', 'scripts', 'setup.mjs'),
+      'console.log(JSON.stringify({ cwd: process.cwd(), home: process.env.SQL_APPS_PROJECT_HOME }));\n',
+    ),
+    writeFile(join(project, '.sql-apps-project.json'), `${JSON.stringify({
+      version: 1,
+      id: 'b91d4857-9570-4d4b-a740-918471ca7e26',
+      name: 'Nested Project',
+      slug: 'nested-project',
+      starter: 'data',
+      profile: 'role-based-data',
+      scaffoldVersion: 1,
+      tooling: { package: '@microsoft/sql-apps', version: '0.1.1' },
+    })}\n`),
+  ]);
+
+  const result = await runNode([join(packageRoot, 'bin', 'sql-apps.mjs'), 'setup'], { cwd: nested });
+  assert.deepEqual(JSON.parse(result.stdout), { cwd: project, home: project });
+});
+
+test('package tree validation rejects links', async t => {
+  const fixture = await mkdtemp(join(tmpdir(), 'sql-apps-package-link-'));
+  t.after(() => rm(fixture, { recursive: true, force: true }));
+  await mkdir(join(fixture, 'bin'));
+  await writeFile(join(fixture, 'target'), 'target');
+  try {
+    await symlink(join(fixture, 'target'), join(fixture, 'bin', 'linked'), 'file');
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOSYS'].includes(error.code)) {
+      t.skip(`links unavailable: ${error.code}`);
+      return;
+    }
+    throw error;
+  }
+  const { validatePackageTree } = await import('../scripts/check-tooling-package.mjs');
+  await assert.rejects(validatePackageTree(fixture), /link/i);
+});
+
+test('tooling package check validates npm dry-run contents', async () => {
+  const result = await runNode([join(root, 'scripts', 'check-tooling-package.mjs')]);
+  assert.match(result.stdout, /Tooling package checks passed/);
+});
+
+test('tooling:check rejects an unexpected staged file without removing it', async t => {
+  const unexpected = join(staged, 'unexpected.txt');
+  await writeFile(unexpected, 'unexpected');
+  t.after(() => rm(unexpected, { force: true }));
+
+  await assert.rejects(runNpm(['run', 'tooling:check']), error => {
+    assert.match(`${error.stdout}\n${error.stderr}`, /Unexpected top-level package path: unexpected\.txt/);
+    return true;
+  });
+  assert.equal(await readFile(unexpected, 'utf8'), 'unexpected');
+});
+
+test('tooling:check rejects missing package.json files trees without rebuilding', async () => {
+  for (const tree of ['bin', 'dist', 'assets']) {
+    const source = join(staged, tree);
+    const held = `${staged}-${tree}-${Date.now()}`;
+    await rename(source, held);
+    try {
+      await assert.rejects(runNpm(['run', 'tooling:check']), error => {
+        assert.match(`${error.stdout}\n${error.stderr}`, new RegExp(`Missing required package tree: ${tree}`));
+        return true;
+      });
+    } finally {
+      await rename(held, source);
+    }
+  }
+});

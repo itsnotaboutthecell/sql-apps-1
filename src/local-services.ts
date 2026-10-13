@@ -17,6 +17,7 @@ import { maintainLocalJobs } from './local-maintenance.js';
 import { runtimeFor, functionsImage } from './workspace.mjs';
 import { verifyContainerWorkspace } from './local-ownership.js';
 import { probeReadiness } from './readiness.js';
+import { toolingAsset, toolingRoot } from './runtime-roots.js';
 
 export const localFunctionsOrigin = runtimeFor().origins.functions;
 const azuriteImage = 'mcr.microsoft.com/azure-storage/azurite:3.35.0@sha256:647c63a91102a9d8e8000aab803436e1fc85fbb285e7ce830a82ee5d6661cf37';
@@ -167,7 +168,8 @@ export async function startLocalServices(container: string, runner: Run = run): 
   }
   if (!ready) throw new Error('Azurite did not become ready');
   const image = functionsImage(runtime);
-  await runner('docker', ['build', '--file', 'functions/local.Dockerfile', '--tag', image, '.']);
+  await runner('docker', ['build', '--file', toolingAsset('functions', 'local.Dockerfile'),
+    '--tag', image, toolingRoot]);
   const address = async (name: string) => {
     const ip = (await networks(name))[names.network]?.IPAddress;
     if (!ip || !/^\d+\.\d+\.\d+\.\d+$/.test(ip)) throw new Error(`Container ${name} has no local worker network IPv4 address`);

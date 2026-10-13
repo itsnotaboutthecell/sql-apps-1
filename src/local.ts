@@ -10,6 +10,7 @@ import { runtimeFor } from './workspace.mjs';
 import { verifyContainerWorkspace } from './local-ownership.js';
 import { pinnedDabImage } from './artifacts.js';
 import { type RoleBasedProfile, validateRoleBasedDab, roleBasedProcedureGrants } from './role-based-profile.js';
+import { projectPath } from './runtime-roots.js';
 
 const database = runtimeFor().database;
 const login = runtimeFor().login;
@@ -264,7 +265,7 @@ export async function publishLocalSchema(container: string, target: {
   const port = await sqlHostPort(container, run);
   const tools = z.object({ tools: z.object({ 'microsoft.sqlpackage': z.object({
     version: z.string().regex(/^\d+\.\d+\.\d+$/),
-  }) }) }).parse(JSON.parse(await readFile('.config/dotnet-tools.json', 'utf8')));
+  }) }) }).parse(JSON.parse(await readFile(projectPath('.config', 'dotnet-tools.json'), 'utf8')));
   const expected = tools.tools['microsoft.sqlpackage'].version;
   let verified = false;
   try {
@@ -298,9 +299,13 @@ export async function initLocal(container: string, run: Run, authorized?: RoleBa
 IF DB_ID(N'${database}') IS NULL CREATE DATABASE [${database}];
 IF SUSER_ID(N'${login}') IS NULL CREATE LOGIN [${login}] WITH PASSWORD = N'${state.password}';
 `, run, [state.password]);
-    await publishLocalSchema(container, { database, project: join('sql', 'database.sqlproj'), output: join('dist', 'sql') }, run);
+    await publishLocalSchema(container, {
+      database,
+      project: projectPath('sql', 'database.sqlproj'),
+      output: projectPath('dist', 'sql'),
+    }, run);
     const grants = authorized ? roleBasedProcedureGrants(
-      JSON.parse(await readFile('dab/dab-config.json', 'utf8')), authorized, login,
+      JSON.parse(await readFile(projectPath('dab', 'dab-config.json'), 'utf8')), authorized, login,
     ) : `GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.FileJobs TO [${login}];
 GRANT VIEW DEFINITION ON dbo.FileJobs TO [${login}];`;
     try {
@@ -325,7 +330,7 @@ async function databaseQuery(state: LocalState, sql: string, run: Run, admin = f
 
 async function testLocalSql(state: LocalState, run: Run): Promise<void> {
   await verifyLocal(state.container, run);
-  const sql = (await readFile('sql/local/acceptance.sql', 'utf8')).replaceAll('$(LocalDabUser)', login);
+  const sql = (await readFile(projectPath('sql', 'local', 'acceptance.sql'), 'utf8')).replaceAll('$(LocalDabUser)', login);
   const result = await databaseQuery(state, sql, run);
   if (!result.includes('LOCAL SQL ACCEPTANCE PASSED')) throw new Error('SQL acceptance did not report success');
 }
@@ -339,7 +344,7 @@ export function localPrincipal(oid: string, scope = 'access_as_user', role = 'au
 }
 
 export async function localDabConfig(authorized?: RoleBasedProfile): Promise<unknown> {
-  const config = JSON.parse(await readFile('dab/dab-config.json', 'utf8'));
+  const config = JSON.parse(await readFile(projectPath('dab', 'dab-config.json'), 'utf8'));
   if (authorized) validateRoleBasedDab(config, authorized);
   config.runtime.host = { mode: 'development', authentication: { provider: 'AppService' } };
   if (authorized) return config;
@@ -511,7 +516,8 @@ export async function localCommand(command: string, container: string, run: Run,
   else if (command === 'init') await initLocal(container, run, authorized);
   else if (command === 'test') await testLocalSql(await readLocal(container), run);
   else if (command === 'app-check') {
-    const result = await databaseQuery(await readLocal(container), await readFile('sql/local/application-acceptance.sql', 'utf8'), run, true);
+    const result = await databaseQuery(await readLocal(container),
+      await readFile(projectPath('sql', 'local', 'application-acceptance.sql'), 'utf8'), run, true);
     if (!result.includes('CLEAN APPLICATION DATABASE PASSED')) throw new Error('Clean application database acceptance did not report success');
   }
   else if (command === 'data') await startLocalData(container, run, authorized);

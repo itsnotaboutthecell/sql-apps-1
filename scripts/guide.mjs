@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, writeFile, rename, unlink, rmdir } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { inspectSource } from './workspace-check.mjs';
 import { runtimeFor } from '../src/workspace.mjs';
+import { projectHome } from '../src/tooling-context.mjs';
 
-const defaultHome = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const maximumBytes = 16384;
 const stages = [
   { id: 'describe', title: 'Describe', goal: 'Agree on who the app helps, its information and actions. No SQL knowledge required.' },
@@ -122,7 +122,8 @@ export async function saveBrief(home, input) {
   }
 }
 
-export async function readGuide(home = defaultHome) {
+export async function readGuide(home) {
+  home ??= await projectHome();
   const source = await sourceFor(home);
   const runtime = runtimeFor(undefined, source.home);
   const state = await readState(source.home);
@@ -201,13 +202,14 @@ export function formatGuide(report) {
 }
 
 export async function main(args = process.argv.slice(2)) {
+  const home = await projectHome();
   const json = args.at(-1) === '--json';
   const options = json ? args.slice(0, -1) : args;
   if (options.length && (options.length !== 2 || options[0] !== '--save' || !options[1] || options[1].startsWith('--'))) {
     throw new Error('Usage: npm run guide -- [--save <brief.json>] [--json]. Save only after agreeing on the brief; never include secrets or production data.');
   }
-  if (options.length) await saveBrief(defaultHome, await readBriefFile(resolve(options[1])));
-  const report = await readGuide();
+  if (options.length) await saveBrief(home, await readBriefFile(resolve(options[1])));
+  const report = await readGuide(home);
   console.log(json ? JSON.stringify(report, null, 2) : formatGuide(report));
 }
 

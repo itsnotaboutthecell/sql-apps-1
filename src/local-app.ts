@@ -11,6 +11,7 @@ import { localFunctionsOrigin, localServiceAdapters } from './local-services.js'
 import { runtimeFor } from './workspace.mjs';
 import type { RoleBasedProfile } from './role-based-profile.js';
 import { probeReadiness } from './readiness.js';
+import { projectPath } from './runtime-roots.js';
 
 type LocalAdapters = Awaited<ReturnType<typeof localServiceAdapters>>;
 
@@ -25,9 +26,11 @@ export async function createLocalApp(fetcher: typeof fetch = fetch, services?: L
   container = runtimeFor().defaultSql, authentication: LocalAuthentication = readLocalAuthentication(), entraKey?: JWTVerifyGetKey) {
   if (process.env.NODE_ENV === 'production') throw new Error('Local development server is disabled in production');
   if (authorized && services) throw new Error('Role-based-data excludes storage and Functions adapters');
-  const provenance = z.object({ version: z.literal(1), home: z.literal(runtimeFor().home),
-    sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/) })
-    .parse(JSON.parse(await readFile(new URL('../build-provenance.json', import.meta.url), 'utf8')));
+  const provenance = z.object({ version: z.literal(2), home: z.literal(runtimeFor().home),
+    sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    toolingFingerprint: z.string().regex(/^[a-f0-9]{64}$/) })
+    .passthrough()
+    .parse(JSON.parse(await readFile(projectPath('dist', 'build-provenance.json'), 'utf8')));
   const sessions = new Map<string, { oid: string; expires: number }>();
   const previewIdentity = async (token: string) => {
     const session = sessions.get(token);
@@ -76,7 +79,8 @@ export async function createLocalApp(fetcher: typeof fetch = fetch, services?: L
     ...authorized,
     tenantId: gatewayTenant, apiClientId: gatewayClient, dabUrl: localOrigin,
     blobAccountUrl: 'https://unconfigured.invalid', blobContainer: 'files',
-    functionsUrl: services ? localFunctionsOrigin : 'https://unconfigured.invalid', publicDirectory: 'public',
+    functionsUrl: services ? localFunctionsOrigin : 'https://unconfigured.invalid',
+    publicDirectory: projectPath('public'),
   }, {
     verifyUser: identity,
     files: services?.files ?? { put: unavailable, get: unavailable, delete: unavailable },

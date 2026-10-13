@@ -3,15 +3,16 @@ import { promisify } from 'node:util';
 import { readFile, access, realpath, lstat, mkdir, writeFile } from 'node:fs/promises';
 import { totalmem, hostname, release } from 'node:os';
 import { createServer } from 'node:net';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, join, relative, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { randomUUID, createHash } from 'node:crypto';
 import { runtimeFor, describeWorkspace } from '../src/workspace.mjs';
 import { readSqlSources, roleBasedDabProblem, roleBasedProcedureProblem, roleBasedProfileProblem } from '../src/role-based-rules.mjs';
+import { readProjectManifest } from '../src/project-contract.mjs';
+import { projectHome, toolingHome } from '../src/tooling-context.mjs';
 
 const execute = promisify(execFile);
-const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const containerPattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 
 async function exists(path) {
@@ -59,8 +60,9 @@ export function parseArguments(args) {
   return options;
 }
 
-export async function checkSetup(options = {}, injected = {}) {
-  const root = resolve(options.root ?? defaultRoot);
+export async function checkSetup(options = {}, injected = {}, context = {}) {
+  const tools = resolve(options.toolingRoot ?? await toolingHome(import.meta.url));
+  const root = resolve(options.root ?? (Object.keys(injected).length ? tools : await projectHome()));
   let proposed;
   if (options.workspace !== undefined) {
     if (typeof options.workspace !== 'string' || options.workspace !== 'legacy' && !/^\d{5}$/.test(options.workspace)) {
@@ -86,8 +88,22 @@ export async function checkSetup(options = {}, injected = {}) {
     checks.push({ id, status, code, message, nextAction, required, ...(toolState ? { toolState } : {}) });
   const failedTool = error => error.code === 'ENOENT' ? 'missing' : 'check-failed';
   const pkg = JSON.parse(await deps.read(join(root, 'package.json')));
-  if (pkg.name !== 'sql-apps') throw new Error('Run setup-check from a validated SQL Apps checkout');
-  if (pkg.engines?.node !== '>=22 <23 || >=24 <25') throw new Error('Node requirements changed; update the setup diagnostic before using it');
+  if (context.project === true) {
+    const [manifest, toolingPackage] = await Promise.all([
+      readProjectManifest(root),
+      readFile(join(tools, 'package.json'), 'utf8').then(JSON.parse),
+    ]);
+    if (pkg.dependencies?.['@microsoft/sql-apps'] !== manifest.tooling.version ||
+        toolingPackage.version !== manifest.tooling.version) {
+      throw new Error('Project package, manifest and installed tooling versions must agree exactly');
+    }
+    if (toolingPackage.engines?.node !== '>=22 <23 || >=24 <25') {
+      throw new Error('Node requirements changed; update the setup diagnostic before using it');
+    }
+  } else {
+    if (pkg.name !== 'sql-apps') throw new Error('Run setup-check from a validated SQL Apps project');
+    if (pkg.engines?.node !== '>=22 <23 || >=24 <25') throw new Error('Node requirements changed; update the setup diagnostic before using it');
+  }
   if (!['win32', 'darwin', 'linux'].includes(deps.platform)) {
     add('platform', 'action-required', 'PLATFORM_REVIEW_REQUIRED', 'This operating system has no documented local setup route.',
       'Review host/container compatibility before installing anything; do not apply another OS recipe.');
@@ -170,7 +186,9 @@ export async function checkSetup(options = {}, injected = {}) {
           'Confirm the container name with its owner. Do not create a replacement under that name.');
       }
     } else {
-      const source = await deps.read(join(root, 'src', 'local.ts'));
+      const source = await deps.read(context.project === true
+        ? join(tools, 'dist', 'src', 'local.js')
+        : join(root, 'src', 'local.ts'));
       const image = /const sqlImage = '([^']+)';/.exec(source)?.[1];
       if (!image) throw new Error('Cannot locate the project SQL image; update setup-check for the current runtime');
       try {
@@ -251,14 +269,17 @@ export async function checkSetup(options = {}, injected = {}) {
     }
   }
   for (const [id, path, action] of [
-    ['dependencies', 'node_modules/typescript/package.json', 'After approval, use consent-run restore (guarded npm ci) from this checkout. Initial downloads need internet.'],
+    ['dependencies', context.project === true
+      ? relative(root, join(tools, 'node_modules', 'typescript', 'package.json'))
+      : 'node_modules/typescript/package.json',
+    'After approval, use consent-run restore (guarded npm ci) from this project. Initial downloads need internet.'],
     ['build', 'dist/src/local-cli.js', 'After dependencies and approval, use consent-run build (the guarded build).'],
   ]) {
     const present = await deps.exists(join(root, path));
     add(id, present ? 'ready' : 'action-required', present ? `${id.toUpperCase()}_PRESENT` : `${id.toUpperCase()}_MISSING`,
       present ? `${id} files are present (not a freshness/correctness check).` : `${id} files are missing.`, action, false);
   }
-  return { version: 1, platform: deps.platform, architecture: deps.architecture, root,
+  return { version: 1, platform: deps.platform, architecture: deps.architecture, root, home: root,
     workspace: { id: runtime.id, mode: runtime.mode, ports: runtime.ports, origins: runtime.origins },
     ready: checks.filter(check => check.required).every(check => check.status === 'ready'), checks,
     scope: 'Read-only prerequisite check, not SQL authorization, complete offline-cache, ownership or runtime acceptance. See docs/guides/getting-started.md.' };
@@ -484,7 +505,7 @@ export async function installReviewed(path, value, injected = {}) {
 
 export async function main(args = process.argv.slice(2)) {
   const options = parseArguments(args);
-  const report = await checkSetup(options);
+  const report = await checkSetup({ ...options, root: await projectHome() }, {}, { project: true });
   if (options.json) console.log(JSON.stringify(report, null, 2));
   else {
     console.log(`SQL Apps setup check (${report.platform}/${report.architecture})`);

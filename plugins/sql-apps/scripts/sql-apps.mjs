@@ -118,7 +118,14 @@ export async function workspaceReport(home, options = {}) {
     try { await access(configuredBinding); source = 'installed-binding'; }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
-  return checkWorkspace({ home, activeDirectory: options.cwd ?? process.cwd(), bindingSource: source, explicitHome: explicit });
+  return checkWorkspace({
+    home,
+    activeDirectory: options.cwd ?? process.cwd(),
+    bindingSource: source,
+    explicitHome: explicit,
+    tooling: home,
+    foundation: true,
+  });
 }
 
 export async function status(fetcher = fetch, origins = { app: 'http://127.0.0.1:18080', data: 'http://127.0.0.1:15000' }) {

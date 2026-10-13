@@ -1,8 +1,9 @@
 import { readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readSqlSources, roleBasedDabProblem, roleBasedProcedureProblem, roleBasedProfileProblem } from './role-based-rules.mjs';
+import { projectPath, projectRoot } from './runtime-roots.js';
 
 const reservedRoles = ['anonymous', 'authenticated', 'Function.Invoke', 'processor'];
 
@@ -17,7 +18,7 @@ export const roleBasedProfileSchema = z.strictObject({
 });
 export type RoleBasedProfile = z.infer<typeof roleBasedProfileSchema>;
 
-export async function readRoleBasedProfile(path = 'role-based-data.json'): Promise<RoleBasedProfile> {
+export async function readRoleBasedProfile(path = projectPath('role-based-data.json')): Promise<RoleBasedProfile> {
   return parseRoleBasedProfile(JSON.parse(await readFile(path, 'utf8')));
 }
 
@@ -91,8 +92,8 @@ export async function validateRoleBasedCloudSource(profile: RoleBasedProfile, ro
   if (procedureProblem) throw new Error(`${procedureProblem} Add each procedure to the SQL project under sql/ before building artifacts.`);
 }
 
-export async function roleBasedSchemaFingerprint(): Promise<string> {
-  const hash = createHash('sha256').update(await readFile(join('dab', 'dab-config.json')));
+export async function roleBasedSchemaFingerprint(root = projectRoot): Promise<string> {
+  const hash = createHash('sha256').update(await readFile(join(root, 'dab', 'dab-config.json')));
   async function add(directory: string): Promise<void> {
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -101,10 +102,10 @@ export async function roleBasedSchemaFingerprint(): Promise<string> {
       if (entry.isDirectory()) {
         if (!['obj', 'bin'].includes(entry.name)) await add(path);
       } else if (/\.(sql|sqlproj)$/.test(entry.name)) {
-        hash.update(path).update('\0').update(await readFile(path)).update('\0');
+        hash.update(relative(root, path)).update('\0').update(await readFile(path)).update('\0');
       }
     }
   }
-  await add('sql');
+  await add(join(root, 'sql'));
   return hash.digest('hex');
 }
