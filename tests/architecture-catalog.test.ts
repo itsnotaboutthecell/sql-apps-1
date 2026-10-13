@@ -36,8 +36,9 @@ test('free SQL forbids a paid fallback and verifies free enrollment', () => {
 });
 
 test('catalog contains no paid SQL or bill-overage module', () => {
-  assert.equal(architectureCatalog.has('paid-sql'), false);
-  assert.equal(architectureCatalog.has('bill-overage'), false);
+  for (const id of architectureCatalog.keys()) {
+    assert.doesNotMatch(id, /paid-sql|bill-overage/);
+  }
 });
 
 test('DAB requires free SQL and the DAB runtime capability', () => {
