@@ -44,6 +44,8 @@ After explicit approval, the approved form performs only the reviewed stages. A 
 
 Never infer an authenticated production profile from the word "deploy."
 
+`architecture-plan` is an offline, metadata-only review aid; see [adaptive architecture planning](deployment.md#adaptive-architecture-planning). It does not convert an existing database or legacy paid deployment and is not deployment approval. Keep using this candidate journey and its live gates until the compiler reaches deployment parity and live acceptance.
+
 ## Free-tier-first cost review
 
 Start with [costs and paid growth](../guides/costs.md), then run `npm run azure -- demo-cost azure-demo-cost.example.json` after building. This is offline and makes no Azure requests. The zero-spend example exits 2 with `blocked-by-fixed-charges`: SQL/compute free allowances do not remove ACR Basic or custom-network managed infrastructure charges. See [the cost command reference](demo-cost.md) for configuration and output details.
