@@ -1,9 +1,7 @@
 import { z } from 'zod';
 
 const nameSchema = z.string()
-  .min(2)
-  .max(64)
-  .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/);
+  .regex(/^[a-z][a-z0-9-]{1,63}$/);
 const uniqueNames = (minimum = 0) => z.array(nameSchema)
   .min(minimum)
   .refine(values => new Set(values).size === values.length, 'Names must be unique');

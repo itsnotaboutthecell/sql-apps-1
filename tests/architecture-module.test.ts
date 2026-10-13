@@ -43,8 +43,18 @@ test('validateModuleCatalog rejects a malformed raw descriptor', () => {
   assert.throws(() => validateModuleCatalog(descriptors));
 });
 
-test('architectureModuleSchema rejects invalid module IDs', () => {
-  for (const id of ['', 'a', 'Core', 'core_api', '-core', 'core-', 'core--api', 'a'.repeat(65)]) {
+test('architectureModuleSchema accepts module IDs matching the contract regex', () => {
+  for (const id of ['core-', 'core--api']) {
+    assert.equal(
+      architectureModuleSchema.safeParse(moduleFixture({ id })).success,
+      true,
+      `expected module ID ${JSON.stringify(id)} to be accepted`,
+    );
+  }
+});
+
+test('architectureModuleSchema rejects module IDs outside the contract regex', () => {
+  for (const id of ['Core', 'a', '1core', '-core', 'core_api', 'a'.repeat(65)]) {
     assert.equal(
       architectureModuleSchema.safeParse(moduleFixture({ id })).success,
       false,
