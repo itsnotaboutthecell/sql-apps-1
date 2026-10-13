@@ -11,6 +11,7 @@ const state: DeploymentState = {
   outputs: {
     sqlServer: 'example.database.windows.net', databaseName: 'app',
     dabPrincipalId: config.apiClientId, gatewayPrincipalId: config.apiClientId,
+    functionPrincipalId: config.apiClientId,
     gatewayName: 'gateway', gatewayUrl: 'https://gateway.example', functionsName: 'functions',
     storageAccount: 'storage', networkId: '/network', vaultName: 'vault',
     sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo' as const, sqlAuditWorkspaceName: 'logs',

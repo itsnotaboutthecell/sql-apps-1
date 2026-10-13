@@ -1,6 +1,9 @@
 node_modules
 dist
 .git
+.worktrees
+.vscode
+.azure
 .sql-apps
 .env*
 sql-apps.json

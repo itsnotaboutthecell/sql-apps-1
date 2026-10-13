@@ -6,7 +6,11 @@ import { dirname, join } from 'node:path';
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { deploymentSchema, environmentKey, portFromEnvironment } from '../src/config.js';
-import { armParameters, configureRedirect, deploy, functionRoleId, preflight, saveState, statePath, withDeploymentLock, type DeploymentState, type DeploymentOutputs } from '../src/deployment.js';
+import {
+  armParameters, configureRedirect, deploy, expectedRbacAssignments, functionRoleId, preflight,
+  rbacParameters, saveState, statePath, verifyRbacAssignments, withDeploymentLock,
+  type DeploymentState, type DeploymentOutputs,
+} from '../src/deployment.js';
 import type { Run } from '../src/process.js';
 
 const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps.example.json', 'utf8')));
@@ -14,6 +18,7 @@ const outputs: DeploymentOutputs = {
   sqlServer: 'example.database.windows.net', databaseName: 'app',
   dabPrincipalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   gatewayPrincipalId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  functionPrincipalId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
   gatewayName: 'gateway', gatewayUrl: 'https://example.azurecontainerapps.io',
   functionsName: 'functions', networkId: '/network', storageAccount: 'storage', vaultName: 'vault',
   sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo' as const, sqlAuditWorkspaceName: 'logs',
@@ -33,6 +38,7 @@ function fakeRunner(failSchema = false): { run: Run; calls: string[][] } {
     if (args[0] === 'ad' && args[1] === 'sp') return config.apiClientId;
     if (args[0] === 'provider') return 'Registered';
     if (args[0] === 'acr' && args[1] === 'repository') return `sha256:${'a'.repeat(64)}`;
+    if (args[0] === 'role' && args[1] === 'assignment') return JSON.stringify(expectedRbacAssignments(config, outputs));
     if (args[0] === 'rest' && args.includes('GET')) return '{"value":[]}';
     if (args[0] === 'deployment') return JSON.stringify(Object.fromEntries(Object.entries(outputs).map(([key, value]) => [key, { value }])));
     if (failSchema && args.includes('/Action:Publish')) throw new Error('SQL network unavailable');
@@ -58,6 +64,53 @@ test('ARM parameters exclude local routing settings and identify separate enviro
   assert.equal('resourceGroup' in parameters, false);
   assert.deepEqual(parameters.deployGateway, { value: false });
   assert.notEqual(environmentKey(config), environmentKey({ ...config, environment: 'prod' }));
+});
+test('RBAC handoff uses saved principals and exposes only template inputs', () => {
+  const parameters = rbacParameters(config, outputs).parameters;
+  assert.deepEqual(parameters.gatewayPrincipalId, { value: outputs.gatewayPrincipalId });
+  assert.deepEqual(parameters.dabPrincipalId, { value: outputs.dabPrincipalId });
+  assert.deepEqual(parameters.functionPrincipalId, { value: outputs.functionPrincipalId });
+  assert.equal('apiClientId' in parameters, false);
+  assert.equal('sqlAdminObjectId' in parameters, false);
+  assert.equal('gatewayImage' in parameters, false);
+});
+test('expected RBAC assignments are profile-specific and exactly scoped', () => {
+  const foundation = expectedRbacAssignments(config, outputs);
+  assert.equal(foundation.length, 8);
+  assert.equal(new Set(foundation.map(item => `${item.principalId}|${item.roleDefinitionId}|${item.scope}`)).size, 8);
+  assert.ok(foundation.every(item => item.scope.startsWith(
+    `/subscriptions/${config.subscriptionId}/resourceGroups/${config.resourceGroup}/providers/`,
+  )));
+  const roleBased = expectedRbacAssignments({
+    ...config, profile: 'role-based-data', requiredRole: 'AppUser', readinessPath: '/api/Ready', functionsImage: '',
+  }, { ...outputs, functionPrincipalId: '', functionsName: '', storageAccount: '', vaultName: '' });
+  assert.equal(roleBased.length, 2);
+  assert.ok(roleBased.every(item => item.label.startsWith('ACR pull')));
+});
+test('runtime RBAC verification fails closed and names every missing assignment', async () => {
+  const calls: string[][] = [];
+  const run: Run = async (command, args) => {
+    calls.push([command, ...args]);
+    return '[]';
+  };
+  await assert.rejects(
+    verifyRbacAssignments(config, outputs, run),
+    error => error instanceof Error && /RBAC handoff is incomplete/.test(error.message) &&
+      /ACR pull for gateway/.test(error.message) && /Key Vault secrets for functions/.test(error.message) &&
+      /rbac-deploy/.test(error.message),
+  );
+  assert.ok(calls.length > 0);
+  assert.ok(calls.every(call => call[1] === 'role' && call[2] === 'assignment' && call.includes('--include-inherited')));
+});
+test('runtime RBAC verification accepts only exact live principal, role and scope matches', async () => {
+  const expected = expectedRbacAssignments(config, outputs);
+  await verifyRbacAssignments(config, outputs, async () => JSON.stringify(expected));
+  await assert.rejects(
+    verifyRbacAssignments(config, outputs, async () => JSON.stringify(expected.map(item => ({
+      ...item, scope: `/subscriptions/${config.subscriptionId}/resourceGroups/${config.resourceGroup}`,
+    })))),
+    /RBAC handoff is incomplete/,
+  );
 });
 test('missing deployment images fail preflight before infrastructure side effects', async () => {
   const { run, calls } = fakeRunner();

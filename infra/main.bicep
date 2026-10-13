@@ -36,12 +36,6 @@ var storageName = 'sqlapps${suffix}'
 var vaultName = 'sqlapps-${suffix}'
 var functionName = '${prefix}-fn-${suffix}'
 var tags = { project: 'sql-apps', environment: environment }
-var blobContributor = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
-var blobOwner = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')
-var queueContributor = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '974c5e8b-45b9-4653-ba55-5f855dd0fb88')
-var tableContributor = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')
-var acrPull = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-
 resource gatewayIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${prefix}-gateway'
   location: location
@@ -57,19 +51,6 @@ resource functionIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023
   location: location
   tags: tags
 }
-resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
-  name: split(registryServer, '.')[0]
-}
-resource pullRoles 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for index in range(0, fullFoundation ? 3 : 2): {
-  name: guid(registry.id, ['gateway', 'data', 'functions'][index], prefix, acrPull)
-  scope: registry
-  properties: {
-    roleDefinitionId: acrPull
-    principalId: index == 0 ? gatewayIdentity.properties.principalId : index == 1 ? dabIdentity.properties.principalId : functionIdentity!.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}]
-
 resource network 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   name: '${prefix}-network'
   location: location
@@ -206,16 +187,6 @@ resource hostContainer 'Microsoft.Storage/storageAccounts/blobServices/container
   name: 'azure-webjobs-hosts'
   properties: { publicAccess: 'None' }
 }
-resource gatewayStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (fullFoundation) {
-  name: guid(fileContainer.id, gatewayIdentity.id, blobContributor)
-  scope: fileContainer
-  properties: { roleDefinitionId: blobContributor, principalId: gatewayIdentity.properties.principalId, principalType: 'ServicePrincipal' }
-}
-resource hostStorageRoles 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for role in (fullFoundation ? [blobOwner, queueContributor, tableContributor] : []): {
-  name: guid(files.id, functionIdentity.id, role)
-  scope: files
-  properties: { roleDefinitionId: role, principalId: functionIdentity!.properties.principalId, principalType: 'ServicePrincipal' }
-}]
 resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = if (fullFoundation) {
   name: vaultName
   location: location
@@ -229,15 +200,6 @@ resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = if (fullFoundation) {
     softDeleteRetentionInDays: 90
     publicNetworkAccess: 'Disabled'
     networkAcls: { defaultAction: 'Deny', bypass: 'None' }
-  }
-}
-resource functionSecretsRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (fullFoundation) {
-  name: guid(vault.id, functionIdentity.id, 'secrets-user')
-  scope: vault
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
-    principalId: functionIdentity!.properties.principalId
-    principalType: 'ServicePrincipal'
   }
 }
 resource functionPlan 'Microsoft.Web/serverfarms@2023-12-01' = if (fullFoundation) {
@@ -283,7 +245,6 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = if (fullFoundation) {
       ]
     }
   }
-  dependsOn: [hostStorageRoles, pullRoles]
 }
 
 module sqlEndpoint 'private-endpoint.bicep' = {
@@ -334,7 +295,7 @@ resource dataApp 'Microsoft.App/containerApps@2024-03-01' = if (deployGateway) {
       }]
     }
   }
-  dependsOn: [pullRoles, sqlEndpoint]
+  dependsOn: [sqlEndpoint]
 }
 resource gateway 'Microsoft.App/containerApps@2024-03-01' = if (deployGateway) {
   name: '${prefix}-gateway'
@@ -377,7 +338,7 @@ resource gateway 'Microsoft.App/containerApps@2024-03-01' = if (deployGateway) {
       }]
     }
   }
-  dependsOn: [gatewayStorageRole, storageEndpoints, functionEndpoint, pullRoles]
+  dependsOn: [storageEndpoints, functionEndpoint]
 }
 
 output gatewayUrl string = deployGateway ? 'https://${gateway!.properties.configuration.ingress.fqdn}' : ''
@@ -385,6 +346,7 @@ output sqlServer string = '${sql.name}${az.environment().suffixes.sqlServerHostn
 output databaseName string = database.name
 output dabPrincipalId string = dabIdentity.properties.principalId
 output gatewayPrincipalId string = gatewayIdentity.properties.principalId
+output functionPrincipalId string = fullFoundation ? functionIdentity!.properties.principalId : ''
 output gatewayName string = '${prefix}-gateway'
 output functionsName string = fullFoundation ? functions!.name : ''
 output networkId string = network.id

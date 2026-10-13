@@ -276,6 +276,7 @@ test('packaged deployment resolves immutable assets from tooling while retaining
         databaseName: { value: 'app' },
         dabPrincipalId: { value: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
         gatewayPrincipalId: { value: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+        functionPrincipalId: { value: '' },
         gatewayName: { value: 'gateway' },
         gatewayUrl: { value: 'https://example.invalid' },
         functionsName: { value: 'functions' },

@@ -15,6 +15,7 @@ const outputSchema = z.object({
   databaseName: z.literal('app'),
   dabPrincipalId: z.string().uuid(),
   gatewayPrincipalId: z.string().uuid(),
+  functionPrincipalId: z.union([z.string().uuid(), z.literal('')]),
   gatewayName: z.string(),
   gatewayUrl: z.string(),
   functionsName: z.string(),
@@ -30,6 +31,7 @@ export const functionRoleId = '15d91b1c-83c7-4cb6-b349-d7b8fd4b1425';
 export const delegatedScopeId = '6bb296dd-f397-4dcc-a69b-d37dfce3c555';
 export const applicationRoleId = '530d74b7-cf30-41f4-a44c-9f594cba7c63';
 export const deploymentTemplatePath = () => toolingAsset('infra', 'main.bicep');
+export const rbacTemplatePath = () => toolingAsset('infra', 'rbac.bicep');
 const deploymentProjectRoot = () => process.env.SQL_APPS_PROJECT_HOME ?? process.cwd();
 const deploymentProjectPath = (...parts: string[]) => resolve(deploymentProjectRoot(), ...parts);
 
@@ -50,7 +52,15 @@ export const deploymentStateSchema = z.strictObject({
 });
 
 export async function readState(config: DeploymentConfig): Promise<DeploymentState> {
-  const state = deploymentStateSchema.parse(JSON.parse(await readFile(statePath(config), 'utf8')));
+  let candidate: unknown = JSON.parse(await readFile(statePath(config), 'utf8'));
+  const legacy = z.object({ outputs: z.record(z.string(), z.unknown()) }).passthrough().safeParse(candidate);
+  if (legacy.success && !Object.hasOwn(legacy.data.outputs, 'functionPrincipalId')) {
+    if (config.profile !== 'role-based-data') {
+      throw new Error('Legacy foundation deployment state lacks functionPrincipalId; rerun provision before continuing.');
+    }
+    candidate = { ...legacy.data, outputs: { ...legacy.data.outputs, functionPrincipalId: '' } };
+  }
+  const state = deploymentStateSchema.parse(candidate);
   if (state.environmentKey !== environmentKey(config)) throw new Error('Deployment state belongs to a different environment');
   if (config.profile === 'role-based-data' && state.applicationHome !== await realpath(deploymentProjectRoot())) {
     throw new Error('Role-based deployment state belongs to a different application checkout; discovery or copied state is not reuse approval');
@@ -73,6 +83,95 @@ export function armParameters(config: DeploymentConfig, deployGateway: boolean) 
     ...(config.profile === 'role-based-data' ? { readinessPath: config.readinessPath } : {}), deployGateway })
     .filter(([, value]) => value !== undefined).map(([key, value]) => [key, { value }])) };
 }
+
+export function rbacParameters(config: DeploymentConfig, outputs: DeploymentOutputs) {
+  return { parameters: {
+    name: { value: config.name },
+    environment: { value: config.environment },
+    profile: { value: config.profile ?? 'foundation' },
+    registryServer: { value: config.registryServer },
+    gatewayPrincipalId: { value: outputs.gatewayPrincipalId },
+    dabPrincipalId: { value: outputs.dabPrincipalId },
+    functionPrincipalId: { value: outputs.functionPrincipalId },
+  } };
+}
+
+const roleIds = {
+  acrPull: '7f951dda-4ed3-4680-a7ca-43fe172d538d',
+  blobContributor: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe',
+  blobOwner: 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b',
+  queueContributor: '974c5e8b-45b9-4653-ba55-5f855dd0fb88',
+  tableContributor: '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3',
+  secretsUser: '4633458b-17de-408a-b874-0445c86b69e6',
+} as const;
+
+export interface ExpectedRbacAssignment {
+  label: string;
+  principalId: string;
+  roleDefinitionId: string;
+  scope: string;
+}
+
+export function expectedRbacAssignments(
+  config: DeploymentConfig, outputs: DeploymentOutputs,
+): ExpectedRbacAssignment[] {
+  const root = `/subscriptions/${config.subscriptionId}/resourceGroups/${config.resourceGroup}/providers`;
+  const role = (id: string) => `/subscriptions/${config.subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/${id}`;
+  const registry = `${root}/Microsoft.ContainerRegistry/registries/${config.registryServer.split('.')[0]}`;
+  const assignments: ExpectedRbacAssignment[] = [
+    { label: 'ACR pull for gateway', principalId: outputs.gatewayPrincipalId,
+      roleDefinitionId: role(roleIds.acrPull), scope: registry },
+    { label: 'ACR pull for data', principalId: outputs.dabPrincipalId,
+      roleDefinitionId: role(roleIds.acrPull), scope: registry },
+  ];
+  if (config.profile === 'role-based-data') return assignments;
+  const storage = `${root}/Microsoft.Storage/storageAccounts/${outputs.storageAccount}`;
+  const functions = outputs.functionPrincipalId;
+  return [...assignments,
+    { label: 'ACR pull for functions', principalId: functions,
+      roleDefinitionId: role(roleIds.acrPull), scope: registry },
+    { label: 'Blob data for gateway', principalId: outputs.gatewayPrincipalId,
+      roleDefinitionId: role(roleIds.blobContributor), scope: `${storage}/blobServices/default/containers/files` },
+    { label: 'Blob host storage for functions', principalId: functions,
+      roleDefinitionId: role(roleIds.blobOwner), scope: storage },
+    { label: 'Queue host storage for functions', principalId: functions,
+      roleDefinitionId: role(roleIds.queueContributor), scope: storage },
+    { label: 'Table host storage for functions', principalId: functions,
+      roleDefinitionId: role(roleIds.tableContributor), scope: storage },
+    { label: 'Key Vault secrets for functions', principalId: functions,
+      roleDefinitionId: role(roleIds.secretsUser), scope: `${root}/Microsoft.KeyVault/vaults/${outputs.vaultName}` },
+  ];
+}
+
+export async function verifyRbacAssignments(
+  config: DeploymentConfig, outputs: DeploymentOutputs, run: Run,
+): Promise<void> {
+  const expected = expectedRbacAssignments(config, outputs);
+  const actual = new Map<string, z.infer<typeof liveAssignmentSchema>[]>();
+  for (const scope of new Set(expected.map(item => item.scope))) {
+    const rows = z.array(liveAssignmentSchema).parse(JSON.parse(await run('az', [
+      'role', 'assignment', 'list', '--subscription', config.subscriptionId,
+      '--scope', scope, '--include-inherited', '-o', 'json',
+    ])));
+    actual.set(scope.toLowerCase(), rows);
+  }
+  const same = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+  const missing = expected.filter(item => !(actual.get(item.scope.toLowerCase()) ?? []).some(row =>
+    same(row.principalId, item.principalId) &&
+    same(row.roleDefinitionId, item.roleDefinitionId) &&
+    same(row.scope, item.scope)));
+  if (missing.length) {
+    throw new Error(`RBAC handoff is incomplete:\n${missing.map(item =>
+      `- ${item.label}: principal ${item.principalId}, role ${item.roleDefinitionId}, scope ${item.scope}`).join('\n')}\n` +
+      'An authorized administrator must run: npm run azure -- rbac-deploy <config.json>');
+  }
+}
+
+const liveAssignmentSchema = z.object({
+  principalId: z.string().uuid(),
+  roleDefinitionId: z.string().min(1),
+  scope: z.string().min(1),
+}).passthrough();
 
 export function parseOutputs(text: string): DeploymentOutputs {
   const envelope = z.record(z.string(), z.object({ value: z.unknown() })).parse(JSON.parse(text));
@@ -241,6 +340,13 @@ export async function parametersFile(config: DeploymentConfig, enabled: boolean)
   return path;
 }
 
+export async function rbacParametersFile(config: DeploymentConfig, outputs: DeploymentOutputs): Promise<string> {
+  const path = `${statePath(config)}.rbac.parameters.json`;
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(rbacParameters(config, outputs), null, 2));
+  return path;
+}
+
 export async function publishSchema(config: DeploymentConfig, outputs: DeploymentOutputs, run: Run) {
   const roleBasedGrants = config.profile === 'role-based-data' ? roleBasedProcedureGrants(
     JSON.parse(await readFile(deploymentProjectPath('dab', 'dab-config.json'), 'utf8')),
@@ -281,6 +387,7 @@ export async function deploy(
   let state: DeploymentState = previous ?? { environmentKey: environmentKey(config), configHash, stage: 'infrastructure',
     outputs: await deployResources(false), ...(config.profile === 'role-based-data' ? { applicationHome: await realpath('.') } : {}) };
   await persist(state);
+  await verifyRbacAssignments(config, state.outputs, run);
   if (!previous || previous.stage === 'infrastructure') await publishSchema(config, state.outputs, run);
   if (config.profile === 'role-based-data') {
     if (!previous || ['infrastructure', 'schema'].includes(previous.stage)) {

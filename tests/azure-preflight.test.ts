@@ -183,6 +183,7 @@ test('ARM transient failures retry narrowly and stop at a bounded count', async 
 test('CLI exposes separate read-only demo diagnostics without requiring full-foundation configuration', async () => {
   const output = await run(process.execPath, ['dist/src/cli.js', 'help']);
   assert.match(output, /demo-preflight/);
+  assert.match(output, /rbac-plan\|rbac-deploy/);
   assert.doesNotMatch(output, /Run npm run build/, 'help must not bypass the guarded consent-run build path');
   await assert.rejects(run(process.execPath, ['dist/src/cli.js', 'demo-preflight']), /explicit.*target configuration/i);
 });

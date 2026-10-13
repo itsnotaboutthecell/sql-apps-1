@@ -24,7 +24,7 @@ import { compileArchitecture } from './architecture-compiler.js';
 import {
   configureRedirect, delegatedScopeId, deploy, deploymentConfigHash, functionRoleId, parametersFile, preflight,
   publishSchema, readConfig, readState, saveJson, saveState, statePath, withDeploymentLock, provision,
-  deploymentTemplatePath, type DeploymentState,
+  deploymentTemplatePath, rbacParametersFile, rbacTemplatePath, verifyRbacAssignments, type DeploymentState,
 } from './deployment.js';
 
 const [command, configPath = 'sql-apps.json', argument] = process.argv.slice(2);
@@ -40,7 +40,7 @@ function parseFlags(args: string[], allowed: string[]): Record<string, string | 
 }
 async function main() {
   if (command === 'help' || !command) {
-    console.log('Usage: npm run azure -- <validate|artifacts|identity|plan|provision|deploy|status|schema|static|redirect|smoke|gateway|functions|secret-set|demo-init|demo-publish|demo-status|hosting-compare|architecture-plan> [config.json] [options]\nRequires a current build (after approval, consent-run build). Azure CLI, Bicep, .NET, SqlPackage and the local pinned SWA CLI are used directly.');
+    console.log('Usage: npm run azure -- <validate|artifacts|identity|plan|provision|rbac-plan|rbac-deploy|deploy|status|schema|static|redirect|smoke|gateway|functions|secret-set|demo-init|demo-publish|demo-status|hosting-compare|architecture-plan> [config.json] [options]\nRequires a current build (after approval, consent-run build). Azure CLI, Bicep, .NET, SqlPackage and the local pinned SWA CLI are used directly.');
     console.log('Architecture recommendation: architecture-plan <architecture-intent.json> compiles an offline/read-only recommendation with no Azure writes. It performs no Azure calls and is not deployment approval.');
     console.log('Public-demo diagnostics: demo-preflight <explicit target configuration>. Read-only cache/tenant/ARM/provider/region/permission evidence; no Graph, app registration, login reset or resource writes. Not deployment readiness.');
     console.log('Public-demo starter: demo-init <new-publication.json> --subscription <id> --resource-group <name> --location <region> --static-web-app-location <region> --application <name> --artifact <path> --owner <owner>. Discovery only; creates no Azure resources.');
@@ -172,6 +172,10 @@ async function main() {
       const code = await new Promise<number | null>((done, reject) => spawn(process.execPath, [process.argv[1]!, step, configPath], { stdio: 'inherit' })
         .on('error', reject).on('exit', done));
       if (code !== 0) throw new Error(`${step} failed; fix the cause, then run deploy-all ${configPath} again to resume from the remaining steps.`);
+      if (step === 'provision') {
+        console.log(`Infrastructure is ready. An administrator must review rbac-plan ${configPath} and run rbac-deploy ${configPath}; then rerun deploy-all to continue with live-verified RBAC.`);
+        return;
+      }
     }
     console.log('deploy-all finished. Assign the application role (role-based-assign) and run smoke tests as separate decisions.');
     return;
@@ -190,7 +194,7 @@ async function main() {
     console.log(JSON.stringify(await preflightDemo(target, run), null, 2));
     return;
   }
-  if (!['validate', 'artifacts', 'identity', 'plan', 'provision', 'deploy', 'status', 'schema', 'static', 'redirect', 'smoke', 'gateway', 'functions', 'secret-set', 'role-based-assign', 'role-based-smoke'].includes(command)) {
+  if (!['validate', 'artifacts', 'identity', 'plan', 'provision', 'rbac-plan', 'rbac-deploy', 'deploy', 'status', 'schema', 'static', 'redirect', 'smoke', 'gateway', 'functions', 'secret-set', 'role-based-assign', 'role-based-smoke'].includes(command)) {
     throw new Error(`Unknown command: ${command}`);
   }
   const config = await readConfig(resolve(configPath));
@@ -252,6 +256,24 @@ async function main() {
       '--parameters', `@${await parametersFile(config, true)}`]));
     return;
   }
+  if (command === 'rbac-plan' || command === 'rbac-deploy') {
+    const state = await readState(config);
+    if (state.configHash !== await deploymentConfigHash(config)) {
+      throw new Error('Saved deployment state does not match this configuration; restore the provisioned configuration or reprovision before changing Azure RBAC.');
+    }
+    const parameters = `@${await rbacParametersFile(config, state.outputs)}`;
+    const common = ['--subscription', config.subscriptionId, '--resource-group', config.resourceGroup,
+      '--template-file', rbacTemplatePath(), '--parameters', parameters];
+    if (command === 'rbac-plan') {
+      console.log(await run('az', ['deployment', 'group', 'what-if', ...common]));
+      return;
+    }
+    await run('az', ['deployment', 'group', 'create', '--name', `${config.name}-${config.environment}-rbac`,
+      ...common, '-o', 'none']);
+    await verifyRbacAssignments(config, state.outputs, run);
+    console.log('Privileged RBAC deployment completed and every required assignment was verified from live Azure state. The ordinary deployer can now run deploy.');
+    return;
+  }
   if (command === 'deploy') {
     await withDeploymentLock(statePath(config), async () => {
       const state = await deploy(config, run);
@@ -263,7 +285,7 @@ async function main() {
     await withDeploymentLock(statePath(config), async () => {
       const state = await provision(config, run);
       await saveState(statePath(config), state);
-      console.log(`Infrastructure available (saved stage: ${state.stage}). Configure private runner connectivity to ${state.outputs.networkId}, then run deploy. Saved stages are historical, not live acceptance.`);
+      console.log(`Infrastructure available (saved stage: ${state.stage}). An administrator with roleAssignments/write must review rbac-plan ${configPath} and run rbac-deploy ${configPath}. After live RBAC verification, configure private runner connectivity to ${state.outputs.networkId}, then run deploy. Saved stages are historical, not live acceptance.`);
     });
     return;
   }

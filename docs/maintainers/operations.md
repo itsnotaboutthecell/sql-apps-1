@@ -16,6 +16,7 @@ Use Azure CLI for container revisions, logs, identities, role assignments, and r
 - Schema failure prevents new gateway/data rollout; existing runtime resources are not intentionally deleted.
 - Local locks atomically publish a directory containing a unique process/host owner record. Recovery removes only the observed dead owner's record, so concurrent recovery cannot delete a replacement lock. Legacy incomplete files or empty consent locks are recovered after 30 seconds; live owners remain protected regardless of age.
 - `deploy-all` checks the saved deployment fingerprint before skipping completed stages. A changed configuration or role-based SQL/DAB source stops continuation for operator review; a historical ready stage is not proof that a changed release was deployed.
+- `deploy-all` stops after ordinary infrastructure provisioning for an administrator-run `rbac-plan`/`rbac-deploy` handoff. Runtime deployment reads every required assignment back from its exact Azure scope before schema or service changes.
 - Gateway proxies use Fastify's native Web-stream handling for incremental delivery and backpressure. Disconnecting a client cancels the upstream response even while its next chunk is pending; loopback HTTP regressions cover both DAB and Functions proxy paths.
 - ARM changes, SQL publishing, and Graph assignments are not a single transaction. Inspect recorded stages and Azure state after failure.
 - Runtime rollback does not reverse schema changes. Use expand/contract changes and operator-reviewed recovery.

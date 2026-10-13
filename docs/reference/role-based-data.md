@@ -74,7 +74,7 @@ After explicit approval for each relevant cloud-write scope:
 npm run azure -- identity azure-role-based.json
 ```
 
-This creates a new single-tenant registration/service principal with delegated `access_as_user` and the configured human application role (allowed member type `User`), not `Function.Invoke`. A configuration from `npm run azure -- init ... --profile role-based-data` receives the printed identifier automatically, and `deploy-all` runs identity, artifacts, provision, deploy and status as one reviewed approval ([deployment reference](deployment.md#shortest-path)); otherwise set `apiClientId` to its printed identifier. Existing registrations need an enabled equivalent application role; creation does not patch unrelated registrations.
+This creates a new single-tenant registration/service principal with delegated `access_as_user` and the configured human application role (allowed member type `User`), not `Function.Invoke`. A configuration from `npm run azure -- init ... --profile role-based-data` receives the printed identifier automatically. `deploy-all` runs the reviewed ordinary-operator stages, stops after provisioning for the separate administrator RBAC handoff, and resumes afterward ([deployment reference](deployment.md#shortest-path)); otherwise set `apiClientId` to its printed identifier. Existing registrations need an enabled equivalent application role; creation does not patch unrelated registrations.
 
 Assign only approved authorized users/groups by object ID:
 
@@ -91,11 +91,13 @@ npm run azure -- validate azure-role-based.json
 npm run azure -- artifacts azure-role-based.json
 npm run azure -- plan azure-role-based.json
 npm run azure -- provision azure-role-based.json
+npm run azure -- rbac-plan azure-role-based.json
+npm run azure -- rbac-deploy azure-role-based.json
 npm run azure -- deploy azure-role-based.json
 npm run azure -- status azure-role-based.json
 ```
 
-`validate` is offline. For this profile it also requires `requiredRole` and `readinessPath` to match `role-based-data.json` when present, and every DAB procedure to be declared under `sql/`, so a mismatch fails before images are published. `artifacts` builds/publishes exactly gateway and DAB images from this checkout and saves digests only after both succeed. `plan` uses Azure/Graph reads and ARM what-if; obtain separate authorization. `provision`/`deploy` create paid resources. ACR must already exist at the explicitly selected target; creating it is a separate approved operation.
+`validate` is offline. For this profile it also requires `requiredRole` and `readinessPath` to match `role-based-data.json` when present, and every DAB procedure to be declared under `sql/`, so a mismatch fails before images are published. `artifacts` builds/publishes exactly gateway and DAB images from this checkout and saves digests only after both succeed. `plan` uses Azure/Graph reads and ARM what-if; obtain separate authorization. `provision`/`deploy` create paid resources. The administrator-only `rbac-plan`/`rbac-deploy` commands grant and verify only the two exact ACR pull assignments; the ordinary `deploy` command verifies those assignments again before publishing SQL. ACR must already exist at the explicitly selected target; creating it is a separate approved operation.
 
 SQL remains Entra-only with its public endpoint disabled. The deployment operator needs private runner connectivity and database publishing authorization. The template retains SQL private endpoint/DNS but excludes Functions, storage, Key Vault, their identities/grants/endpoints and the Functions subnet. Schema publishing is non-destructive and grants the DAB managed identity only approved procedure permissions.
 

@@ -68,6 +68,7 @@ export function planDeployAll(config: DeploymentConfig, stage: string | undefine
   const pending = deploySteps.filter(step => !done[step]);
   const approval = createHash('sha256').update(JSON.stringify({ config, pending })).digest('hex').slice(0, 12);
   return { pending, approval, excluded: [
+    'rbac-plan / rbac-deploy: Azure resource-role assignment needs a separately authorized administrator after provisioning',
     'role-based-assign: assigning the application role names a person and stays a separate decision',
     'role-based-smoke / smoke: needs delegated user tokens',
     'deleting or changing existing resources outside this deployment',

@@ -72,9 +72,13 @@ npm run azure -- deploy-all sql-apps.json
 `artifacts`, `provision`, `deploy`, `status`), the exclusions and an id. Review
 costs (`demo-cost`/`role-based-cost`) and those steps, then, after explicit
 approval, run `deploy-all sql-apps.json --approve <id>`. It runs the existing
-commands below in order, skips completed ones and refuses a stale id. On a
+commands below in order, skips completed ones and refuses a stale id. After
+`provision`, it stops for the separately authorized Azure RBAC handoff described
+below. Once an administrator completes that handoff, rerun `deploy-all`; it
+verifies live assignments before publishing SQL or runtime resources. On a
 failure, such as no private-network path to SQL before `deploy`, fix the cause
-and rerun it to resume. Role assignment and smoke tests stay separate.
+and rerun it to resume. Application-role assignment and smoke tests stay
+separate.
 
 Completed stages are skipped only when their saved fingerprint still matches
 the configuration and, for `role-based-data`, the SQL/DAB source. Changed image
@@ -121,6 +125,31 @@ The configured `sqlAdminObjectId` must identify your migration principal or an E
 
 No public SQL firewall exception is added to make migrations pass. Use `provision` to create the infrastructure and obtain its network ID before connecting a runner. If full deployment's SQL publishing fails, infrastructure stage state is retained, and deployment stops before gateway/data rollout. Restore private connectivity and retry.
 
+## Privileged Azure RBAC handoff
+
+The ordinary infrastructure template does not create Azure role assignments
+and does not require `Microsoft.Authorization/roleAssignments/write`. After
+`provision`, give an authorized administrator the unchanged configuration,
+checkout, and generated deployment state. The administrator must preview and
+apply only the dedicated RBAC template:
+
+```powershell
+npm run azure -- rbac-plan sql-apps.json
+npm run azure -- rbac-deploy sql-apps.json
+```
+
+For `foundation`, this grants the three managed identities the exact ACR,
+Storage, Blob-container, and Key Vault data-plane roles required by the
+runtime. For `role-based-data`, it grants only the gateway and DAB identities
+ACR pull. `rbac-deploy` reads the resulting assignments back from their exact
+resource scopes and fails if any principal, role, or scope does not match.
+Broader inherited grants do not satisfy this least-privilege contract.
+
+The ordinary operator then runs `deploy`. It performs the same live read-back
+before schema publication, so copying state or merely claiming that the RBAC
+deployment ran cannot bypass the gate. Neither command persists credentials or
+records an RBAC-success stage.
+
 ## Deployment commands
 
 ```powershell
@@ -128,6 +157,8 @@ npm run azure -- validate sql-apps.json
 npm run azure -- artifacts sql-apps.json
 npm run azure -- plan sql-apps.json
 npm run azure -- provision sql-apps.json
+npm run azure -- rbac-plan sql-apps.json
+npm run azure -- rbac-deploy sql-apps.json
 npm run azure -- deploy sql-apps.json
 npm run azure -- status sql-apps.json
 npm run azure -- schema sql-apps.json

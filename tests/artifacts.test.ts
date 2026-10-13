@@ -29,6 +29,13 @@ test('artifact builds use ACR for all services and return immutable validated co
   assert.equal(calls.every(call => call.includes(config.subscriptionId)), true);
 });
 
+test('Docker build context excludes workspace-only state', async () => {
+  const ignored = new Set((await readFile('.dockerignore', 'utf8')).split(/\r?\n/).filter(Boolean));
+  for (const path of ['.git', '.worktrees', '.vscode', '.azure', '.sql-apps', 'sql-apps.json']) {
+    assert.equal(ignored.has(path), true, `${path} must not enter remote ACR build contexts`);
+  }
+});
+
 test('artifact builds fail explicitly and stop before later builds', async () => {
   let builds = 0;
   const run: Run = async (_command, args) => {

@@ -101,6 +101,7 @@ test('deploy-all lists only pending paid steps and binds approval to the config 
   assert.deepEqual(resumed.pending, ['deploy', 'status']);
   assert.notEqual(resumed.approval, fresh.approval);
   assert.deepEqual(planDeployAll(pinned, 'ready').pending, ['status']);
+  assert.ok(fresh.excluded.some(item => /rbac-deploy/.test(item)), 'privileged Azure RBAC stays a separate administrator decision');
   assert.ok(fresh.excluded.some(item => /role-based-assign/.test(item)), 'role assignment names a person and stays a separate decision');
 });
 
@@ -117,6 +118,7 @@ async function saveDeployment(root: string, config: DeploymentConfig, stage: Dep
       outputs: { sqlServer: 'fixture.database.windows.net', databaseName: 'app',
         dabPrincipalId: '55555555-5555-4555-8555-555555555555',
         gatewayPrincipalId: '66666666-6666-4666-8666-666666666666',
+        functionPrincipalId: '',
         gatewayName: 'fixture-gateway', gatewayUrl: 'https://fixture.invalid', functionsName: 'fixture-functions',
         networkId: 'fixture-network', storageAccount: 'fixturestorage', vaultName: 'fixture-vault',
         sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo', sqlAuditWorkspaceName: 'fixture-logs' } });
