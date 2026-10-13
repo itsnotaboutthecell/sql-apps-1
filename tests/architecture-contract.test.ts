@@ -38,6 +38,11 @@ test('canonical recursively sorts object keys while preserving array order', () 
     '{"list":[{"x":1,"y":2},"last"],"nested":{"a":1,"b":2},"z":1}');
 });
 
+test('canonical sorts punctuation and non-ASCII object keys by locale-independent ordinal order', () => {
+  assert.equal(canonical({ 'éclair': 4, zebra: 3, '中': 5, _meta: 2, '!tag': 1 }),
+    '{"!tag":1,"_meta":2,"zebra":3,"éclair":4,"中":5}');
+});
+
 test('briefFingerprint is a stable lowercase SHA-256 digest', () => {
   const reordered = {
     acceptanceActions: validBrief.acceptanceActions,
