@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { copyFile, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -150,7 +150,7 @@ test('bin help is project-independent and its validated command map targets pack
 });
 
 test('bin dispatches from the project root when invoked in a nested directory', async t => {
-  const fixture = await mkdtemp(join(tmpdir(), 'sql-apps-bin-project-'));
+  const fixture = await realpath(await mkdtemp(join(tmpdir(), 'sql-apps-bin-project-')));
   t.after(() => rm(fixture, { recursive: true, force: true }));
   const packageRoot = join(fixture, 'package');
   const project = join(fixture, 'project');

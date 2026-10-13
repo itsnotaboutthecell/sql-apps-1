@@ -160,7 +160,7 @@ test('open registers an existing SQL Apps project and list reports all projects'
 
 test('plugin accepts generated projects and resolves the current or active project before its foundation binding', async t => {
   const source = await sourceFixture(t);
-  const userHome = await mkdtemp(join(tmpdir(), 'sql-apps-project-routing-'));
+  const userHome = await realpath(await mkdtemp(join(tmpdir(), 'sql-apps-project-routing-')));
   t.after(() => rm(userHome, { recursive: true, force: true }));
   const created = await projects.createProject(source, 'Current App', { userHome, initializeGit: false });
   assert.equal(await plugin.validateHome(created.path), created.path);
