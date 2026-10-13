@@ -8,6 +8,12 @@ The default authenticated foundation path includes Functions, storage, Key Vault
 
 Keep the confirmed new application checkout/configuration/artifacts as the deployment subject. With read-only Azure authorization, discovered older resources are potential collisions, not permission to reuse or modify them. Reuse requires an explicit request and a separate compatibility/migration/cost review; existing data remains untouched.
 
+## Adaptive architecture planning
+
+`npm run azure -- architecture-plan <architecture-intent.json>` reads a strict architecture intent and produces an offline review plan. It makes no Azure calls or writes. Every plan keeps Azure SQL free-tier intent and DAB as mandatory modules; its output is metadata-only with `authorized: false` and `deployable: false`. The plan makes no pricing claim and does not verify Azure eligibility.
+
+The compiler does not convert an existing database or a legacy paid deployment, is not deployment approval, and is not ready to deploy its plan. The existing profile guidance and deployment commands below remain authoritative until a later implementation reaches command parity and passes live acceptance.
+
 ## Supported tools
 
 The project uses Azure CLI/Bicep for infrastructure and Microsoft.Build.Sql/SqlPackage for schema publishing. No custom Azure control-plane client or SQL migration engine is implemented.
