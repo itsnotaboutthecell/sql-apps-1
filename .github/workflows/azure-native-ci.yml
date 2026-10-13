@@ -42,4 +42,4 @@ jobs:
       - run: node scripts/check-application.mjs . sql/obj/Debug/model/model.xml
       - run: az bicep install
       - run: npm run infra:build
-      - run: npm run infra:test-demo
+      - run: npm run infra:test

@@ -4,7 +4,6 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { run } from '../dist/src/process.js';
-import { reviewRoleBasedCost } from '../dist/src/role-based-cost.js';
 
 test('compiled authorized profile gates excluded resources and retains private SQL and trusted authorized settings', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'sql-apps-role-based-infra-'));
@@ -46,16 +45,13 @@ test('compiled authorized profile gates excluded resources and retains private S
   assert.equal(sql.properties.administrators.azureADOnlyAuthentication, true);
   const sqlEndpoint = template.resources.find(resource => resource.name === 'sql-endpoint');
   assert.equal(sqlEndpoint.condition, undefined);
-  const cost = reviewRoleBasedCost(JSON.parse(await readFile('azure-role-based-cost.example.json', 'utf8')));
   const database = template.resources.find(resource => resource.type === 'Microsoft.Sql/servers/databases');
   assert.match(database.sku, /if\(variables\('fullFoundation'\).*S0.*roleBasedSqlSku/);
   assert.equal(template.variables.roleBasedSqlSku.name, 'GP_S_Gen5_2');
   assert.match(database.properties, /useFreeLimit.*freeLimitExhaustionBehavior.*AutoPause.*autoPauseDelay.*60.*minCapacity.*0\.5/);
-  assert.equal(cost.resources[0].sku, 'GP_S_Gen5_2 free limit');
   for (const resource of template.resources.filter(resource => resource.type === 'Microsoft.App/containerApps')) {
     assert.match(resource.properties.template.scale.minReplicas, /if\(variables\('fullFoundation'\), 1, 0\)/);
-    assert.equal(cost.resources[2].minReplicas, 0);
-    assert.equal(resource.properties.template.scale.maxReplicas, cost.resources[2].maxReplicas);
+    assert.equal(resource.properties.template.scale.maxReplicas, 2);
     assert.equal(resource.properties.template.containers[0].resources.cpu, "[json('0.5')]");
     assert.equal(resource.properties.template.containers[0].resources.memory, '1Gi');
     assert.equal(resource.properties.configuration.ingress.allowInsecure, false);

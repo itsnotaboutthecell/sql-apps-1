@@ -11,7 +11,7 @@
   "location": "westus2",
   "environment": "dev",
   "name": "data-app",
-  "gatewayImage": "yourregistry.azurecr.io/app-gateway:0.1.2",
-  "dabImage": "yourregistry.azurecr.io/app-data:0.1.2",
+  "gatewayImage": "yourregistry.azurecr.io/app-gateway:0.2.0",
+  "dabImage": "yourregistry.azurecr.io/app-data:0.2.0",
   "registryServer": "yourregistry.azurecr.io"
 }

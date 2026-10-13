@@ -25,9 +25,9 @@ Run `npm run guide` to recover saved decisions. Saved evidence is historical, no
 - Use `sql-apps-application` for screens, SQL behavior, access rules and the first useful change.
 - Use `sql-apps-local` for prerequisites, approval, startup, resume and stop.
 - Use `sql-apps-validation` for tests and live workflow checks.
-- Use `sql-apps-design` for a substantial visual direction or redesign.
+- Use an available frontend design skill for general visual direction; retain SQL Apps account/access and data-state requirements.
 - Use `sql-apps-diagnostics` for an existing failure.
-- Use `sql-apps-cloud-preview` only after the user asks to share.
+- Use `sql-apps-cloud-preview` only after the user asks to share; it routes general Azure preparation, cost, deployment, and diagnostics to maintained Azure skills.
 
 Do not preload those skills or their references. Load the next stage only, and stop gathering context once its command or blocker is known.
 

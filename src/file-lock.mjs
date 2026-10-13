@@ -74,7 +74,11 @@ async function clearStale(lock) {
     try {
       if (!await stale(owner, ownerInfo, entries[0].slice(0, -5))) return false;
       await unlink(owner);
-    } catch (error) { if (!hasCode(error, 'ENOENT')) throw error; }
+    } catch (error) {
+      // Windows denies access to an owner file pending deletion during release; an unreadable owner is never stale.
+      if (hasCode(error, 'EPERM', 'EBUSY')) return false;
+      if (!hasCode(error, 'ENOENT')) throw error;
+    }
   } else if (Date.now() - info.mtimeMs < 30_000) return false;
   try { await rmdir(lock); return true; }
   catch (error) {

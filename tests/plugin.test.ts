@@ -16,7 +16,7 @@ const probe = async (code: string, env: NodeJS.ProcessEnv = {}) =>
   run(process.execPath, ['--input-type=module', '-e', `import { resolveHome, status, main } from ${JSON.stringify(moduleUrl)}; ${code}`], { env });
 
 test('local plugin bundle validates its manifests, matching skill names and isolated sources', async () => {
-  assert.match(await run(process.execPath, [resolve('scripts', 'check-plugin.mjs')]), /six skills, four design references, MIT license/);
+  assert.match(await run(process.execPath, [resolve('scripts', 'check-plugin.mjs')]), /six focused skills, MIT license/);
   assert.equal(await readFile(resolve('plugins', 'sql-apps', 'LICENSE'), 'utf8'), await readFile('LICENSE', 'utf8'));
 });
 
@@ -30,7 +30,7 @@ test('SQL Apps identity is consistent across packages, platform manifests and ma
     assert.equal(manifest.name, 'sql-apps', path);
     assert.equal(manifest.homepage, repository, path);
     assert.equal(manifest.repository, repository, path);
-    assert.equal(manifest.version, '0.1.2', path);
+    assert.equal(manifest.version, '0.2.0', path);
     assert.deepEqual(manifest.author, { name: 'Microsoft SQL team (mssql)', url: 'https://github.com/microsoft' }, path);
     if (manifest.interface) {
       assert.equal(manifest.interface.displayName, 'SQL Apps');
@@ -122,17 +122,11 @@ test('application boundary retains the proven SQL storage and mutation rules', a
   ]) assert.match(boundary, requirement);
 });
 
-test('SQL Apps design guidance progressively discloses packaged references', async () => {
-  const craftFloor = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-design', 'references', 'craft-floor.md'), 'utf8');
-  const uiRecipes = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-design', 'references', 'ui-style-recipes.md'), 'utf8');
-  const visualRecipes = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-design', 'references', 'visual-style-recipes.md'), 'utf8');
-  const formatting = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-design', 'references', 'formatting.md'), 'utf8');
-  assert.ok(craftFloor.length > 1000);
-  assert.ok(uiRecipes.length > 1000);
-  assert.ok(visualRecipes.length > 1000);
-  assert.ok(formatting.length > 1000);
+test('SQL Apps delegates general visual design and retains app-specific state requirements', async () => {
   const design = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-design', 'SKILL.md'), 'utf8');
-  assert.match(design, /references\/craft-floor\.md/);
+  assert.match(design, /maintained frontend or design skill/);
+  assert.match(design, /loading, empty, error, disabled, save, and reload states/i);
+  assert.doesNotMatch(design, /references\/|craft floor|style recipes/i);
   const guide = await readFile(resolve('docs', 'guides', 'build-your-app.md'), 'utf8');
   assert.match(guide, /`sql-apps-design` skill/);
 });
@@ -145,10 +139,6 @@ test('agent guidance stays concise, stack-neutral and script-led', async () => {
   const cloud = await read('plugins/sql-apps/skills/sql-apps-cloud-preview/SKILL.md');
   const validation = await read('plugins/sql-apps/skills/sql-apps-validation/SKILL.md');
   const design = await read('plugins/sql-apps/skills/sql-apps-design/SKILL.md');
-  const craftFloor = await read('plugins/sql-apps/skills/sql-apps-design/references/craft-floor.md');
-  const uiRecipes = await read('plugins/sql-apps/skills/sql-apps-design/references/ui-style-recipes.md');
-  const visualRecipes = await read('plugins/sql-apps/skills/sql-apps-design/references/visual-style-recipes.md');
-  const formatting = await read('plugins/sql-apps/skills/sql-apps-design/references/formatting.md');
   const buildGuide = await read('docs/guides/build-your-app.md');
   const runGuide = await read('docs/guides/run-locally.md');
   const guideReference = await read('docs/reference/guide.md');
@@ -163,26 +153,18 @@ test('agent guidance stays concise, stack-neutral and script-led', async () => {
   assert.doesNotMatch(application, /Then implement the first useful change/);
   assert.doesNotMatch(application, /npm run build[\s\S]*npm test/, 'the application skill must delegate command selection');
   assert.doesNotMatch(local, /setup-check/, 'setup plan is the normal prerequisite probe');
-  assert.match(cloud, /For a cost review[\s\S]*docs\/guides\/costs\.md/);
-  assert.match(cloud, /For deployment[\s\S]*docs\/reference\/deployment\.md/);
+  assert.match(cloud, /azure-prepare[\s\S]*azure-validate[\s\S]*azure-deploy/);
+  assert.match(cloud, /azure-cost/);
+  assert.match(cloud, /compatibility path for existing projects/);
   assert.doesNotMatch(readme, /Static Web Apps candidate/);
   assert.doesNotMatch(readme, /uses TypeScript, Azure SQL Database, Data API builder, Blob Storage and Azure Functions/);
   await assert.rejects(read('docs/superpowers/plans/2026-10-10-bakery-ordering.md'));
   await assert.rejects(read('docs/superpowers/specs/2026-10-10-bakery-ordering-design.md'));
   assert.match(await read('docs/README.md'), /Temporary implementation plans.*not product guidance/is);
 
-  for (const [path, content] of [
-    ['ui-style-recipes.md', uiRecipes],
-    ['visual-style-recipes.md', visualRecipes],
-    ['formatting.md', formatting],
-  ] as const) {
-    assert.doesNotMatch(content, /src\/global\.css|@\/lib\/utils|Radix|Tailwind|VegaVisual|DataGrid|fabric-visuals/i, path);
-  }
-  assert.doesNotMatch(craftFloor, /always wrong/);
-  assert.doesNotMatch(formatting, /must be strictly followed/i);
-  assert.ok(uiRecipes.split(/\s+/).length < 700, 'UI guidance should fit its context budget');
-  assert.ok(visualRecipes.split(/\s+/).length < 600, 'visual guidance should fit its context budget');
-  assert.ok(formatting.split(/\s+/).length < 500, 'formatting guidance should fit its context budget');
+  assert.match(design, /maintained frontend or design skill/);
+  assert.match(design, /Product screens show real account and access states/);
+  assert.doesNotMatch(design, /references\/|craft floor|style recipes/i);
 
   const statusPhrase = /implemented.*built.*running.*workflow[- ]verified/gi;
   const skillMentions = [gettingStarted, application, local, cloud, validation, design]

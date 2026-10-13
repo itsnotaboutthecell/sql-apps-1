@@ -25,7 +25,7 @@ has this shape:
   "scaffoldVersion": 1,
   "tooling": {
     "package": "@microsoft/sql-apps",
-    "version": "0.1.2"
+    "version": "0.2.0"
   }
 }
 ```
@@ -79,6 +79,6 @@ Git history and `.sql-apps` state; it is not a worktree of the foundation.
 
 Project scaffolding must write the manifest and package metadata atomically,
 refuse an existing destination and clean up only the temporary directory it
-created after a failure. The current foundation does not expose a public
-one-command project generator, so documentation and plugins must not advertise
-one until that workflow emits this package-based contract.
+created after a failure. The foundation exposes project creation through
+`npm run projects -- create "<name>"`; generated projects use this package-based
+contract and are independent of the foundation checkout.

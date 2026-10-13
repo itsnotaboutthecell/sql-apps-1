@@ -158,16 +158,15 @@ export async function readGuide(home) {
       ...(capabilities.includes('files') ? ['File storage'] : []),
       ...(capabilities.includes('background-jobs') ? ['Background processing'] : [])],
     cloud: { authorized: false, optional: true,
-      note: 'Public anonymous demos require synthetic data only. Minimal Azure demo deployment remains unfinished; do not substitute the full production template.' },
+      note: 'Public anonymous demos require synthetic data only. Use the maintained Azure Skills (prepare, validate, deploy) for new cloud deployments, then run SQL Apps live acceptance.' },
     cost: {
       preference: state?.brief.costPreference ?? 'zero-azure-spend',
       phase: nextStage === 'share-optionally' ? 'deployment-cost-review' :
         nextStage === 'make-it-yours' ? 'capability-cost-awareness' : 'local-cost-awareness',
       message: nextStage === 'share-optionally' ?
-        `Before sharing, run the offline ${suggestedProfile === 'role-based-data' ? 'role-based-cost' : 'demo-cost'} review. Free SQL/compute allowances do not remove registry or managed-network charges. A zero-spend intent is blocked by the current template; never fall back to paid resources.` :
+        'Before sharing, review expected Azure costs with the Azure Cost tooling (forecast, estimate and actual usage). Free SQL/compute allowances do not remove registry or managed-network charges. A zero-spend intent is blocked by the current template; never fall back to paid resources.' :
         'Local operation has no Azure usage bill; tool/access/licensing conditions still apply. Review future costs when adding files/background work, not cloud architecture during initial design.',
-      reviewCommand: suggestedProfile === 'role-based-data' ? 'npm run azure -- role-based-cost azure-role-based-cost.example.json (copy and edit for your app)' :
-        'npm run azure -- demo-cost <explicit-cost-config.json>',
+      reviewCommand: 'Use the azure-cost plugin (Azure Cost skills) to estimate the planned resources before approving any deployment.',
       usageStatus: 'not-queried',
       spendingAuthorized: false,
       scaleGuidance: 'Review actual remaining allowances, latency and availability needs before paying for capacity. User count is not a scaling threshold. Budgets are alerts, not hard spending caps.',

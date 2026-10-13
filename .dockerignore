@@ -7,5 +7,4 @@ dist
 .sql-apps
 .env*
 sql-apps.json
-azure-demo-cost.json
 functions/local.settings.json

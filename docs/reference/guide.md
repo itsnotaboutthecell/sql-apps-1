@@ -39,7 +39,7 @@ These are scope decisions, not switches that dynamically compose services. The f
 
 Optional `costPreference` is `zero-azure-spend` or `review-paid-costs`. It is never spending consent.
 
-The report's `profile` is `role-based-data` when `role-based-data.json` exists in the checkout, otherwise `null`. `suggestedProfile` is that configured profile; without one, a saved brief suggests `role-based-data` for data-only capabilities and `foundation` when it includes `files` or `background-jobs` (`null` before a brief). The suggestion fills the `setup plan --profile` hint and selects `role-based-cost` or `demo-cost` for the cost review. It is advice, not configuration: a suggested `role-based-data` still needs `role-based-data.json`, which `setup plan` reports.
+The report's `profile` is `role-based-data` when `role-based-data.json` exists in the checkout, otherwise `null`. `suggestedProfile` is that configured profile; without one, a saved brief suggests `role-based-data` for data-only capabilities and `foundation` when it includes `files` or `background-jobs` (`null` before a brief). The suggestion fills the `setup plan --profile` hint; cloud cost review routes to the Azure Cost plugin. It is advice, not configuration: a suggested `role-based-data` still needs `role-based-data.json`, which `setup plan` reports.
 
 ## Record historical evidence
 

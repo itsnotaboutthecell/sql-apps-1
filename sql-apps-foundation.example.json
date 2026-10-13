@@ -9,8 +9,8 @@
   "location": "westus2",
   "environment": "test",
   "name": "sqlapps",
-  "gatewayImage": "example.azurecr.io/sql-apps:0.1.2",
-  "dabImage": "example.azurecr.io/sql-apps-dab:0.1.2",
-  "functionsImage": "example.azurecr.io/sql-apps-functions:0.1.2",
+  "gatewayImage": "example.azurecr.io/sql-apps:0.2.0",
+  "dabImage": "example.azurecr.io/sql-apps-dab:0.2.0",
+  "functionsImage": "example.azurecr.io/sql-apps-functions:0.2.0",
   "registryServer": "example.azurecr.io"
 }

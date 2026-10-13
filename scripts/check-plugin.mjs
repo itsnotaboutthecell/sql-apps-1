@@ -12,7 +12,7 @@ export async function checkPlugin() {
   const manifest = JSON.parse(await readFile(join(plugin, 'plugin.json'), 'utf8'));
   assert.equal(manifest.$schema, 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json');
   assert.equal(manifest.name, 'sql-apps');
-  assert.equal(manifest.version, '0.1.2');
+  assert.equal(manifest.version, '0.2.0');
   assert.ok(manifest.description?.length);
   const allowed = new Set(['$schema', 'name', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords']);
   assert.ok(Object.keys(manifest).every(key => allowed.has(key)), 'Manifest uses only Agent Plugins 1.0 metadata fields');
@@ -43,8 +43,6 @@ export async function checkPlugin() {
     join(plugin, 'plugin.json'),
     join(plugin, 'scripts', 'sql-apps.mjs'),
     ...skillNames.map(name => join(plugin, 'skills', name, 'SKILL.md')),
-    ...['craft-floor.md', 'ui-style-recipes.md', 'visual-style-recipes.md', 'formatting.md']
-      .map(name => join(plugin, 'skills', 'sql-apps-design', 'references', name)),
   ];
   async function inspect(directory) {
     for (const name of await readdir(directory)) {
@@ -57,8 +55,8 @@ export async function checkPlugin() {
   }
   assert.deepEqual((await readdir(plugin)).sort(), ['LICENSE', 'plugin.json', 'scripts', 'skills']);
   await inspect(plugin);
-  assert.deepEqual(files.sort(), expectedFiles.sort(), 'Bundle contains only the declared manifest, launcher, six skills, four design references and MIT license');
-  console.log('Local plugin packaging passed: six skills, four design references, MIT license, portable manifest, clean isolated bundle and matching marketplaces.');
+  assert.deepEqual(files.sort(), expectedFiles.sort(), 'Bundle contains only the declared manifest, launcher, six focused skills and MIT license');
+  console.log('Local plugin packaging passed: six focused skills, MIT license, portable manifest, clean isolated bundle and matching marketplaces.');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

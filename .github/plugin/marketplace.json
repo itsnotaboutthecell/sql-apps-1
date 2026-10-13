@@ -1,6 +1,6 @@
 {
   "name": "sql-apps-skills",
   "owner": { "name": "Microsoft", "url": "https://www.microsoft.com" },
-  "metadata": { "description": "Independent Azure-native application development", "version": "0.1.2" },
-  "plugins": [{ "name": "sql-apps", "description": "Subscription-free local Azure application workflows and diagnostics", "version": "0.1.2", "source": "./plugins/sql-apps" }]
+  "metadata": { "description": "Application development on Azure SQL Database and Data API Builder", "version": "0.2.0" },
+  "plugins": [{ "name": "sql-apps", "description": "Build and validate Azure SQL and Data API Builder applications; delegate general Azure lifecycle work to maintained Azure skills", "version": "0.2.0", "source": "./plugins/sql-apps" }]
 }

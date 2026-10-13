@@ -194,6 +194,34 @@ for (const removed of [true, false]) {
   });
 }
 
+test('owner-file EPERM while another owner releases the lock is retried, not fatal', async t => {
+  const home = await fixture(t);
+  const lock = join(home, '.sql-apps', 'consent.lock');
+  const token = '2a0243a1-32b2-4ecf-ae3d-ef2dab7e5509';
+  const owner = join(lock, `${token}.json`);
+  await mkdir(lock, { recursive: true });
+  await writeFile(owner, JSON.stringify({ pid: process.pid, token }));
+  const original = fs.readFile;
+  const denied = Object.assign(new Error('Synthetic Windows delete-pending read failure'), { code: 'EPERM' });
+  let injected = false;
+  t.mock.method(fs, 'readFile', async (...args) => {
+    if (args[0] === owner && !injected) {
+      injected = true;
+      await rm(lock, { recursive: true, force: true });
+      throw denied;
+    }
+    return original(...args);
+  });
+  syncBuiltinESMExports();
+  try {
+    assert.equal(await withFileLock(lock, async () => 'acquired', 2), 'acquired');
+    assert.equal(injected, true);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
 test('a live consent lock is protected and a killed owner is recovered immediately', { timeout: 5_000 }, async t => {
   const home = await fixture(t);
   await grantConsent(home, await planConsent(home, { operation: 'restore' }));

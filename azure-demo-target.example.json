@@ -1,9 +1,0 @@
-{
-  "profile": "public-demo",
-  "securityPosture": "starter",
-  "tenantId": "11111111-1111-4111-8111-111111111111",
-  "subscriptionId": "22222222-2222-4222-8222-222222222222",
-  "resourceGroup": "sql-apps-synthetic-demo",
-  "location": "westus2",
-  "staticWebAppLocation": "centralus"
-}

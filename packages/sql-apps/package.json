@@ -1,6 +1,6 @@
 {
   "name": "@microsoft/sql-apps",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "engines": {

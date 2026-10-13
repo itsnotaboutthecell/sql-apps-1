@@ -21,11 +21,11 @@ The installer:
 
 Rerunning the installer is safe for the same checkout/profile. It refuses to replace a conflicting marketplace, differently sourced plugin, or runtime binding. Unrelated existing plugins are not disabled or modified.
 
-Only [plugins/sql-apps](../../plugins/sql-apps) is the installed package: manifest, six skills, four design references, an MIT license and a Node launcher. Runtime code, `.sql-apps` credentials, dependencies and SQL/Blob volumes stay outside the package. **Use this local marketplace, not a direct repository-root installation**, which is the older compatibility package.
+Only [plugins/sql-apps](../../plugins/sql-apps) is the installed package: manifest, six focused skills, an MIT license and a Node launcher. Runtime code, `.sql-apps` credentials, dependencies and SQL/Blob volumes stay outside the package. **Use this local marketplace, not a direct repository-root installation**, which is the older compatibility package.
 
 ## Use the GitHub Copilot App
 
-Restart the App or create a **fresh session** after installation. In **Customize -> Plugins**, look for **sql-apps**, marketplace **sql-apps-skills**, version **0.1.2**, enabled. Its skills should appear under **Skills**:
+Restart the App or create a **fresh session** after installation. In **Customize -> Plugins**, look for **sql-apps**, marketplace **sql-apps-skills**, version **0.2.0**, enabled. Its skills should appear under **Skills**:
 
 | Skill | Example prompt |
 | --- | --- |
@@ -36,16 +36,10 @@ Restart the App or create a **fresh session** after installation. In **Customize
 | `sql-apps-application` | Build a domain-specific application without copying the Todo example; verify source, build, API and database boundaries. |
 | `sql-apps-design` | Agree on a custom app's visual direction and review its rendered desktop/mobile experience. |
 
-The [design skill](../../plugins/sql-apps/skills/sql-apps-design/SKILL.md) includes a
-[craft floor](../../plugins/sql-apps/skills/sql-apps-design/references/craft-floor.md),
-[UI style recipes](../../plugins/sql-apps/skills/sql-apps-design/references/ui-style-recipes.md),
-[visual style recipes](../../plugins/sql-apps/skills/sql-apps-design/references/visual-style-recipes.md)
-and [visual formatting rules](../../plugins/sql-apps/skills/sql-apps-design/references/formatting.md).
-Its SQL Apps scope and compatibility section takes precedence over stack-specific examples:
-use the application's actual styling system, tokens and dependencies rather than assuming
-the named frontend files, hooks or packages are supplied by SQL Apps. New packages or
-font/image downloads still need explicit approval. SQL, identity and runtime decisions
-remain in `sql-apps-application`.
+The `sql-apps-design` skill is a small routing adapter for an available frontend design
+capability. It retains SQL Apps requirements for real account/access states and truthful
+loading, error, save, and reload behavior; SQL, identity, and runtime decisions remain in
+`sql-apps-application`.
 
 Invoke a skill explicitly from the App's skill picker/slash completion if natural-language discovery picks another plugin instead. Ask for **SQL Apps** and confirm the **sql-apps-skills** marketplace. The plugin does not embed the browser UI; use the startup-reported origin (`http://127.0.0.1:18080/` in fixed-port mode) for the actual application.
 
@@ -129,7 +123,7 @@ node "C:\git\sql-apps\plugins\sql-apps\scripts\sql-apps.mjs" setup-check
 
 `guide` is also dependency-free and available before the runtime is built. It returns JSON with the four stages, saved brief, suggested next action and explicitly historical progress; it does not probe live services. `guide-save "<absolute-brief.json>"` validates and saves the agreed brief in `.sql-apps/guide.json` in the bound checkout. Both enforce the same runtime-home mismatch checks. Source changes flag saved progress for local re-verification. See [the brief contract](guide.md); do not include credentials or actual data.
 
-The guide also introduces cost awareness progressively; optional saved `costPreference` is not spending approval. The cloud-preview skill selects the approved application profile first. Offline `demo-cost` is synthetic-demo-only; `role-based-cost` matches the [role-based-data profile](role-based-data.md), whose `role-based-app`/`role-based-serve` commands are also exposed by the launcher. A zero-spend intent stays   blocked while the minimal template has registry/network fixed charges; budgets are alerts, not spending caps. See [costs and paid growth](../guides/costs.md).
+The guide also introduces cost awareness progressively; optional saved `costPreference` is not spending approval. The cloud-preview skill selects the approved application profile first. Azure estimates and spend analysis route to the Azure Cost plugin. The [role-based-data profile](role-based-data.md) `role-based-app`/`role-based-serve` commands are exposed by the launcher. Budgets are alerts, not spending caps. See [costs and paid growth](../guides/costs.md).
 
 If the active checkout differs from the installed binding, runtime execution is refused until you explicitly select the intended home. This also applies when the active worktree lacks the uncommitted foundation. Review the report, then select one checkout for this terminal/session:
 

@@ -28,7 +28,7 @@ async function fixture(t) {
   t.after(() => rm(home, { recursive: true, force: true }));
   for (const folder of ['src', 'sql', 'public', 'dab', '.config']) await mkdir(join(home, folder), { recursive: true });
   await writeFile(join(home, 'package.json'), JSON.stringify({
-    name: 'fixture', dependencies: { '@microsoft/sql-apps': '0.1.2' },
+    name: 'fixture', dependencies: { '@microsoft/sql-apps': '0.2.0' },
   }));
   await writeFile(join(home, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3 }));
   await writeFile(join(home, 'tsconfig.json'), JSON.stringify({ compilerOptions: {} }));
@@ -36,7 +36,7 @@ async function fixture(t) {
   await writeFile(join(home, '.sql-apps-project.json'), JSON.stringify({
     version: 1, id: 'b91d4857-9570-4d4b-a740-918471ca7e26', name: 'Fixture',
     slug: 'fixture', starter: 'data', profile: 'role-based-data', scaffoldVersion: 1,
-    tooling: { package: '@microsoft/sql-apps', version: '0.1.2' },
+    tooling: { package: '@microsoft/sql-apps', version: '0.2.0' },
   }));
   await writeFile(join(home, 'application.json'), JSON.stringify({ name: 'fixture', selectedExamples: [] }));
   await writeFile(join(home, 'role-based-data.json'), JSON.stringify({
@@ -79,20 +79,20 @@ test('guide routes run-locally through setup plan and suggests the profile that 
   assert.equal(report.suggestedProfile, 'role-based-data', 'a data-only brief must not be steered to the file/job foundation');
   assert.match(report.nextAction, /setup plan --profile role-based-data/);
   assert.doesNotMatch(report.nextAction, /setup-check/, 'the coordinator, not the raw readiness check, orders approvals');
-  assert.match(report.cost.reviewCommand, /role-based-cost/);
+  assert.match(report.cost.reviewCommand, /azure-cost/);
   await saveBrief(home, { ...brief(), capabilities: ['data', 'files', 'background-jobs'] });
   report = await readGuide(home);
   assert.equal(report.suggestedProfile, 'role-based-data',
     'the generated project profile remains authoritative when the brief outgrows its starter');
   assert.match(report.nextAction, /setup plan --profile role-based-data/);
-  assert.match(report.cost.reviewCommand, /role-based-cost/);
+  assert.match(report.cost.reviewCommand, /azure-cost/);
   await writeFile(join(home, 'role-based-data.json'), '{}');
   report = await readGuide(home);
   assert.equal(report.profile, 'role-based-data');
   assert.equal(report.suggestedProfile, 'role-based-data', 'a configured profile wins over the brief');
   assert.match(report.nextAction, /setup plan --profile role-based-data/);
-  assert.match(report.cost.reviewCommand, /role-based-cost .*azure-role-based-cost\.example\.json/);
-  assert.doesNotMatch(report.cost.reviewCommand, /demo-cost/);
+  assert.match(report.cost.reviewCommand, /azure-cost/);
+  assert.doesNotMatch(report.cost.reviewCommand, /demo-cost|role-based-cost/);
 });
 
 test('guide persists decisions and reports evidence as historical, never current acceptance', async t => {
@@ -268,20 +268,17 @@ test('coordinator entry points use the local-first journey and retain sharing bo
     'the beginner entry point should defer hosting topology to the sharing guide');
   assert.match(readme, /docs\/guides\/sharing\.md/);
   const sharing = await readFile('docs/guides/sharing.md', 'utf8');
-  const demoDeployment = await readFile('docs/reference/demo-deployment.md', 'utf8');
-  assert.match(sharing, /Static Web Apps.*website.*Container App.*API.*Data API Builder/is);
-  assert.match(sharing, /one public URL/is);
-  assert.match(sharing, /Standard.*not automatically cheaper/is);
-  assert.match(demoDeployment, /demo-publish.*--approve/is);
-  assert.match(demoDeployment, /hosting-compare/is);
-  assert.match(demoDeployment, /direct.*backend.*denied/is);
+  assert.match(sharing, /azure-prepare.*azure-validate.*azure-deploy/is);
+  assert.match(sharing, /azure-cost/);
+  assert.match(sharing, /role-based-data/);
+  assert.doesNotMatch(sharing, /demo-publish|hosting-compare|demo-cost/);
   const guideReference = await readFile('docs/reference/guide.md', 'utf8');
   assert.match(guideReference, /historical/i);
   assert.match(guideReference, /does not authorize.*cloud deployment/);
   assert.equal((await readFile('content/start.md', 'utf8')).includes('"'), false);
   const cloud = await readFile('plugins/sql-apps/skills/sql-apps-cloud-preview/SKILL.md', 'utf8');
   assert.match(cloud, /Sharing is optional/);
-  assert.match(cloud, /Load only the material needed for the request/);
+  assert.match(cloud, /azure-prepare[\s\S]*azure-validate[\s\S]*azure-deploy/);
 });
 
 test('agent guidance stays lean, scoped and progressively disclosed', async () => {
@@ -308,20 +305,9 @@ test('agent guidance stays lean, scoped and progressively disclosed', async () =
 
   const local = await readFile('plugins/sql-apps/skills/sql-apps-local/SKILL.md', 'utf8');
   assert.doesNotMatch(local, /docs\/reference\/deployment\.md|demo-cost|role-based-cost/,
-    'local startup guidance must leave deployment and cloud cost work to cloud-preview');
+    'local startup guidance must leave deployment and cloud cost work to the Azure skills route');
 
   await access('docs/maintainers/agent-evaluations.md');
-});
-
-test('hosting decision records the candidate architecture and promotion gate', async () => {
-  const hostingDecision = await readFile('docs/maintainers/hosting-decision.md', 'utf8');
-  assert.match(hostingDecision, /Database Connections.*retired.*November 30, 2025/is);
-  assert.match(hostingDecision, /Static Web Apps Standard.*linked.*Container App/is);
-  assert.match(hostingDecision, /Node API.*DAB.*sidecar/is);
-  assert.match(hostingDecision, /not.*assumed.*cheaper/is);
-  assert.match(hostingDecision, /role-based-data.*full-foundation.*unchanged/is);
-  assert.doesNotMatch(hostingDecision,
-    /Lovable|Bolt|Replit|v0\/Vercel|competitor|market (?:research|opportunity)/i);
 });
 
 test('reader documentation, skill references and icons resolve after audience-based reorganization', async () => {

@@ -1,5 +1,7 @@
 # Operating and releasing authenticated applications
 
+> **Compatibility runbook:** This describes SQL Apps' custom Azure deployment for existing environments. Use maintained Azure deployment and diagnostics skills for new projects; retain the SQL/DAB-specific acceptance requirements when migrating.
+
 This checklist is for maintainers and operators of the full authenticated Azure deployment, not the local getting-started path.
 
 ## Diagnostics

@@ -1,6 +1,6 @@
 {
   "name": "sql-apps",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -28,7 +28,7 @@
     "plugin:check": "node scripts/check-plugin.mjs",
     "plugin:install": "node scripts/install-plugin.mjs",
     "infra:build": "az bicep build --file infra/main.bicep --outfile dist/main.json",
-    "infra:test-demo": "node --test tests/demo-infra.test.mjs tests/role-based-infra.test.mjs",
+    "infra:test": "node --test tests/role-based-infra.test.mjs",
     "sql:build": "dotnet build sql/database.sqlproj --output dist/sql",
     "sql:tools": "dotnet tool restore",
     "dab:validate": "node dist/src/validate-dab.js"
@@ -48,7 +48,6 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@azure/static-web-apps-cli": "2.0.10",
     "@types/node": "22.20.4",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",

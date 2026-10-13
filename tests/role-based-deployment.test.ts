@@ -9,7 +9,6 @@ import {
   expectedRbacAssignments, type DeploymentState,
 } from '../src/deployment.js';
 import { buildArtifacts } from '../src/artifacts.js';
-import { reviewRoleBasedCost } from '../src/role-based-cost.js';
 import { assignApplicationRole } from '../src/role-based-identity.js';
 import { roleBasedSmoke } from '../src/role-based-smoke.js';
 import type { Run } from '../src/process.js';
@@ -70,16 +69,6 @@ function runner(failRuntime = false) {
   };
   return { run, calls };
 }
-test('authorized cost review matches paid template and never infers spending approval', () => {
-  const report = reviewRoleBasedCost({ version: 1, profile: 'role-based-data', intent: 'zero-azure-spend', acknowledgeFixedCharges: false });
-  assert.equal(report.review.canProceedToWhatIf, false);
-  assert.equal(report.estimatedMonthlyCost, null);
-  assert.equal(report.deployment.authorized, false);
-  assert.equal(report.resources[0]!.sku, 'GP_S_Gen5_2 free limit');
-  assert.equal(report.resources[2]!.minReplicas, 0);
-  assert.match(report.resources[3]!.billing, /private endpoint/i);
-  assert.throws(() => reviewRoleBasedCost({ version: 1, profile: 'public-demo', intent: 'review-paid-costs', acknowledgeFixedCharges: true }));
-});
 test('authorized artifacts publish only gateway and DAB images', async () => {
   const { run, calls } = runner();
   const pinned = await buildArtifacts(config, run);

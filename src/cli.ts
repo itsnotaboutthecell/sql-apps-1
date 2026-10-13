@@ -1,26 +1,16 @@
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import { run } from './process.js';
 import { smoke } from './smoke.js';
 import { deployStatic, setSecret, updateImage } from './maintenance.js';
 import { buildArtifacts } from './artifacts.js';
-import { preflightDemo, DemoPreflightError } from './azure-preflight.js';
-import { reviewDemoCost } from './demo-cost.js';
-import { compareHosting } from './hosting-comparison.js';
-import {
-  demoPublicationSchema, demoPublicationStatus, planDemoPublication, publishDemo,
-  readDemoPublicationState, validateDemoPublication, type DemoPublicationState,
-} from './demo-publication.js';
-import { createDemoPublicationFile } from './demo-init.js';
-import { reviewRoleBasedCost } from './role-based-cost.js';
 import { assignApplicationRole, applicationRegistrationRole } from './role-based-identity.js';
 import { roleBasedSmoke } from './role-based-smoke.js';
 import { validateRoleBasedCloudSource } from './role-based-profile.js';
 import { initDeploymentConfig, planDeployAll, unsetClientId, type InitOptions } from './azure-init.js';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { compileArchitecture } from './architecture-compiler.js';
 import {
   configureRedirect, delegatedScopeId, deploy, deploymentConfigHash, functionRoleId, parametersFile, preflight,
   publishSchema, readConfig, readState, saveJson, saveState, statePath, withDeploymentLock, provision,
@@ -40,94 +30,10 @@ function parseFlags(args: string[], allowed: string[]): Record<string, string | 
 }
 async function main() {
   if (command === 'help' || !command) {
-    console.log('Usage: npm run azure -- <validate|artifacts|identity|plan|provision|rbac-plan|rbac-deploy|deploy|status|schema|static|redirect|smoke|gateway|functions|secret-set|demo-init|demo-publish|demo-status|hosting-compare|architecture-plan> [config.json] [options]\nRequires a current build (after approval, consent-run build). Azure CLI, Bicep, .NET, SqlPackage and the local pinned SWA CLI are used directly.');
-    console.log('Architecture recommendation: architecture-plan <architecture-intent.json> compiles an offline/read-only recommendation with no Azure writes. It performs no Azure calls and is not deployment approval.');
-    console.log('Public-demo diagnostics: demo-preflight <explicit target configuration>. Read-only cache/tenant/ARM/provider/region/permission evidence; no Graph, app registration, login reset or resource writes. Not deployment readiness.');
-    console.log('Public-demo starter: demo-init <new-publication.json> --subscription <id> --resource-group <name> --location <region> --static-web-app-location <region> --application <name> --artifact <path> --owner <owner>. Discovery only; creates no Azure resources.');
-    console.log('Public-demo costs: demo-cost <explicit cost configuration>. Offline free-allowance/fixed-charge review; no Azure login, network requests or resource writes. Exit 2 means cost intent is blocked or acknowledgement is missing; exit 1 means invalid input.');
-    console.log('Role-based-data: role-based-cost <cost configuration> is offline and profile-specific. Use validate/artifacts/identity/plan/provision/deploy/status/schema with a role-based-data deployment configuration. role-based-assign <config> <user-or-group-object-id> explicitly assigns its application role; role-based-smoke <config> needs delegated tokens with and without the required role in SQL_APPS_USER_TOKEN / SQL_APPS_SECOND_USER_TOKEN. All cloud writes need operator approval; local simulations never deploy.');
-    console.log('Shortest path: stay local for POCs. For minimal cloud validation: az login, then init <new-config.json> --location <region> --resource-group <rg> --registry <name>.azurecr.io (read-only). This defaults to the scale-to-zero role-based-data profile; --profile foundation is an explicit paid full-stack opt-in.');
-    return;
-  }
-  if (command === 'architecture-plan') {
-    if (process.argv.length !== 4) {
-      throw new Error('Usage: architecture-plan <architecture-intent.json>');
-    }
-    const input: unknown = JSON.parse(await readFile(resolve(configPath), 'utf8'));
-    console.log(JSON.stringify(compileArchitecture(input), null, 2));
-    return;
-  }
-  if (command === 'hosting-compare') {
-    if (process.argv.length !== 4) throw new Error('Usage: hosting-compare <comparison-config.json>');
-    console.log(JSON.stringify(compareHosting(JSON.parse(await readFile(resolve(configPath), 'utf8'))), null, 2));
-    return;
-  }
-  if (command === 'demo-init') {
-    if (process.argv.length < 4 || !configPath.endsWith('.json')) {
-      throw new Error('Usage: demo-init <new-publication.json> --subscription <id> --resource-group <name> --location <region> --static-web-app-location <region> --application <name> --artifact <path> --owner <owner>');
-    }
-    const flags = parseFlags(process.argv.slice(4), [
-      'subscription', 'resource-group', 'location', 'static-web-app-location', 'application', 'artifact', 'owner',
-    ]);
-    const outputPath = resolve(configPath);
-    if (existsSync(outputPath)) throw new Error(`${configPath} already exists; demo-init never overwrites a configuration.`);
-    for (const key of [
-      'subscription', 'resource-group', 'location', 'static-web-app-location', 'application', 'artifact', 'owner',
-    ]) {
-      if (!flags[key]) throw new Error(`demo-init needs --${key}.`);
-    }
-    await createDemoPublicationFile(outputPath, {
-      subscriptionId: flags.subscription!,
-      resourceGroup: flags['resource-group']!,
-      location: flags.location!,
-      staticWebAppLocation: flags['static-web-app-location']!,
-      selectedApplication: flags.application!,
-      selectedArtifact: flags.artifact!,
-      owner: flags.owner!,
-    }, run);
-    console.log(`Wrote ${outputPath} for Starter public-demo publication. Nothing was created in Azure.`);
-    console.log(`Next (read-only): demo-preflight <target>, then demo-publish ${outputPath}.`);
-    return;
-  }
-  if (command === 'demo-publish' || command === 'demo-status') {
-    if (process.argv.length < 4) throw new Error(`Usage: ${command} <publication-config.json>${command === 'demo-publish' ? ' [--approve <id>]' : ''}`);
-    const flags = command === 'demo-publish' ? parseFlags(process.argv.slice(4), ['approve']) : {};
-    if (command === 'demo-status' && process.argv.length !== 4) throw new Error('demo-status accepts exactly one publication configuration');
-    const publication = demoPublicationSchema.parse(JSON.parse(await readFile(resolve(configPath), 'utf8')));
-    await validateDemoPublication(publication);
-    if (command === 'demo-status') {
-      console.log(JSON.stringify(await demoPublicationStatus(publication, run), null, 2));
-      return;
-    }
-    let state: DemoPublicationState | undefined;
-    try { state = await readDemoPublicationState(publication); }
-    catch (error) {
-      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
-    }
-    const reviewed = planDemoPublication(publication, state);
-    if (flags.approve !== reviewed.approval) {
-      if (flags.approve) {
-        throw new Error('The configuration, selected artifact, or pending publication work changed; review demo-publish again');
-      }
-      console.log(reviewed.warning);
-      console.log(`Pending paid/write stages: ${reviewed.pending.length ? reviewed.pending.join(' -> ') : 'none'}`);
-      for (const item of reviewed.review) console.log(item);
-      console.log(`Excluded: ${reviewed.excluded.join('; ')}.`);
-      console.log(`Approval ID: ${reviewed.approval}`);
-      if (reviewed.pending.length) console.log(`After explicit approval: demo-publish ${configPath} --approve ${reviewed.approval}`);
-      return;
-    }
-    if (!reviewed.pending.length) {
-      console.log('Public-demo publication is already at the saved ready stage; run demo-status for bounded live checks.');
-      return;
-    }
-    try {
-      const completed = await publishDemo(publication, run, fetch, reviewed.approval);
-      console.log(`Public-demo publication completed at ${completed.runtime?.publicUrl ?? 'the reviewed Static Web App URL'}.`);
-    } catch (error) {
-      console.error(`Publication stopped safely. Resume only after review: demo-publish ${configPath}`);
-      throw error;
-    }
+    console.log('Usage: npm run azure -- <init|deploy-all|validate|artifacts|identity|plan|provision|rbac-plan|rbac-deploy|deploy|status|schema|static|redirect|smoke|gateway|functions|secret-set|role-based-assign|role-based-smoke> [config.json] [options]\nRequires a current build (after approval, consent-run build). Azure CLI, Bicep, .NET and SqlPackage are used directly.');
+    console.log('New deployments: use maintained Azure Skills for onboarding, preparation, validation, deployment, cost and diagnostics. These commands deploy the role-based-data profile with private SQL, DAB managed-identity grants and live SQL Apps acceptance, and remain supported for existing SQL Apps deployments.');
+    console.log('Role-based-data: use validate/artifacts/identity/plan/provision/deploy/status/schema with a role-based-data deployment configuration. role-based-assign <config> <user-or-group-object-id> explicitly assigns its application role; role-based-smoke <config> needs delegated tokens with and without the required role in SQL_APPS_USER_TOKEN / SQL_APPS_SECOND_USER_TOKEN. All cloud writes need operator approval; local simulations never deploy.');
+    console.log('Shortest path: stay local for POCs. For cloud validation: az login, then init <new-config.json> --location <region> --resource-group <rg> --registry <name>.azurecr.io (read-only). This defaults to the scale-to-zero role-based-data profile; --profile foundation is an explicit paid full-stack opt-in. Review costs with the Azure Cost tooling before approving paid steps.');
     return;
   }
   if (command === 'init') {
@@ -163,7 +69,7 @@ async function main() {
       if (flags.approve) throw new Error('The configuration or remaining work changed since review; run deploy-all again and review the new list.');
       console.log(`Pending paid Azure steps for ${configPath}: ${reviewed.pending.join(' -> ')}`);
       console.log(`Not included: ${reviewed.excluded.join('; ')}.`);
-      console.log('Review cost first with demo-cost or role-based-cost, and plan (what-if) once identity exists.');
+      console.log('Review cost first with the Azure Cost tooling, and plan (what-if) once identity exists.');
       console.log(`After explicit approval: deploy-all ${configPath} --approve ${reviewed.approval}`);
       return;
     }
@@ -179,20 +85,6 @@ async function main() {
       }
     }
     console.log('deploy-all finished. Assign the application role (role-based-assign) and run smoke tests as separate decisions.');
-    return;
-  }
-  if (command === 'demo-cost' || command === 'role-based-cost') {
-    if (process.argv.length !== 4) throw new Error('Provide an explicit matching-profile cost configuration; no billing choice or spending consent is inferred. Copy and review azure-demo-cost.example.json (public-demo) or azure-role-based-cost.example.json (role-based-data). Foundation requires its own explicit target pricing review.');
-    const input: unknown = JSON.parse(await readFile(resolve(configPath), 'utf8'));
-    const report = command === 'role-based-cost' ? reviewRoleBasedCost(input) : reviewDemoCost(input);
-    console.log(JSON.stringify(report, null, 2));
-    if (!report.review.canProceedToWhatIf) process.exitCode = 2;
-    return;
-  }
-  if (command === 'demo-preflight') {
-    if (process.argv.length !== 4) throw new Error('Provide an explicit public-demo target configuration; no subscription/tenant defaults are inferred.');
-    const target: unknown = JSON.parse(await readFile(resolve(configPath), 'utf8'));
-    console.log(JSON.stringify(await preflightDemo(target, run), null, 2));
     return;
   }
   if (!['validate', 'artifacts', 'identity', 'plan', 'provision', 'rbac-plan', 'rbac-deploy', 'deploy', 'status', 'schema', 'static', 'redirect', 'smoke', 'gateway', 'functions', 'secret-set', 'role-based-assign', 'role-based-smoke'].includes(command)) {
@@ -357,8 +249,7 @@ async function main() {
   throw new Error(`Unknown command: ${command}`);
 }
 main().catch(error => {
-  console.error(error instanceof DemoPreflightError ? `${error.stage}: ${error.code}: ${error.message}` :
-    error instanceof z.ZodError ? `Configuration is invalid:\n${z.prettifyError(error)}` :
+  console.error(error instanceof z.ZodError ? `Configuration is invalid:\n${z.prettifyError(error)}` :
     error instanceof Error ? error.message : 'Deployment command failed');
   process.exitCode = 1;
 });

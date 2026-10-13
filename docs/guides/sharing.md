@@ -2,32 +2,25 @@
 
 Before moving a local app online, decide **who should use it** and **what information it contains**. A public URL is not a substitute for access control.
 
+For new cloud deployments, SQL Apps owns the Azure SQL/DAB application contract and acceptance checks; maintained Azure tooling owns service selection, infrastructure, cost review, predeployment validation, deployment, and cloud diagnostics. Use the Azure Skills `azure-app-onboard` when the architecture is open, then `azure-prepare` -> `azure-validate` -> `azure-deploy`. Use the `azure-cost` plugin for Azure estimates and cost analysis, and `azure-diagnostics` for production incidents. For SQL-specific identity, schema, and DAB requirements, route to `build-app-on-azure-sql`, `entra-id-auth`, and `dab-rest-and-graphql`.
+
+The `npm run azure` workflow documented below remains supported for existing role-based-data deployments; do not use it as the default for new projects. External deployment success is not SQL/DAB application acceptance: verify the deployed identity, DAB role forwarding, intended permissions, and a real browser-to-SQL persistence/reload workflow with `sql-apps-validation`.
+
 ## Choose the right path
 
 | You want to... | Current option |
 | --- | --- |
 | Keep using the app on your computer | Stay local. No cloud deployment is needed. |
-| Let people try a public app with synthetic data | Review the [public-demo publishing candidate](../reference/demo-deployment.md). Its proposed guided commands are not yet the default deployment path. |
-| Share an authenticated app with the full foundation capabilities | Full Azure commands require Entra setup, paid Functions/storage/Key Vault/private-network infrastructure and a privately connected SQL deployment runner. |
-| Share a role-authorized data-only domain app | Use the [role-based-data profile](../reference/role-based-data.md): matching cost review, two-image artifacts, authorized identity/assignment and private SQL deployment. Paid infrastructure and live authorization/browser acceptance are still required. |
+| Prepare a new app for Azure | Use the maintained Azure Skills onboarding and prepare/validate/deploy flow above, with SQL Apps requirements and acceptance. |
+| Estimate cost or inspect current spend | Use the `azure-cost` plugin; treat estimates as estimates, not a spending cap or deployment approval. |
+| Diagnose an Azure production incident | Use `azure-diagnostics`; use SQL Apps validation for the app-specific SQL/DAB contract. |
+| Continue an existing SQL Apps deployment | Review the [deployment reference](../reference/deployment.md) and [role-based-data profile](../reference/role-based-data.md); do not mix its state with `azd` deployments. |
 
 Do not put real or sensitive information in the anonymous synthetic-data reference.
 
-## Review costs first
+## Existing SQL Apps deployments
 
-Select the agreed capability/access profile before choosing a cost command. Read [Costs and growth](costs.md). The goal is free-tier-first, but current templates include recurring charges. A cost review is a decision step, not permission to spend or deploy.
-
-For a public-demo cost review after building:
-
-```powershell
-npm run azure -- demo-cost azure-demo-cost.example.json
-```
-
-The zero-spend example reports known fixed-charge blockers and exits 2. This is expected; it does not create resources. Its output is demo-only, not a price estimate for an authenticated app. Review the authenticated application's actual resources/prices separately; missing estimates are unknown, not zero. See the [cost command reference](../reference/demo-cost.md).
-
-## Prepare an authenticated deployment
-
-If this is the path you need, follow the [deployment reference](../reference/deployment.md). You will review your Azure target, identities, images, networking, schema and costs before creating resources.
+The `npm run azure` commands deploy the role-based-data profile: private Azure SQL, an internal DAB with managed-identity database grants, and live SQL Apps acceptance. They remain supported for existing deployments. Follow the [deployment reference](../reference/deployment.md) and [role-based-data profile](../reference/role-based-data.md); you will review your Azure target, identities, images, networking and schema before creating resources.
 
 If the approved app excludes files/jobs, select `role-based-data` rather than expanding to the full template or changing authorized access to an anonymous demo. Its `identity` command creates the configured human role and `role-based-assign` manages explicitly approved assignments; the foundation profile still creates `Function.Invoke`. Verify token claims and trusted DAB forwarding in the real environment.
 
@@ -35,26 +28,9 @@ Existing-resource discovery must not change the deployment subject. Older matchi
 
 After an approved deployment, test sign-in, each user's access, saved data, selected capabilities and recovery in that environment. Local tests and template compilation do not prove those cloud behaviors.
 
-For the evolving minimal public-demo path, use [public-demo publishing candidate](../reference/demo-deployment.md). It is a technical reference, not a shortcut around approval, cost and live-acceptance gates.
+## Public synthetic demos
 
-## Public-demo hosting candidate
-
-For a public synthetic demo, the Static Web Apps candidate looks like one app at **one public URL**. **Static Web Apps Standard hosts the static website** and forwards `/api/*` to **one linked Container App**. That Container App runs the protected Node API and an internal **Data API Builder (DAB)** sidecar; DAB has no public ingress and connects to Azure SQL with managed identity.
-
-This design does **not** use App Service for the website. It also does not use Static Web Apps Database Connections: that feature is retired, so `/data-api` is not part of the design. The browser uses only the Static Web Apps hostname and same-origin `/api/*` routes.
-
-Static Web Apps Standard is **not automatically cheaper**. It adds a resource while Container Apps, ACR, networking and SQL remain. The current Container Apps public-demo path remains the default until a dated, same-basis `hosting-compare` result and the complete live acceptance checklist both pass. A successful comparison reports a candidate; it never changes the default automatically.
-
-The candidate command interface is:
-
-```powershell
-npm run azure -- demo-publish azure-demo-publication.json
-npm run azure -- demo-publish azure-demo-publication.json --approve <reviewed-id>
-npm run azure -- demo-status azure-demo-publication.json
-npm run azure -- hosting-compare azure-demo-hosting-comparison.json
-```
-
-These commands are the proposed public-demo journey, not permission to spend and not guidance for real data. Keep using the private, advanced [role-based-data](../reference/role-based-data.md) and [full-foundation](../reference/deployment.md) paths for their intended authenticated applications.
+Selected example applications build a hardened `public-demo` container (`npm run app:build -- <application> public-demo`) with visitor sessions and synthetic data only. SQL Apps no longer ships its own public-demo publisher or hosting comparison: deploy that artifact through the maintained Azure Skills, keep DAB internal with managed-identity access to Azure SQL, and verify direct backend access is denied before sharing the URL.
 
 ## Accounts before publishing
 
@@ -62,6 +38,6 @@ Follow **Build -> Sign in -> Give access -> Publish** and the [authentication an
 
 Giving someone access requires a separately approved application-role assignment and the appropriate DAB permissions and SQL grants. Verify the delegated token, role forwarding and any owner restrictions, not just the ability to sign in. Browser role editing, guest invitations and an administration console are not implemented.
 
-Container Apps is the current supported hosting implementation and remains the default. Static Web Apps Standard is the public synthetic-demo candidate described above; App Service is not used for its website. SWA CLI only mocks authentication and is not a prerequisite for real local Entra sign-in.
+Container Apps is the hosting implementation used by the retained deployment. SWA CLI only mocks authentication and is not a prerequisite for real local Entra sign-in.
 
 Changing hosting does not remove private SQL, networking, selected-service costs or identity requirements. Any new publishing path needs its own deployment and rollback plan, cost review, spending approval and explicit authorization before Azure changes.

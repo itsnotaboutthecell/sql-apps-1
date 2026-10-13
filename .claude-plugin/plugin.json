@@ -1,11 +1,11 @@
 {
   "name": "sql-apps",
-  "version": "0.1.2",
-  "description": "Build and deploy this independent Azure-native TypeScript stack.",
+  "version": "0.2.0",
+  "description": "Build and validate Azure SQL Database and Data API Builder applications; use maintained Azure skills for the general cloud lifecycle.",
   "author": { "name": "Microsoft SQL team (mssql)", "url": "https://github.com/microsoft" },
   "homepage": "https://github.com/microsoft/sql-apps",
   "repository": "https://github.com/microsoft/sql-apps",
   "license": "MIT",
   "skills": "./skills/",
-  "keywords": ["azure", "bicep", "typescript", "data-api-builder"]
+  "keywords": ["azure-sql", "typescript", "data-api-builder"]
 }

@@ -18,6 +18,7 @@ const generatedOutputs = [
   'dist/src',
   'dist/functions',
   'dist/scripts',
+  'dist/tests',
   'public/app.js',
   'public/auth/redirect.js',
 ];

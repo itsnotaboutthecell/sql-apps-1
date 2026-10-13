@@ -9,7 +9,6 @@ public/auth/redirect.js
 sql-apps.json
 .azure/
 .vscode/
-azure-demo-cost.json
 functions/local.settings.json
 sql/bin/
 sql/obj/

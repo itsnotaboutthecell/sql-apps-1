@@ -59,7 +59,7 @@ npm run local -- selected-test "<artifact-directory>"
 
 The opt-in suite lives in `demo/smoke.mjs`, outside default delivery. It measures actual two-session ownership, the 200/201 UTF-16 code-unit boundary with ASCII and supplementary Unicode titles, concurrent 50-item quota and 30/31-mutation rate limits, SQL expiry, bounded cleanup, execute-only permissions, pooled-context spoof rejection, and end-session cascade deletion. It advances clocks only for its randomly created synthetic sessions and removes those sessions/rows on success or failure. It does not restart services. Run it in an approved disposable workspace without concurrent activity for deterministic cleanup-count evidence.
 
-Before relying on the example, try browser create/update/completion/reload/delete and check persistence after restarting your own stack. The public-demo artifact is buildable, but the guided Azure provisioning/handoff path is still in development; no cloud deployment is implied by local readiness.
+Before relying on the example, try browser create/update/completion/reload/delete and check persistence after restarting your own stack. The public-demo artifact is buildable; deploy it through the maintained Azure Skills (prepare, validate, deploy) and keep synthetic data only. No cloud deployment is implied by local readiness.
 
 The selected gateway validates successful procedure records, including the requested item's identity for update/delete. An empty, incomplete or mismatched deletion result fails as HTTP502 rather than returning a false-success HTTP204.
 

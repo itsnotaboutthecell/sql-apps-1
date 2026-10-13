@@ -2,17 +2,13 @@
 
 Use this reference when deploying an authenticated application with the full Azure infrastructure template. Start with [sharing your app](../guides/sharing.md) to choose the appropriate path. For an existing pre-rebrand deployment, review [migration notes](../maintainers/naming-transition.md) first.
 
+> **Existing deployments:** This reference documents SQL Apps' retained Azure deployment for the role-based-data and foundation profiles. For new projects, use maintained Azure Skills (`azure-app-onboard` when architecture is open, then `azure-prepare` -> `azure-validate` -> `azure-deploy`) and retain SQL Apps' application-specific identity, DAB, schema, and acceptance requirements. Do not mix `.azure` deployment state with the custom `npm run azure` state.
+
 ## Profile and deployment subject
 
-The default authenticated cloud path is the [role-based-data profile](role-based-data.md): two scale-to-zero images, human application roles, free-limit SQL and no file/job services. The foundation profile is an explicit paid full-stack opt-in that adds Functions, storage, Key Vault, S0 SQL and private endpoints. Do not add excluded services or use an anonymous demo without an agreed scope change. `demo-cost` remains demo-only; use `role-based-cost` for role-based-data and review actual regional/account prices separately.
+The default authenticated cloud path is the [role-based-data profile](role-based-data.md): two scale-to-zero images, human application roles, free-limit SQL and no file/job services. The foundation profile is an explicit paid full-stack opt-in that adds Functions, storage, Key Vault, S0 SQL and private endpoints. Do not add excluded services or use an anonymous demo without an agreed scope change. Review actual regional/account prices with the Azure Cost plugin before approving paid steps.
 
 Keep the confirmed new application checkout/configuration/artifacts as the deployment subject. With read-only Azure authorization, discovered older resources are potential collisions, not permission to reuse or modify them. Reuse requires an explicit request and a separate compatibility/migration/cost review; existing data remains untouched.
-
-## Adaptive architecture planning
-
-`npm run azure -- architecture-plan <architecture-intent.json>` reads a strict architecture intent and produces an offline review plan. It makes no Azure calls or writes. Every plan keeps Azure SQL free-tier intent and DAB as mandatory modules; its output is metadata-only with `authorized: false` and `deployable: false`. The plan makes no pricing claim and does not verify Azure eligibility.
-
-The compiler does not convert an existing database or a legacy paid deployment, is not deployment approval, and is not ready to deploy its plan. The existing profile guidance and deployment commands below remain authoritative until a later implementation reaches command parity and passes live acceptance.
 
 ## Supported tools
 
@@ -50,9 +46,9 @@ npm run azure -- artifacts sql-apps.json
 Alternatively use the underlying standard Azure CLI commands:
 
 ```powershell
-az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps:0.1.2 --file Dockerfile .
-az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps-dab:0.1.2 --file dab/Dockerfile .
-az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps-functions:0.1.2 --file functions/Dockerfile .
+az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps:0.2.0 --file Dockerfile .
+az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps-dab:0.2.0 --file dab/Dockerfile .
+az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps-functions:0.2.0 --file functions/Dockerfile .
 ```
 
 ACR tasks require suitable Azure permissions and may have region/subscription restrictions. Images are not built by `deploy`. Use immutable digests for release, not tags that are overwritten. Publishing code to a registry is an explicit operator action.
@@ -77,7 +73,7 @@ replicas and private-endpoint cost floor.
 
 `deploy-all` without `--approve` only lists the pending paid steps (`identity`,
 `artifacts`, `provision`, `deploy`, `status`), the exclusions and an id. Review
-costs (`demo-cost`/`role-based-cost`) and those steps, then, after explicit
+costs with the Azure Cost plugin and those steps, then, after explicit
 approval, run `deploy-all sql-apps.json --approve <id>`. It runs the existing
 commands below in order, skips completed ones and refuses a stale id. After
 `provision`, it stops for the separately authorized Azure RBAC handoff described

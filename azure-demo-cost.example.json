@@ -1,7 +1,0 @@
-{
-  "version": 1,
-  "profile": "public-demo",
-  "intent": "zero-azure-spend",
-  "sql": { "mode": "free-paused" },
-  "acknowledgeFixedCharges": false
-}

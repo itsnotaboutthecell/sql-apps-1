@@ -3,10 +3,10 @@
   "plugins": [{
     "id": "sql-apps",
     "displayName": "SQL Apps",
-    "version": "0.1.2",
-    "description": "Build and deploy this independent Azure-native TypeScript stack.",
+    "version": "0.2.0",
+    "description": "Build and validate Azure SQL Database and Data API Builder applications; use maintained Azure skills for the general cloud lifecycle.",
     "homepage": "https://github.com/microsoft/sql-apps",
-    "keywords": ["azure", "bicep", "typescript"],
+    "keywords": ["azure-sql", "typescript"],
     "source": "https://github.com/microsoft/sql-apps"
   }]
 }

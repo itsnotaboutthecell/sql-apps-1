@@ -1,29 +1,22 @@
 ---
 name: sql-apps-diagnostics
-description: "Use when a SQL Apps local service, startup, readiness probe, file-processing job, retry, maintenance task or trace dashboard is failing."
+description: "Use for a SQL Apps local SQL/DAB or application-contract failure; route Azure resource incidents to the maintained Azure diagnostics skill."
 ---
 
-# Diagnose SQL Apps locally
+# Diagnose SQL Apps
 
-Resolve `../../scripts/sql-apps.mjs` from this installed skill and run its absolute path with `home`. Confirm the application checkout with `workspace-check`; do not inspect a plugin cache, guess another checkout or overwrite a mismatch.
+Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and confirm the intended application checkout with `workspace-check`. Keep diagnosis scoped to the failing SQL Apps contract and use bounded, project-owned evidence.
 
-Read `docs/reference/local-development.md` for the failing subsystem only. Run `setup status --profile <agreed-profile> --json` and `status`. Report the first named blocker and the command that continues after it. HTTP health does not prove SQL permissions, storage, worker behavior or browser acceptance.
+## Route to the capability owner
 
-## Find the cause
+- Azure resource health, Container Apps, Functions, Azure Monitor, Log Analytics, or production incidents: use `azure-diagnostics`.
+- Azure cost, forecasts, or resource optimization: use the `azure-cost` plugin.
+- Azure SQL connection or engine errors: use `diagnose-connection-errors` or the matching Azure SQL diagnostic skill.
+- DAB configuration, permissions, or API exposure: use `dab-rest-and-graphql` and `azuresql-db-dab`.
+- Local SQL Apps startup, readiness, or application-contract failures: continue below.
 
-1. Reproduce the failing action. Keep a positive control when testing authorization, Origin or validation.
-2. Inspect only project-owned bounded logs, workspace state and documented containers. Do not dump environment variables, credential state or private files.
-3. For prerequisites, use `setup-check`. Distinguish missing, unsupported and broken installed tools; none grants installation permission.
-4. Check `local-settings.json` at the workspace path reported by `workspace-check`. Invalid settings fail explicitly and require the affected services to restart.
-5. For jobs, use the signed-in user's status and trace dashboard. A retry creates a new parent-linked job; obtain approval before submitting it. Missing snapshots require reupload.
-6. Restart only the affected owned service after identifying the cause, then repeat the same action.
+## Local application failures
 
-Use `setup resume` after fixing a setup blocker. Do not reinstall tools, reset volumes, regenerate credentials, disable authentication, kill processes by name or switch to Azure as a troubleshooting shortcut.
+Use `sql-apps-local` to inspect the selected profile, workspace, service readiness, and next safe lifecycle action. Use `sql-apps-validation` to reproduce and verify the domain workflow.
 
-SQL recovery and maintenance are separate mutations. Show their consent plan and obtain one-operation approval. Recovery preserves the selected image, credentials, ports and labeled data; retention may delete data. Resume interrupted recovery without printing sensitive state.
-
-Keep resolved failures as history, but separate them from current blockers. If source changed during a comparison, report the difference; never reset another writer's work or replace the baseline.
-
-Trace records are owner-scoped and omit file contents and credentials. SQL, Blob and Queue are not one atomic transaction, so do not promise exactly-once delivery.
-
-If an approval or completion control is unavailable, say so and wait for explicit consent or report ordinary evidence. Tool failure is never approval.
+Reproduce the failing action and pair negative authorization/input probes with a positive control. Inspect only bounded logs and project state; never print tokens, environment variables, or private files. HTTP liveness does not prove SQL permissions, DAB behavior, persistence, or browser acceptance. Preserve application data, and obtain explicit approval before recovery or other destructive maintenance.

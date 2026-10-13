@@ -1,52 +1,35 @@
 ---
 name: sql-apps-cloud-preview
-description: "Use only when the user asks to share SQL Apps, review Azure costs or prerequisites, prepare a what-if, or deploy through the project's existing Azure orchestration."
+description: "Use when a user wants to share a SQL Apps project or asks about cloud readiness; hand generic Azure planning, cost, validation, deployment, and diagnostics to maintained Azure skills."
 ---
 
-# Prepare SQL Apps for Azure
+# Share a SQL Apps project
 
-Sharing is optional. Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, then confirm the requested application checkout with `workspace-check`. Historical local evidence is not deployment consent or cloud readiness.
+Sharing is optional. Confirm the application checkout and preserve the SQL Apps contract: Azure SQL Database is the data store, DAB is the application API, and the user must explicitly request Azure work.
 
-Load only the material needed for the request:
+Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and confirm the requested project with `workspace-check` before reading or testing that project.
 
-- For a cost review, read `docs/guides/costs.md` and the selected profile's cost reference.
-- For sharing options or prerequisites, read `docs/guides/sharing.md`.
-- For deployment, read `docs/reference/deployment.md` and the relevant part of `docs/maintainers/operations.md`.
+## Route cloud lifecycle work
 
-Use the existing Azure CLI and Bicep orchestration; do not invent commands or another deployment system.
+Use maintained skills for generic Azure work rather than extending SQL Apps' custom Azure CLI/Bicep orchestration:
 
-## Select the exact profile
+- Use `build-app-on-azure-sql` to sequence Azure SQL identity, schema, API, and deployment decisions.
+- Use `azure-app-onboard` when the target architecture or service choice is open.
+- Use `azure-prepare` to create the Azure deployment plan and infrastructure.
+- Use `azure-validate` before any deployment.
+- Use `azure-deploy` to deploy the reviewed plan.
+- Use the `azure-cost` plugin for forecasts, estimates, actual cost analysis, optimization, and governance.
+- Use `azure-diagnostics` for Azure production incidents.
+- Use `github-actions-for-sql` for SQL-aware CI pipelines.
 
-Keep cloud preparation tied to the agreed application:
+If the Azure Skills plugin or a specialized skill is unavailable, explain the prerequisite and use the project's documented legacy route only when the user explicitly requests that route. Do not implement a parallel generic Azure service, cost, deployment, or diagnostics workflow in SQL Apps.
 
-- Anonymous public demo: synthetic data only; guided deployment remains incomplete.
-- Authenticated full foundation: Functions, storage, Key Vault and private networking remain included.
-- `role-based-data`: SQL/DAB/browser with matching role assignment and paid private SQL infrastructure.
+## Preserve SQL Apps-specific requirements
 
-Do not substitute one profile for another. State unsupported combinations as gaps.
+Before handing off, record the agreed application profile, SQL/DAB configuration, identity and application-role contract, private-network requirements, database grants, and acceptance criteria. Treat deployment output and infrastructure validation as necessary, not as proof that the SQL/DAB application works.
 
-Run the profile's offline cost command with an explicit configuration. `demo-cost` applies only to the synthetic demo; `role-based-cost` applies to role-based data. Free allowances are not guaranteed zero cost. Unknown prices remain unknown, budgets are alerts rather than caps, and saved preferences are not spending approval.
+After deployment, use `sql-apps-validation` for the application-specific acceptance: live sign-in, expected DAB role forwarding, least-privilege procedure access, two-user isolation where required, and a browser write followed by SQL persistence and reload. Report preparation, deployment, and application acceptance as separate results.
 
-For new demo SQL, use the explicitly approved `free-paused` or `paid-reviewed` policy. Free-paused must fail when unavailable; never retry as paid or enable overage automatically.
+## Existing SQL Apps deployment commands
 
-## Review before writes
-
-Before any cloud mutation, present:
-
-- subscription, tenant, resource group and region;
-- application profile, identities and access model;
-- images and billable resources;
-- public exposure and data sensitivity;
-- what-if result, recurring cost assumptions and cleanup path.
-
-Preparation and read-only discovery are not write approval. Existing matching resources are collision information, not permission to reuse, rename, delete or replace the new application. An email address is not a tenant ID.
-
-Use `npm run azure -- help` for the implemented surface. The project `init` command derives identity settings after approved sign-in; ask only for placement values it cannot derive. `deploy-all` may run its printed pending list only after explicit approval of that exact list and costs. Role assignment and smoke tests remain separately authorized.
-
-Keep secrets out of chat, committed files and client configuration. Do not change subscription defaults, register providers, publish SQL, push images, create identities or assign roles without the matching approval.
-
-## Prove the deployed result
-
-Compilation, what-if, schema validation and mocks do not prove deployment. Verify live sign-in, intended role forwarding, two-user isolation where required, function identity for selected services, and the real application workflow. Report preparation, deployed resources and live acceptance separately.
-
-Review actual usage, latency and availability before paid growth. Cleanup or export is a separate reviewed operation; never delete resources or data automatically.
+`npm run azure` commands and their Bicep templates remain a compatibility path for existing projects while migration proceeds. Do not recommend that custom orchestration for new projects by default. If an existing deployment must use it, read its exact profile and deployment reference, preserve its approval gates, and do not mix its state files with an Azure Skills/`azd` deployment.

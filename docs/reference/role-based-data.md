@@ -2,6 +2,8 @@
 
 Use the explicit `role-based-data` profile for an implemented domain application that needs SQL/DAB/browser access restricted to users assigned the required role, without files or background jobs. It is a runtime/deployment path, not an application generator. Keep the original foundation and unrelated databases unchanged; use the intended application checkout.
 
+> **Cloud lifecycle:** The Azure commands in this reference remain supported for existing SQL Apps deployments. For new cloud deployments, use maintained Azure Skills for onboarding, infrastructure, predeployment validation, deployment, cost, and Azure diagnostics; preserve the SQL/DAB requirements and acceptance checks described here.
+
 This is application role-based access control: Entra authenticates users, the gateway requires the configured application role, and DAB enforces procedure permissions. It is not Azure resource-management RBAC and does not automatically provide row-level security (RLS). Implement row/owner restrictions separately where the application requires them. `AppUser` is an example role; choose a role appropriate to your application.
 
 ## Application contract
@@ -56,13 +58,7 @@ Use the existing approved `stop` command to stop only the owned DAB container wh
 
 Copy `azure-role-based.example.json` to an application-specific configuration, fill the exact tenant/subscription/target and immutable version image choices, and retain `profile`, `requiredRole` and `readinessPath` consistent with the local app. No Functions image is accepted. Placeholder identifiers in the example are not valid deployment targets.
 
-Review costs offline:
-
-```powershell
-npm run azure -- role-based-cost azure-role-based-cost.example.json
-```
-
-The zero-spend example still exits **2** because ACR Basic, one SQL private endpoint and custom Container Apps network infrastructure can carry fixed charges. The profile now uses eligible free-limit serverless SQL with `AutoPause`, two scale-to-zero Consumption apps, Local backup redundancy and a 0.1 GB/day Log Analytics cap. Free SQL eligibility and shared Container Apps allowances must be verified for the target subscription. To review the remaining paid supporting resources, explicitly choose `review-paid-costs` and acknowledge fixed charges in a separate cost configuration. The report is not a quote, eligibility check, spending cap or deployment approval. `demo-cost` is not this profile's cost model.
+Review costs with the Azure Cost plugin before approving paid steps. The profile uses eligible free-limit serverless SQL with `AutoPause`, two scale-to-zero Consumption apps, Local backup redundancy and a 0.1 GB/day Log Analytics cap, but ACR Basic, one SQL private endpoint and custom Container Apps network infrastructure can still carry fixed charges. Free SQL eligibility and shared Container Apps allowances must be verified for the target subscription. An estimate is not a quote, eligibility check, spending cap or deployment approval.
 
 With separate target/read-only authorization, validate the app/configuration and review what-if. No command silently selects discovered older resources; treat them as collisions unless reuse is explicitly requested.
 

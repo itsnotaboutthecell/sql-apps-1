@@ -1,11 +1,11 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "sql-apps",
-  "version": "0.1.2",
-  "description": "Build this independent Azure-native stack with Azure CLI, Bicep, Entra ID, Azure SQL, Blob Storage, and Functions.",
+  "version": "0.2.0",
+  "description": "Build and validate applications on Azure SQL Database and Data API Builder; use maintained Azure skills for infrastructure, cost, deployment, and operations.",
   "author": { "name": "Microsoft SQL team (mssql)", "url": "https://github.com/microsoft" },
   "homepage": "https://github.com/microsoft/sql-apps",
   "repository": "https://github.com/microsoft/sql-apps",
   "license": "MIT",
-  "keywords": ["azure", "bicep", "typescript", "data-api-builder"]
+  "keywords": ["azure-sql", "data-api-builder", "typescript"]
 }

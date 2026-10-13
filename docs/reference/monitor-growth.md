@@ -2,7 +2,7 @@
 
 Use this workflow after deploying to **Azure SQL Database**: observe a real app action, investigate the limiting resource, make an approved change, and check the result. Start with [Costs and growth](../guides/costs.md) for the billing choices.
 
-The SQL Apps cost/preflight commands are offline or deployment-readiness checks, not live usage monitoring. The public-demo deployment workflow remains incomplete; this page does not provide an alternative provisioning path.
+SQL Apps deployment checks are readiness checks, not live usage monitoring; use the Azure Cost plugin for actual spend and forecasts. This page does not provide an alternative provisioning path.
 
 ## 1. Connect Database Hub for free monitoring
 
@@ -40,7 +40,7 @@ Database performance percentages are not a billing meter.
 - In Cost Management, check actual and forecast costs for both the application resource group and the Container Apps managed infrastructure group. Include registry/network charges.
 - Configure budget alerts with reviewed recipients and thresholds if needed. Alerts are delayed notifications, not a hard spending cap.
 
-Keep free-tier SQL pause-at-monthly-limit behavior unless the owner deliberately chooses another reviewed billing plan. Database Hub is not an automatic upgrade or billing-control mechanism. See the [cost reference](demo-cost.md) for allowance figures and billing-policy caveats.
+Keep free-tier SQL pause-at-monthly-limit behavior unless the owner deliberately chooses another reviewed billing plan. Database Hub is not an automatic upgrade or billing-control mechanism. Use the Azure Cost plugin and [costs and growth](../guides/costs.md) for current allowances and billing-policy caveats.
 
 ## 3. Investigate a real slow action
 

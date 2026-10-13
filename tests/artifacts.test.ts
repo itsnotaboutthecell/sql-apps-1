@@ -25,7 +25,7 @@ test('artifact builds use ACR for all services and return immutable validated co
   for (const field of imageFields) {
     assert.equal(result[field], `${config[field].split(':')[0]}@${digest}`);
   }
-  assert.equal(config.gatewayImage.endsWith(':0.1.2'), true);
+  assert.equal(config.gatewayImage.endsWith(':0.2.0'), true);
   assert.equal(calls.every(call => call.includes(config.subscriptionId)), true);
 });
 
