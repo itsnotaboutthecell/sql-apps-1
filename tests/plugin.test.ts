@@ -238,18 +238,19 @@ test('plugin dispatch uses checkout cwd, passes literal arguments and preserves 
   const output = JSON.parse(await run(process.execPath, [launcher, 'verify', 'custom-sql'], { env: { SQL_APPS_HOME: home } }));
   assert.equal(output.cwd, home);
   assert.deepEqual(output.args, ['verify', 'custom-sql']);
-  for (const command of ['role-based-app', 'role-based-serve']) {
+  // Dispatch checks below only read the fixture, so independent launches run concurrently.
+  await Promise.all(['role-based-app', 'role-based-serve'].map(async command => {
     const selected = JSON.parse(await run(process.execPath, [launcher, command, 'custom-sql'], { env: { SQL_APPS_HOME: home } }));
     assert.equal(selected.cwd, home);
     assert.deepEqual(selected.args, [command, 'custom-sql']);
-  }
+  }));
   const artifact = join(home, '.sql-apps', 'selected artifact; literal');
-  for (const command of ['selected-app', 'selected-serve', 'selected-test']) {
+  await Promise.all(['selected-app', 'selected-serve', 'selected-test'].map(async command => {
     const selected = JSON.parse(await run(process.execPath, [launcher, command, artifact], { env: { SQL_APPS_HOME: home } }));
     assert.equal(selected.cwd, home);
     assert.deepEqual(selected.args, [command, artifact]);
     await assert.rejects(run(process.execPath, [launcher, command, 'relative-artifact'], { env: { SQL_APPS_HOME: home } }), /absolute artifact/);
-  }
+  }));
   const stopped = JSON.parse(await run(process.execPath, [launcher, 'selected-stop', 'inventory'], { env: { SQL_APPS_HOME: home } }));
   assert.deepEqual(stopped.args, ['selected-stop', 'inventory']);
   const configuredStatus = JSON.parse(await probe(`
@@ -290,22 +291,24 @@ test('plugin dispatch uses checkout cwd, passes literal arguments and preserves 
   assert.deepEqual(beforeBuild.args, ['--json']);
   await writeFile(join(home, 'scripts/local-consent.mjs'),
     'console.log(JSON.stringify({cwd:process.cwd(),args:process.argv.slice(2)}));');
-  for (const [command, args] of [
-    ['consent-plan', ['role-based-app', 'custom-sql']],
-    ['consent-status', ['build']],
-    ['consent-grant', [briefPath]],
-    ['consent-grant-once', [briefPath]],
-    ['consent-terms', [briefPath]],
-    ['consent-revoke', ['terms']],
-    ['consent-run', ['build']],
-  ] as const) {
-    const consent = JSON.parse(await run(process.execPath, [launcher, command, ...args], { env: { SQL_APPS_HOME: home } }));
-    assert.equal(consent.cwd, home);
-    assert.deepEqual(consent.args, [command.replace('consent-', ''), ...args]);
-  }
-  await assert.rejects(run(process.execPath, [launcher, 'consent-grant', 'relative.json'], { env: { SQL_APPS_HOME: home } }), /absolute/);
-  await assert.rejects(run(process.execPath, [launcher, 'consent-plan'], { env: { SQL_APPS_HOME: home } }), /operation/);
-  await assert.rejects(run(process.execPath, [launcher, 'setup-check', 'fail-sql'], { env: { SQL_APPS_HOME: home } }), /failed \(7\)/);
+  await Promise.all([
+    ...([
+      ['consent-plan', ['role-based-app', 'custom-sql']],
+      ['consent-status', ['build']],
+      ['consent-grant', [briefPath]],
+      ['consent-grant-once', [briefPath]],
+      ['consent-terms', [briefPath]],
+      ['consent-revoke', ['terms']],
+      ['consent-run', ['build']],
+    ] as const).map(async ([command, args]) => {
+      const consent = JSON.parse(await run(process.execPath, [launcher, command, ...args], { env: { SQL_APPS_HOME: home } }));
+      assert.equal(consent.cwd, home);
+      assert.deepEqual(consent.args, [command.replace('consent-', ''), ...args]);
+    }),
+    assert.rejects(run(process.execPath, [launcher, 'consent-grant', 'relative.json'], { env: { SQL_APPS_HOME: home } }), /absolute/),
+    assert.rejects(run(process.execPath, [launcher, 'consent-plan'], { env: { SQL_APPS_HOME: home } }), /operation/),
+    assert.rejects(run(process.execPath, [launcher, 'setup-check', 'fail-sql'], { env: { SQL_APPS_HOME: home } }), /failed \(7\)/),
+  ]);
   await mkdir(join(home, 'dist/src'), { recursive: true });
   await writeFile(join(home, 'dist/src/local-cli.js'), 'process.exitCode=7;');
   await recordFixture(home);
