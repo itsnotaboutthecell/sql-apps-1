@@ -170,11 +170,11 @@ export async function status(fetcher = fetch, origins = { app: 'http://127.0.0.1
     }
   }
   return { services, healthy: services.every(service => service.healthy),
-    scope: 'HTTP liveness/data readiness only; not worker, storage, SQL authorization or cloud acceptance' };
+    scope: 'HTTP liveness/data readiness only; not SQL authorization or cloud acceptance' };
 }
 
-const commands = new Set(['app', 'serve', 'serve-sql', 'role-based-app', 'role-based-serve', 'services', 'stop-services', 'maintain',
-  'start-sql', 'verify', 'init', 'test', 'data', 'api-test', 'app-test', 'app-check', 'services-test', 'stop',
+const commands = new Set(['app', 'serve', 'role-based-app', 'role-based-serve',
+  'start-sql', 'verify', 'init', 'test', 'data', 'app-test', 'app-check', 'stop',
   'workspace-plan', 'workspace-init', 'recover-sql', 'selected-app', 'selected-serve', 'selected-stop', 'selected-test']);
 const consentCommands = new Set(['consent-plan', 'consent-status', 'consent-grant', 'consent-grant-once',
   'consent-terms', 'consent-revoke', 'consent-run']);
@@ -190,9 +190,9 @@ export async function main(args = process.argv.slice(2)) {
   if (!journey && !consentCommands.has(command) && args.length > 2) throw new Error('Expected a command and its optional selection');
   if (command === 'help') {
     console.log('SQL Apps local plugin: projects <root|create|list|open> | home | workspace-check | guide | guide-save <absolute-brief.json> | status | setup-check [existing-sql-container] | ' + [...commands].join(' | '));
-    console.log('role-based-setup-check [existing-sql-container] checks only role-based-data service ports before build. Local commands use the configured checkout; no cloud deployment command is exposed.');
+    console.log('role-based-setup-check [existing-sql-container] is an alias of setup-check. Local commands use the configured checkout; no cloud deployment command is exposed.');
     console.log('Pre-build consent: consent-plan|consent-status|consent-run <operation> [selection] | consent-grant|consent-grant-once <absolute-plan.json> | consent-terms <absolute-reviewed-document> | consent-revoke [scope|terms]. Record only explicitly approved scopes.');
-    console.log('Pre-build journey: setup plan|status|run|resume --profile foundation|role-based-data [--workspace <base-port|legacy>] [--json]; setup approval|approve --profile <profile> [--workspace <n>] [--approval <id>] is the one local approval; setup install-plan <tool> | setup install <absolute-reviewed-plan.json>. Install only after explicit approval.');
+    console.log('Pre-build journey: setup plan|status|run|resume [--workspace <base-port|legacy>] [--json]; setup approval|approve [--workspace <n>] [--approval <id>] is the one local approval; setup install-plan <tool> | setup install <absolute-reviewed-plan.json>. Install only after explicit approval.');
     return;
   }
   if (!['home', 'workspace-check', 'guide', 'guide-save', 'status', 'setup-check', 'role-based-setup-check', 'setup'].includes(command) && !commands.has(command) && !consentCommands.has(command)) throw new Error(`Unsupported plugin command: ${command}`);

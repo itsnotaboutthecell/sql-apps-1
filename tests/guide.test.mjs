@@ -76,21 +76,15 @@ test('guide routes run-locally through setup plan and suggests the profile that 
   let report = await readGuide(home);
   assert.equal(report.nextStage, 'run-locally');
   assert.equal(report.profile, 'role-based-data');
-  assert.equal(report.suggestedProfile, 'role-based-data', 'a data-only brief must not be steered to the file/job foundation');
-  assert.match(report.nextAction, /setup plan --profile role-based-data/);
+  assert.equal(report.suggestedProfile, 'role-based-data', 'every brief uses the single data profile');
+  assert.match(report.nextAction, /setup plan/);
   assert.doesNotMatch(report.nextAction, /setup-check/, 'the coordinator, not the raw readiness check, orders approvals');
-  assert.match(report.cost.reviewCommand, /azure-cost/);
-  await saveBrief(home, { ...brief(), capabilities: ['data', 'files', 'background-jobs'] });
-  report = await readGuide(home);
-  assert.equal(report.suggestedProfile, 'role-based-data',
-    'the generated project profile remains authoritative when the brief outgrows its starter');
-  assert.match(report.nextAction, /setup plan --profile role-based-data/);
   assert.match(report.cost.reviewCommand, /azure-cost/);
   await writeFile(join(home, 'role-based-data.json'), '{}');
   report = await readGuide(home);
   assert.equal(report.profile, 'role-based-data');
   assert.equal(report.suggestedProfile, 'role-based-data', 'a configured profile wins over the brief');
-  assert.match(report.nextAction, /setup plan --profile role-based-data/);
+  assert.match(report.nextAction, /setup plan/);
   assert.match(report.cost.reviewCommand, /azure-cost/);
   assert.doesNotMatch(report.cost.reviewCommand, /demo-cost|role-based-cost/);
 });
@@ -122,7 +116,7 @@ test('source changes invalidate reported progress and require local re-verificat
   assert.equal(report.progress.status, 'source-changed');
   assert.equal(report.nextStage, 'run-locally');
   assert.match(report.nextAction, /rebuild.*verify/i);
-  assert.match(report.nextAction, /setup plan --profile role-based-data/, 'a stale checkpoint still routes through the guarded coordinator');
+  assert.match(report.nextAction, /setup plan/, 'a stale checkpoint still routes through the guarded coordinator');
   assert.equal(report.brief.nextChange, input.nextChange);
 });
 
@@ -134,7 +128,7 @@ test('implementing the app after a checkpoint-free brief keeps the setup-plan ro
   assert.equal(report.progress.status, 'source-changed');
   assert.equal(report.nextStage, 'run-locally');
   assert.doesNotMatch(report.nextAction, /checkpoint/, 'no checkpoint was ever saved');
-  assert.match(report.nextAction, /setup plan --profile role-based-data/);
+  assert.match(report.nextAction, /setup plan/);
 });
 
 test('guide records checkout-specific workspace selection without authorizing startup', async t => {
@@ -165,8 +159,7 @@ test('strict brief validation rejects unsupported choices, blank values and inve
     { ...brief(), checkpoint: { stage: 'run-locally', summary: 'Works', evidence: ['ok'], verified: true } },
   ]) assert.throws(() => validateBrief(input), /brief|capabilit|checkpoint/i);
   assert.deepEqual(validateBrief(brief()), brief());
-  assert.deepEqual(validateBrief({ ...brief(), capabilities: ['data', 'files', 'background-jobs'] }).capabilities,
-    ['data', 'files', 'background-jobs']);
+  assert.throws(() => validateBrief({ ...brief(), capabilities: ['data', 'files', 'background-jobs'] }), /maintained Azure skills/);
 });
 
 test('invalid, oversized and copied state fail explicitly and are never overwritten', async t => {

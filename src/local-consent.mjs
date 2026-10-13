@@ -7,7 +7,7 @@ import { readProjectManifest } from './project-contract.mjs';
 import { toolingHome } from './tooling-context.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
-const launchOperations = { foundation: 'app', 'role-based-data': 'role-based-app' };
+const launchOperations = { 'role-based-data': 'app' };
 export const SQL_TERMS = Object.freeze({
   url: 'https://aka.ms/azuresqldb-container',
   statement: 'Local SQL startup passes ACCEPT_EULA=Y to the Azure SQL Database container (private preview). ' +
@@ -17,8 +17,7 @@ export const SQL_TERMS = Object.freeze({
 const readOnly = new Set(['help', 'workspace-plan', 'verify', 'app-check']);
 const scopeNames = ['restore', 'build', 'workspace', 'sql-start', 'schema', 'services', 'synthetic', 'stop', 'maintenance'];
 const runtimeCommands = new Set([
-  'app', 'serve', 'serve-sql', 'role-based-app', 'role-based-serve', 'services', 'stop-services',
-  'maintain', 'start-sql', 'init', 'test', 'data', 'api-test', 'app-test', 'services-test', 'stop',
+  'app', 'serve', 'role-based-app', 'role-based-serve', 'start-sql', 'init', 'test', 'data', 'app-test', 'stop',
   'recover-sql', 'selected-app', 'selected-serve', 'selected-stop', 'selected-test',
 ]);
 const validTime = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
@@ -136,8 +135,6 @@ async function consentInputs(home) {
 function toolingInput(path, packaged) {
   if (!packaged) return path;
   if (path.startsWith('src/') && path.endsWith('.ts')) return `dist/${path.slice(0, -3)}.js`;
-  if (path === 'functions/src') return 'dist/functions/src';
-  if (path.startsWith('functions/')) return `assets/${path}`;
   if (path.startsWith('scripts/')) return `dist/${path}`;
   return path;
 }
@@ -159,10 +156,10 @@ async function requirementsFor(home, request, proposed) {
   let artifact;
   const add = async (scope, target, effects, paths = [], reusable = true, artifactPaths = []) => {
     const projectPaths = context.generated
-      ? paths.filter(path => !path.startsWith('src/') && !path.startsWith('scripts/') && !path.startsWith('functions/'))
+      ? paths.filter(path => !path.startsWith('src/') && !path.startsWith('scripts/'))
       : paths;
     const implementationPaths = context.generated
-      ? paths.filter(path => path.startsWith('src/') || path.startsWith('scripts/') || path.startsWith('functions/'))
+      ? paths.filter(path => path.startsWith('src/') || path.startsWith('scripts/'))
         .map(path => toolingInput(path, context.packaged))
       : [];
     const inputs = await inputHashes(home, projectPaths);
@@ -211,8 +208,7 @@ async function requirementsFor(home, request, proposed) {
         !/^[a-z][a-z0-9-]{0,31}$/.test(artifact.name)) throw new Error('Selected artifact belongs to another workspace/profile');
   }
   if (operation === 'selected-stop' && !/^[a-z][a-z0-9-]{0,31}$/.test(selection ?? '')) throw new Error('Invalid application selection');
-  const profile = operation.startsWith('role-based-') ? 'role-based-data' : selected ? `selected:${artifact?.name ?? selection}` :
-    ['serve-sql', 'start-sql', 'init', 'data', 'test', 'api-test', 'stop', 'recover-sql'].includes(operation) ? 'data' : 'foundation';
+  const profile = selected ? `selected:${artifact?.name ?? selection}` : 'role-based-data';
   const target = JSON.stringify({ home, workspace: runtime.id, mode: runtime.mode, ports: runtime.ports,
     container: runtime.sqlContainer, database: artifact ? `${runtime.database}_${artifact.name.replaceAll('-', '_')}` : runtime.database,
     profile });
@@ -222,47 +218,31 @@ async function requirementsFor(home, request, proposed) {
   // Contracts bind launcher code, target and effects; editing app SQL, DAB config or role settings must not re-prompt.
   const schema = () => add('schema', target, ['Publish non-destructive schema and runtime SQL grants; preserve existing data.'],
     artifact ? ['src/local.ts', 'src/selected-local.ts'] :
-      ['src/local.ts', ...(profile === 'role-based-data' ? ['src/role-based-profile.ts'] : [])],
+      ['src/local.ts', 'src/role-based-profile.ts'],
     true, artifact ? ['sql', 'setup', 'dab/dab-config.json'] : []);
-  const settings = profile === 'foundation' ? await readJson(runtime.settingsPath) : null;
-  if (settings) object(settings, ['processing', 'automaticProgress', 'jobRetry', 'tracing', 'progressIntervalMs',
-    'staleJobMinutes', 'retentionDays', 'traceRetentionDays'], 'local processing settings');
   const services = () => add('services', target, [
-    `Start/reuse ${profile} loopback services; download/build images and write owned configuration.`,
-    ...(profile === 'foundation' ? [
-      'Run background file processing and timed stale-job recovery/retention cleanup, including expired traces.',
-      `Processing/retention settings: ${JSON.stringify(settings ?? { defaults: true })}.`,
-    ] : []),
-  ], ['src/artifacts.ts', 'src/local.ts', 'src/local-app.ts', ...(profile === 'foundation' ?
-    ['src/local-services.ts', 'src/local-settings.ts', 'src/local-maintenance.ts', 'functions/src',
-      'functions/local.Dockerfile', 'functions/local-package.json', 'functions/local-host.json'] : []),
-  ...(profile === 'role-based-data' ? ['src/role-based-profile.ts'] : []),
-  ...(artifact ? ['src/selected-local.ts'] : [])], true, artifact ? ['server', 'dab/dab-config.json'] : []);
+    `Start/reuse ${profile} loopback services; download images and write owned configuration.`,
+  ], ['src/artifacts.ts', 'src/local.ts', 'src/local-app.ts',
+    ...(artifact ? ['src/selected-local.ts'] : ['src/role-based-profile.ts'])], true, artifact ? ['server', 'dab/dab-config.json'] : []);
   const composite = ['app', 'role-based-app', 'selected-app'].includes(operation);
   if (composite || operation === 'init') { await restore(); await build(); }
-  if ((composite && !(profile === 'role-based-data' && !runtime.ownsSqlName)) || operation === 'start-sql' || operation === 'recover-sql') await sql();
+  if ((composite && (selected || runtime.ownsSqlName)) || operation === 'start-sql' || operation === 'recover-sql') await sql();
   if (composite || operation === 'init') await schema();
-  if (composite || ['data', 'services', 'serve', 'serve-sql', 'role-based-serve', 'selected-serve', 'services-test'].includes(operation)) await services();
-  if (['test', 'api-test', 'app-test', 'services-test', 'selected-test'].includes(operation)) {
-    await add('synthetic', `${target}:${operation}`, [`Run ${operation}; create synthetic fixtures and perform its documented scoped cleanup${operation === 'services-test' ? ', including owned service restart' : ''}.`],
+  if (composite || ['data', 'serve', 'role-based-serve', 'selected-serve'].includes(operation)) await services();
+  if (['test', 'app-test', 'selected-test'].includes(operation)) {
+    await add('synthetic', `${target}:${operation}`, [`Run ${operation}; create synthetic fixtures and perform its documented scoped cleanup.`],
       artifact ? ['src/selected-local.ts', `examples/${artifact.name}/demo/smoke.mjs`] :
-        ['src/local.ts', 'sql/local/acceptance.sql',
-        ...(operation === 'services-test' ? ['src/local-services-smoke.ts'] :
-          operation === 'app-test' ? ['src/local-app-smoke.ts', 'src/local-job-data.ts'] : [])],
+        ['src/local.ts', 'sql/local/acceptance.sql', ...(operation === 'app-test' ? ['src/local-app-smoke.ts'] : [])],
       true, artifact ? ['sql', 'setup', 'server', 'dab/dab-config.json'] : []);
   }
-  if (['app', 'init', 'data'].includes(operation)) {
+  if (['app', 'role-based-app', 'init'].includes(operation)) {
     await add('synthetic', `${sqlTarget}:sql-acceptance`,
-      ['Run the built-in SQL acceptance suite during initialization/data startup; write and clean up synthetic fixtures.'],
+      ['Run the built-in read-only SQL acceptance check on the least-privilege app user during initialization.'],
       ['src/local.ts', 'sql/local/acceptance.sql']);
   }
-  if (['stop', 'stop-services', 'selected-stop'].includes(operation)) {
-    await add('stop', target, [`Stop/remove only verified owned ${profile} services; preserve SQL/storage volumes and credentials.`],
-      ['src/local.ts', 'src/local-services.ts', 'src/selected-local.ts']);
-  }
-  if (operation === 'maintain') {
-    await add('maintenance', target, ['Recover stale jobs and delete expired jobs, snapshots and traces under configured retention. One operation only.'],
-      ['src/local-maintenance.ts', 'src/local-settings.ts', ...(settings === null ? [] : [relative(home, runtime.settingsPath)])], false);
+  if (['stop', 'selected-stop'].includes(operation)) {
+    await add('stop', target, [`Stop/remove only verified owned ${profile} services; preserve SQL volumes and credentials.`],
+      ['src/local.ts', 'src/selected-local.ts']);
   }
   if (operation === 'recover-sql') {
     requirements.length = 0;
@@ -312,7 +292,7 @@ export async function planBundle(value, options) {
   object(options, ['profile', 'workspace'], 'bundle request');
   const home = await realpath(value);
   const operation = launchOperations[options.profile];
-  if (!operation) throw new Error('Select bundle profile foundation or role-based-data');
+  if (!operation) throw new Error('Select bundle profile role-based-data');
   if (options.workspace !== undefined && typeof options.workspace !== 'string') throw new Error('Invalid bundle workspace selection');
   const existing = readWorkspace(home);
   const requirements = [];

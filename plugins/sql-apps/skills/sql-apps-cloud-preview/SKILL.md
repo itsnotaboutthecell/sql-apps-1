@@ -26,10 +26,10 @@ If the Azure Skills plugin or a specialized skill is unavailable, explain the pr
 
 ## Preserve SQL Apps-specific requirements
 
-Before handing off, record the agreed application profile, SQL/DAB configuration, identity and application-role contract, private-network requirements, database grants, and acceptance criteria. Treat deployment output and infrastructure validation as necessary, not as proof that the SQL/DAB application works.
+Before handing off, record the `role-based-data` profile, SQL/DAB configuration, identity and application-role contract, private-network requirements, database grants, and acceptance criteria. `npm run azure -- grants <config>` writes the exact DAB stored-procedure `EXECUTE` grants to `dist/sql/role-based-grants.sql` for the maintained route to apply. File storage or background jobs are not part of SQL Apps; route them to maintained skills such as `azure-storage`. Treat deployment output and infrastructure validation as necessary, not as proof that the SQL/DAB application works.
 
 After deployment, use `sql-apps-validation` for the application-specific acceptance: live sign-in, expected DAB role forwarding, least-privilege procedure access, two-user isolation where required, and a browser write followed by SQL persistence and reload. Report preparation, deployment, and application acceptance as separate results.
 
 ## Existing SQL Apps deployment commands
 
-`npm run azure` commands and their Bicep templates remain a compatibility path for existing projects while migration proceeds. Do not recommend that custom orchestration for new projects by default. If an existing deployment must use it, read its exact profile and deployment reference, preserve its approval gates, and do not mix its state files with an Azure Skills/`azd` deployment.
+`npm run azure` commands and their Bicep templates remain a compatibility path for existing projects while migration proceeds. Do not recommend that custom orchestration for new projects by default. If an existing deployment must use it, read `docs/reference/deployment.md` and `docs/reference/role-based-data.md`, preserve its approval gates, and do not mix its state files with an Azure Skills/`azd` deployment. To update one after SQL, DAB or configuration changes, run `artifacts` and then `deploy`; `deploy` refuses images built from different source.

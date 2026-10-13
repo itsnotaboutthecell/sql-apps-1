@@ -9,15 +9,12 @@ param environment string
 param location string = resourceGroup().location
 param tenantId string
 param apiClientId string
-@allowed(['foundation', 'role-based-data'])
-param profile string = 'role-based-data'
-param requiredRole string = ''
-param readinessPath string = ''
+param requiredRole string
+param readinessPath string
 param sqlAdminObjectId string
 param sqlAdminName string
 param gatewayImage string
 param dabImage string
-param functionsImage string = ''
 param registryServer string
 param deployGateway bool = true
 @description('Explicit point-in-time restore window for the application database. Longer retention increases backup storage cost and must be reviewed.')
@@ -26,18 +23,11 @@ param deployGateway bool = true
 param sqlBackupRetentionDays int = 7
 @description('Explicit backup storage redundancy for the application database.')
 @allowed(['Local', 'Zone', 'Geo', 'GeoZone'])
-param sqlBackupRedundancy string = 'Geo'
+param sqlBackupRedundancy string = 'Local'
 
 var prefix = '${name}-${environment}'
-var fullFoundation = profile == 'foundation'
-var effectiveSqlBackupRedundancy = fullFoundation ? sqlBackupRedundancy : 'Local'
-var roleBasedSqlSku = { name: 'GP_S_Gen5_2', tier: 'GeneralPurpose', family: 'Gen5', capacity: 2 }
-var logDailyQuotaGb = fullFoundation ? -1 : json('0.1')
 var suffix = uniqueString(resourceGroup().id, prefix)
 var sqlName = '${prefix}-${suffix}'
-var storageName = 'sqlapps${suffix}'
-var vaultName = 'sqlapps-${suffix}'
-var functionName = '${prefix}-fn-${suffix}'
 var tags = { project: 'sql-apps', environment: environment }
 resource gatewayIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${prefix}-gateway'
@@ -46,11 +36,6 @@ resource gatewayIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
 }
 resource dabIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${prefix}-data'
-  location: location
-  tags: tags
-}
-resource functionIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (fullFoundation) {
-  name: '${prefix}-functions'
   location: location
   tags: tags
 }
@@ -68,13 +53,6 @@ resource network 'Microsoft.Network/virtualNetworks@2024-05-01' = {
           delegations: [{ name: 'containers', properties: { serviceName: 'Microsoft.App/environments' } }]
         }
       }
-      ...(fullFoundation ? [{
-        name: 'functions'
-        properties: {
-          addressPrefix: '10.42.2.0/24'
-          delegations: [{ name: 'functions', properties: { serviceName: 'Microsoft.Web/serverFarms' } }]
-        }
-      }] : [])
       { name: 'endpoints', properties: { addressPrefix: '10.42.3.0/24', privateEndpointNetworkPolicies: 'Disabled' } }
     ]
   }
@@ -83,14 +61,7 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: '${prefix}-logs'
   location: location
   tags: tags
-  properties: { sku: { name: 'PerGB2018' }, retentionInDays: 30, workspaceCapping: { dailyQuotaGb: logDailyQuotaGb } }
-}
-resource insights 'Microsoft.Insights/components@2020-02-02' = if (fullFoundation) {
-  name: '${prefix}-insights'
-  location: location
-  kind: 'web'
-  tags: tags
-  properties: { Application_Type: 'web', WorkspaceResourceId: logs.id }
+  properties: { sku: { name: 'PerGB2018' }, retentionInDays: 30, workspaceCapping: { dailyQuotaGb: json('0.1') } }
 }
 resource containers 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: '${prefix}-containers'
@@ -127,18 +98,17 @@ resource database 'Microsoft.Sql/servers/databases@2023-08-01' = {
   name: 'app'
   location: location
   tags: tags
-  sku: fullFoundation ? { name: 'S0', tier: 'Standard', capacity: 10 } : roleBasedSqlSku
-  properties: union({
+  sku: { name: 'GP_S_Gen5_2', tier: 'GeneralPurpose', family: 'Gen5', capacity: 2 }
+  properties: {
     collation: 'SQL_Latin1_General_CP1_CI_AS'
     zoneRedundant: false
-    requestedBackupStorageRedundancy: effectiveSqlBackupRedundancy
-    maxSizeBytes: fullFoundation ? 268435456000 : 34359738368
-    useFreeLimit: !fullFoundation
-  }, fullFoundation ? {} : {
+    requestedBackupStorageRedundancy: sqlBackupRedundancy
+    maxSizeBytes: 34359738368
+    useFreeLimit: true
     freeLimitExhaustionBehavior: 'AutoPause'
     autoPauseDelay: 60
     minCapacity: json('0.5')
-  })
+  }
 }
 resource backupRetention 'Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies@2023-08-01' = {
   parent: database
@@ -166,111 +136,10 @@ resource sqlAuditLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview'
     ]
   }
 }
-resource files 'Microsoft.Storage/storageAccounts@2023-05-01' = if (fullFoundation) {
-  name: storageName
-  location: location
-  tags: tags
-  sku: { name: 'Standard_LRS' }
-  kind: 'StorageV2'
-  properties: {
-    minimumTlsVersion: 'TLS1_2'
-    supportsHttpsTrafficOnly: true
-    allowBlobPublicAccess: false
-    allowSharedKeyAccess: false
-    publicNetworkAccess: 'Disabled'
-    networkAcls: { defaultAction: 'Deny', bypass: 'None' }
-  }
-}
-resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = if (fullFoundation) {
-  parent: files
-  name: 'default'
-  properties: { deleteRetentionPolicy: { enabled: true, days: 7 }, containerDeleteRetentionPolicy: { enabled: true, days: 7 } }
-}
-resource fileContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = if (fullFoundation) {
-  parent: blobService
-  name: 'files'
-  properties: { publicAccess: 'None' }
-}
-resource hostContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = if (fullFoundation) {
-  parent: blobService
-  name: 'azure-webjobs-hosts'
-  properties: { publicAccess: 'None' }
-}
-resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = if (fullFoundation) {
-  name: vaultName
-  location: location
-  tags: tags
-  properties: {
-    tenantId: tenantId
-    sku: { family: 'A', name: 'standard' }
-    enableRbacAuthorization: true
-    enableSoftDelete: true
-    enablePurgeProtection: true
-    softDeleteRetentionInDays: 90
-    publicNetworkAccess: 'Disabled'
-    networkAcls: { defaultAction: 'Deny', bypass: 'None' }
-  }
-}
-resource functionPlan 'Microsoft.Web/serverfarms@2023-12-01' = if (fullFoundation) {
-  name: '${prefix}-functions-plan'
-  location: location
-  tags: tags
-  kind: 'elastic'
-  sku: { name: 'EP1', tier: 'ElasticPremium', capacity: 1 }
-  properties: { reserved: true }
-}
-resource functions 'Microsoft.Web/sites@2023-12-01' = if (fullFoundation) {
-  name: functionName
-  location: location
-  tags: tags
-  kind: 'functionapp,linux,container'
-  identity: { type: 'UserAssigned', userAssignedIdentities: { '${functionIdentity.id}': {} } }
-  properties: {
-    serverFarmId: functionPlan.id
-    httpsOnly: true
-    publicNetworkAccess: 'Disabled'
-    virtualNetworkSubnetId: '${network.id}/subnets/functions'
-    vnetRouteAllEnabled: true
-    vnetImagePullEnabled: true
-    siteConfig: {
-      linuxFxVersion: 'DOCKER|${functionsImage}'
-      acrUseManagedIdentityCreds: true
-      acrUserManagedIdentityID: functionIdentity!.properties.clientId
-      ftpsState: 'Disabled'
-      minTlsVersion: '1.2'
-      appSettings: [
-        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
-        { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'node' }
-        { name: 'WEBSITES_ENABLE_APP_SERVICE_STORAGE', value: 'false' }
-        { name: 'AZURE_TENANT_ID', value: tenantId }
-        { name: 'API_CLIENT_ID', value: apiClientId }
-        { name: 'GATEWAY_PRINCIPAL_ID', value: gatewayIdentity.properties.principalId }
-        { name: 'FUNCTIONS_IDENTITY_CLIENT_ID', value: functionIdentity!.properties.clientId }
-        { name: 'KEY_VAULT_URL', value: vault!.properties.vaultUri }
-        { name: 'AzureWebJobsStorage__accountName', value: files.name }
-        { name: 'AzureWebJobsStorage__credential', value: 'managedidentity' }
-        { name: 'AzureWebJobsStorage__clientId', value: functionIdentity!.properties.clientId }
-        { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights!.properties.ConnectionString }
-      ]
-    }
-  }
-}
 
 module sqlEndpoint 'private-endpoint.bicep' = {
   name: 'sql-endpoint'
   params: { name: '${prefix}-sql', location: location, networkId: network.id, targetId: sql.id, groupId: 'sqlServer', dnsZone: 'privatelink${az.environment().suffixes.sqlServerHostname}' }
-}
-module storageEndpoints 'private-endpoint.bicep' = [for kind in (fullFoundation ? ['blob', 'queue', 'table'] : []): {
-  name: '${kind}-endpoint'
-  params: { name: '${prefix}-${kind}', location: location, networkId: network.id, targetId: files.id, groupId: kind, dnsZone: 'privatelink.${kind}.core.windows.net' }
-}]
-module vaultEndpoint 'private-endpoint.bicep' = if (fullFoundation) {
-  name: 'vault-endpoint'
-  params: { name: '${prefix}-vault', location: location, networkId: network.id, targetId: vault.id, groupId: 'vault', dnsZone: 'privatelink.vaultcore.azure.net' }
-}
-module functionEndpoint 'private-endpoint.bicep' = if (fullFoundation) {
-  name: 'function-endpoint'
-  params: { name: '${prefix}-function', location: location, networkId: network.id, targetId: functions.id, groupId: 'sites', dnsZone: 'privatelink.azurewebsites.net' }
 }
 resource dataApp 'Microsoft.App/containerApps@2024-03-01' = if (deployGateway) {
   name: '${prefix}-data'
@@ -286,7 +155,7 @@ resource dataApp 'Microsoft.App/containerApps@2024-03-01' = if (deployGateway) {
       registries: [{ server: registryServer, identity: dabIdentity.id }]
     }
     template: {
-      scale: { minReplicas: fullFoundation ? 1 : 0, maxReplicas: 2 }
+      scale: { minReplicas: 0, maxReplicas: 2 }
       containers: [{
         name: 'data'
         image: dabImage
@@ -320,7 +189,7 @@ resource gateway 'Microsoft.App/containerApps@2024-03-01' = if (deployGateway) {
       registries: [{ server: registryServer, identity: gatewayIdentity.id }]
     }
     template: {
-      scale: { minReplicas: fullFoundation ? 1 : 0, maxReplicas: 2 }
+      scale: { minReplicas: 0, maxReplicas: 2 }
       containers: [{
         name: 'gateway'
         image: gatewayImage
@@ -330,15 +199,8 @@ resource gateway 'Microsoft.App/containerApps@2024-03-01' = if (deployGateway) {
           { name: 'AZURE_TENANT_ID', value: tenantId }
           { name: 'API_CLIENT_ID', value: apiClientId }
           { name: 'DAB_URL', value: 'https://${dataApp!.properties.configuration.ingress.fqdn}' }
-          ...(fullFoundation ? [
-            { name: 'BLOB_ACCOUNT_URL', value: files!.properties.primaryEndpoints.blob }
-            { name: 'BLOB_CONTAINER', value: fileContainer!.name }
-            { name: 'FUNCTIONS_URL', value: 'https://${functions!.properties.defaultHostName}' }
-          ] : [
-            { name: 'SQL_APPS_PROFILE', value: profile }
-            { name: 'SQL_APPS_REQUIRED_ROLE', value: requiredRole }
-            { name: 'SQL_APPS_READINESS_PATH', value: readinessPath }
-          ])
+          { name: 'SQL_APPS_REQUIRED_ROLE', value: requiredRole }
+          { name: 'SQL_APPS_READINESS_PATH', value: readinessPath }
         ]
         probes: [
           { type: 'Liveness', httpGet: { path: '/health/live', port: 8080 }, initialDelaySeconds: 10, periodSeconds: 30 }
@@ -347,7 +209,6 @@ resource gateway 'Microsoft.App/containerApps@2024-03-01' = if (deployGateway) {
       }]
     }
   }
-  dependsOn: [storageEndpoints, functionEndpoint]
 }
 
 output gatewayUrl string = deployGateway ? 'https://${gateway!.properties.configuration.ingress.fqdn}' : ''
@@ -355,12 +216,8 @@ output sqlServer string = '${sql.name}${az.environment().suffixes.sqlServerHostn
 output databaseName string = database.name
 output dabPrincipalId string = dabIdentity.properties.principalId
 output gatewayPrincipalId string = gatewayIdentity.properties.principalId
-output functionPrincipalId string = fullFoundation ? functionIdentity!.properties.principalId : ''
 output gatewayName string = '${prefix}-gateway'
-output functionsName string = fullFoundation ? functions!.name : ''
 output networkId string = network.id
-output storageAccount string = fullFoundation ? files!.name : ''
-output vaultName string = fullFoundation ? vault!.name : ''
 output sqlBackupRetentionDays int = sqlBackupRetentionDays
-output sqlBackupRedundancy string = effectiveSqlBackupRedundancy
+output sqlBackupRedundancy string = sqlBackupRedundancy
 output sqlAuditWorkspaceName string = logs.name

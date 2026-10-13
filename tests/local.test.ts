@@ -28,7 +28,7 @@ function sqlOwnership(runtime: WorkspaceRuntime, args: readonly string[]): strin
 }
 
 test('guided startup reports each existing stage, stops on failure and preserves the error cause', async () => {
-  const expected = ['start-sql', 'init', 'data', 'services', 'serve'];
+  const expected = ['start-sql', 'init', 'data', 'serve'];
   for (let failure = 0; failure <= expected.length; failure++) {
     const calls: string[] = [];
     const messages: string[] = [];
@@ -40,7 +40,6 @@ test('guided startup reports each existing stage, stops on failure and preserves
     };
     const promise = startLocalApplication('owned-sql', {
       command: action,
-      services: container => action('services', container),
       serve: container => action('serve', container),
     }, message => messages.push(message));
     if (failure === expected.length) {
@@ -85,13 +84,13 @@ test('local verification uses master and passes SQL through stdin, not shell int
   await verifyLocal('sqldbdev', run);
 });
 
-test('local DAB uses production entities and RLS with separate claim simulation configuration', async () => {
-  const local = await localDabConfig() as { runtime: { host: { mode: string; authentication: { provider: string } } }; entities: Record<string, unknown> };
+test('local DAB uses production entities with separate claim simulation configuration', async () => {
+  const local = await localDabConfig({ profile: 'role-based-data', requiredRole: 'AppUser', readinessPath: '/api/AppReady' }) as { runtime: { host: { mode: string; authentication: { provider: string } } }; entities: Record<string, unknown> };
   const production = JSON.parse(await readFile('dab/dab-config.json', 'utf8'));
   assert.equal(local.runtime.host.mode, 'development');
   assert.equal(local.runtime.host.authentication.provider, 'AppService');
-  assert.ok(local.entities.FileJob);
-  assert.ok(production.entities.FileJob);
+  assert.deepEqual(Object.keys(local.entities), ['AppReady']);
+  assert.deepEqual(local.entities, production.entities);
   assert.equal(production.runtime.host.authentication.provider, 'AzureAD');
   assert.equal(production.runtime.host.mode, 'production');
 });

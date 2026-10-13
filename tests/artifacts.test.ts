@@ -5,11 +5,12 @@ import { resolve } from 'node:path';
 import { deploymentSchema } from '../src/config.js';
 import { buildArtifacts, imageDigest, imageFields } from '../src/artifacts.js';
 import type { Run } from '../src/process.js';
+import { roleBasedSchemaFingerprint } from '../src/role-based-profile.js';
 
-const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps-foundation.example.json', 'utf8')));
+const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps.example.json', 'utf8')));
 const digest = `sha256:${'a'.repeat(64)}`;
 
-test('artifact builds use ACR for all services and return immutable validated configuration', async () => {
+test('artifact builds use ACR for the gateway and DAB images and return immutable validated configuration', async () => {
   const calls: string[][] = [];
   const run: Run = async (command, args) => {
     calls.push([command, ...args]);
@@ -17,14 +18,15 @@ test('artifact builds use ACR for all services and return immutable validated co
   };
   const result = await buildArtifacts(config, run);
   const builds = calls.filter(call => call.includes('build'));
-  assert.equal(builds.length, 3);
+  assert.equal(builds.length, 2);
   assert.deepEqual(builds.map(call => call[call.indexOf('--file') + 1]), [
-    resolve('Dockerfile'), resolve('dab', 'Dockerfile'), resolve('functions', 'Dockerfile'),
+    resolve('Dockerfile'), resolve('dab', 'Dockerfile'),
   ]);
-  assert.deepEqual(builds.map(call => call.at(-1)), [resolve('.'), resolve('.'), resolve('.')]);
+  assert.deepEqual(builds.map(call => call.at(-1)), [resolve('.'), resolve('.')]);
   for (const field of imageFields) {
     assert.equal(result[field], `${config[field].split(':')[0]}@${digest}`);
   }
+  assert.equal(result.imageSource, await roleBasedSchemaFingerprint(process.cwd()));
   assert.equal(config.gatewayImage.endsWith(':0.2.0'), true);
   assert.equal(calls.every(call => call.includes(config.subscriptionId)), true);
 });
@@ -46,10 +48,9 @@ test('artifact builds fail explicitly and stop before later builds', async () =>
   assert.equal(builds, 2);
 });
 
-test('builds reject digest outputs and colliding image references before side effects', async () => {
+test('builds reject colliding image references before side effects', async () => {
   let calls = 0;
   const run: Run = async () => { calls++; return ''; };
-  await assert.rejects(buildArtifacts({ ...config, gatewayImage: `${config.registryServer}/gateway@${digest}` }, run), /version tags/);
   await assert.rejects(buildArtifacts({ ...config, dabImage: config.gatewayImage }, run), /distinct/);
   assert.equal(calls, 0);
 });

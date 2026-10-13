@@ -1,11 +1,9 @@
 import { readFile, unlink } from 'node:fs/promises';
 import { resolve, join, sep } from 'node:path';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { saveJson, withDeploymentLock } from './deployment.js';
 import type { Run } from './process.js';
-import { SqlAppsClient, ApiError } from './client.js';
-import { localJobData } from './local-job-data.js';
 import { runtimeFor } from './workspace.mjs';
 import { verifyContainerWorkspace } from './local-ownership.js';
 import { pinnedDabImage } from './artifacts.js';
@@ -284,7 +282,7 @@ export async function publishLocalSchema(container: string, target: {
   { redact: [adminPassword, adminPassword.replaceAll('"', '""')] });
 }
 
-export async function initLocal(container: string, run: Run, authorized?: RoleBasedProfile): Promise<void> {
+export async function initLocal(container: string, run: Run, authorized: RoleBasedProfile): Promise<void> {
   const { stateFile } = localPaths(container);
   await withDeploymentLock(stateFile, async () => {
     await verifyLocal(container, run);
@@ -304,10 +302,9 @@ IF SUSER_ID(N'${login}') IS NULL CREATE LOGIN [${login}] WITH PASSWORD = N'${sta
       project: projectPath('sql', 'database.sqlproj'),
       output: projectPath('dist', 'sql'),
     }, run);
-    const grants = authorized ? roleBasedProcedureGrants(
+    const grants = roleBasedProcedureGrants(
       JSON.parse(await readFile(projectPath('dab', 'dab-config.json'), 'utf8')), authorized, login,
-    ) : `GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.FileJobs TO [${login}];
-GRANT VIEW DEFINITION ON dbo.FileJobs TO [${login}];`;
+    );
     try {
       await databaseQuery(state, `
 IF DATABASE_PRINCIPAL_ID(N'${login}') IS NULL CREATE USER [${login}] FOR LOGIN [${login}];
@@ -316,7 +313,7 @@ ${grants}
     } catch (error) {
       throw new Error('Local app-user setup failed. Older preview images may reject login mapping; use start-sql with a new container name and the current azure-sql/db-dev image. Runtime will not fall back to sa.', { cause: error });
     }
-    if (!authorized) await testLocalSql(state, run);
+    await testLocalSql(state, run);
   });
 }
 
@@ -343,31 +340,20 @@ export function localPrincipal(oid: string, scope = 'access_as_user', role = 'au
   })).toString('base64');
 }
 
-export async function localDabConfig(authorized?: RoleBasedProfile): Promise<unknown> {
+export async function localDabConfig(authorized: RoleBasedProfile): Promise<unknown> {
   const config = JSON.parse(await readFile(projectPath('dab', 'dab-config.json'), 'utf8'));
-  if (authorized) validateRoleBasedDab(config, authorized);
+  validateRoleBasedDab(config, authorized);
   config.runtime.host = { mode: 'development', authentication: { provider: 'AppService' } };
-  if (authorized) return config;
-  config.entities.FileJob = {
-    source: { object: 'dbo.FileJobs', type: 'table' }, rest: { enabled: true }, graphql: { enabled: true },
-    permissions: [
-      { role: 'authenticated', actions: [{ action: 'read', fields: { exclude: ['blob_key'] },
-        policy: { database: '@item.owner_oid eq @claims.oid' } }] },
-      { role: 'processor', actions: ['create', 'read', 'update', 'delete'] },
-    ],
-  };
   return config;
 }
 
-export async function startLocalData(container: string, run: Run, authorized?: RoleBasedProfile): Promise<void> {
+export async function startLocalData(container: string, run: Run, authorized: RoleBasedProfile): Promise<void> {
   const runtime = runtimeFor(container);
   const state = await readLocal(container);
   const { dataContainer, configFile: path } = localPaths(container);
   const config = await localDabConfig(authorized);
-  if (authorized) {
-    await verifyLocal(container, run);
-    await databaseQuery(state, roleBasedProcedureGrants(config, authorized, login), run, true);
-  } else await testLocalSql(state, run);
+  await verifyLocal(container, run);
+  await databaseQuery(state, roleBasedProcedureGrants(config, authorized, login), run, true);
   await saveJson(path, config);
   const networks = z.record(z.string(), z.object({ IPAddress: z.ipv4() }))
     .parse(JSON.parse(await run('docker', ['inspect', container, '--format', '{{json .NetworkSettings.Networks}}'])));
@@ -384,18 +370,6 @@ export async function startLocalData(container: string, run: Run, authorized?: R
     '--mount', `type=bind,source=${path},target=/App/dab-config.json,readonly`,
     dabImage],
   { env: { SQL_CONNECTION_STRING: localConnection(state.password, `${network[1].IPAddress},1433`) }, redact: [state.password] });
-  const servicesNetwork = runtime.names.network;
-  const servicesNetworkExists = (await run('docker',
-    ['network', 'ls', '--filter', `name=^${servicesNetwork}$`, '--format', '{{.Name}}'])).trim();
-  if (servicesNetworkExists) {
-    const details = z.object({ Internal: z.literal(true), Labels: z.record(z.string(), z.string()) })
-      .parse(JSON.parse(await run('docker', ['network', 'inspect', '--format', '{{json .}}', servicesNetwork])));
-    if (details.Labels['sql-apps.local'] !== 'services' ||
-        (runtime.mode === 'isolated' && details.Labels['sql-apps.workspace'] !== runtime.id)) {
-      throw new Error('Local worker network is not owned by this workspace; refusing to attach DAB');
-    }
-    await run('docker', ['network', 'connect', servicesNetwork, dataContainer]);
-  }
   for (let attempt = 0; attempt < 30; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('Local DAB health check timed out')), 2_000);
@@ -423,105 +397,22 @@ async function verifyOwnedData(container: string, run: Run): Promise<void> {
   }
 }
 
-export async function testLocalData(fetcher: typeof fetch = fetch): Promise<void> {
-  const owner = randomUUID();
-  const other = randomUUID();
-  const client = (oid: string) => new SqlAppsClient({
-    baseUrl: localOrigin, getAccessToken: async () => 'local-claim-simulation',
-    fetch: async (url, init) => {
-      const headers = new Headers(init?.headers);
-      headers.delete('authorization');
-      headers.set('x-ms-client-principal', localPrincipal(oid));
-      const request = new URL(String(url));
-      if (request.pathname === '/api/FileJob' && (!init?.method || init.method === 'GET') && !request.search) {
-        request.searchParams.set('$first', '1');
-      }
-      return fetcher(request, { ...init, headers });
-    },
-  });
-  const alice = client(owner);
-  const bob = client(other);
-  const id = randomUUID();
-  const secondId = randomUUID();
-  const fixtures: string[] = [];
-  const jobs = localJobData(localOrigin, fetcher);
-  let failure: unknown;
-  try {
-    await jobs.create(owner, { id, filename: 'acceptance.txt', blob_key: 'acceptance-only' });
-    fixtures.push(id);
-    await jobs.create(owner, { id: secondId, filename: 'pagination.txt', blob_key: 'acceptance-only' });
-    fixtures.push(secondId);
-    async function list(api: SqlAppsClient) {
-      const ids: string[] = [];
-      let next: string | undefined = '/api/FileJob';
-      const seen = new Set<string>();
-      while (next) {
-        const url = new URL(next, localOrigin);
-        if (url.origin !== localOrigin || url.pathname !== '/api/FileJob' || url.username || url.password || url.hash || seen.has(url.href)) {
-          throw new Error('Invalid acceptance pagination');
-        }
-        seen.add(url.href);
-        const body = z.object({ value: z.array(z.object({ id: z.string(), blob_key: z.never().optional() })), nextLink: z.string().optional() })
-          .parse(await (await api.request(url.href)).json());
-        ids.push(...body.value.map(row => row.id.toLowerCase()));
-        next = body.nextLink;
-      }
-      return ids;
-    }
-    const ownRows = await list(alice);
-    if (![id, secondId].every(value => ownRows.includes(value))) throw new Error('Owner REST pagination lost a row');
-    if ((await list(bob)).includes(id)) throw new Error('Cross-user REST row exposure');
-    await jobs.update(owner, id, { status: 'completed' });
-    if ((await jobs.get(owner, id))?.status !== 'completed') throw new Error('Owner update failed');
-    for (const [api, shouldSee] of [[alice, true], [bob, false]] as const) {
-      const body = z.object({
-        data: z.object({ fileJobs: z.object({ items: z.array(z.object({ id: z.string() })) }) }),
-      }).parse(await (await api.request('/graphql', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ query: `{ fileJobs(filter: { id: { eq: "${id}" } }) { items { id filename status } } }` }) })).json());
-      if (body.data.fileJobs.items.some(row => row.id.toLowerCase() === id) !== shouldSee) throw new Error('GraphQL row isolation failed');
-    }
-    await assertLocalDenied(() => alice.request('/api/FileJob', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: randomUUID(), filename: 'forbidden', owner_oid: other }),
-    }));
-    await assertLocalDenied(() => alice.request(`/api/FileJob/id/${id}`, {
-      method: 'PATCH', headers: { 'content-type': 'application/json', 'if-match': '*' },
-      body: JSON.stringify({ owner_oid: other }),
-    }));
-    const anonymous = await fetcher(`${localOrigin}/api/FileJob`, { signal: AbortSignal.timeout(5_000) });
-    if (![401, 403].includes(anonymous.status)) throw new Error(`Anonymous DAB request returned ${anonymous.status}`);
-  } catch (error) {
-    failure = error;
-    throw error;
-  } finally {
-    const cleanup = await Promise.allSettled(fixtures.map(fixture => jobs.delete(owner, fixture)));
-    const errors = cleanup.filter((result): result is PromiseRejectedResult => result.status === 'rejected').map(result => result.reason);
-    if (errors.length) throw new AggregateError([...(failure ? [failure] : []), ...errors], 'Local acceptance fixture cleanup failed');
-  }
-}
-
-async function assertLocalDenied(action: () => Promise<unknown>): Promise<void> {
-  try { await action(); }
-  catch (error) {
-    if (error instanceof ApiError && [400, 403, 404].includes(error.status)) return;
-    throw error;
-  }
-  throw new Error('Forbidden local DAB mutation succeeded');
-}
-
 export async function localCommand(command: string, container: string, run: Run, authorized?: RoleBasedProfile): Promise<void> {
+  const profile = () => {
+    if (!authorized) throw new Error(`${command} needs role-based-data.json`);
+    return authorized;
+  };
   if (command === 'start-sql') await startLocalSql(container, run);
   else if (command === 'recover-sql') await recoverLocalSql(container, run);
   else if (command === 'verify') await verifyLocal(container, run);
-  else if (command === 'init') await initLocal(container, run, authorized);
+  else if (command === 'init') await initLocal(container, run, profile());
   else if (command === 'test') await testLocalSql(await readLocal(container), run);
   else if (command === 'app-check') {
     const result = await databaseQuery(await readLocal(container),
       await readFile(projectPath('sql', 'local', 'application-acceptance.sql'), 'utf8'), run, true);
     if (!result.includes('CLEAN APPLICATION DATABASE PASSED')) throw new Error('Clean application database acceptance did not report success');
   }
-  else if (command === 'data') await startLocalData(container, run, authorized);
-  else if (command === 'api-test') await testLocalData();
+  else if (command === 'data') await startLocalData(container, run, profile());
   else if (command === 'stop') {
     const data = localPaths(container).dataContainer;
     await verifyOwnedData(data, run);

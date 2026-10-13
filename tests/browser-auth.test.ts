@@ -8,13 +8,13 @@ import { createPreviewSession, localSessionKey, prepareAuthentication, SessionEx
   type MsalClient, type SessionHost } from '../src/web/session.js';
 import { authenticationErrorMessage, renderAuthentication, type AuthElements, type AuthState } from '../src/web/auth-view.js';
 
-const previewConfig: BrowserConfig = { mode: 'local', capabilities: { files: false, functions: false } };
-const entraConfig: BrowserConfig = {
+const previewConfig = { mode: 'local', readinessPath: '/api/AppReady' } satisfies BrowserConfig;
+const entraConfig = {
   mode: 'entra', tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   clientId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   scope: 'api://bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/access_as_user',
-  capabilities: { files: false, functions: false },
-};
+  readinessPath: '/api/AppReady',
+} satisfies BrowserConfig;
 const previewToken = 'A'.repeat(43);
 const account: AccountInfo = {
   homeAccountId: 'home', environment: 'login.microsoftonline.com', tenantId: entraConfig.tenantId,
@@ -387,10 +387,8 @@ test('authentication errors distinguish expiry, forbidden actions and backend un
 
 function browserElement() {
   return {
-    hidden: false, disabled: false, textContent: '', children: [] as string[], resets: 0,
+    hidden: false, disabled: false, textContent: '',
     onclick: null as (() => void) | null,
-    replaceChildren() { this.children = []; this.textContent = ''; },
-    reset() { this.resets++; },
   };
 }
 
@@ -406,6 +404,7 @@ function browserGlobal(t: TestContext, name: string, value: unknown) {
 const settleBrowser = () => new Promise<void>(resolve => setImmediate(resolve));
 type BrowserResponse = Response | Error | Promise<Response>;
 let browserImport = 0;
+const readinessRows = [{ ready: 1 }];
 
 async function browserApp(
   t: TestContext, mode: 'local' | 'entra', initialResponses: [string, BrowserResponse][] = [], withSession = true,
@@ -416,12 +415,6 @@ async function browserApp(
     if (!value) { value = browserElement(); elements.set(id, value); }
     return value;
   };
-  const timers: (() => void)[] = [];
-  t.mock.method(globalThis, 'setTimeout', (callback: () => void) => {
-    timers.push(callback);
-    return {} as ReturnType<typeof setTimeout>;
-  });
-  t.mock.method(globalThis, 'clearTimeout', () => {});
   const windowHost = { addEventListener: (_event: string, stop: () => void) => { t.after(stop); } };
   const msal = new TestMsalClient();
   if (!withSession) msal.accounts = [];
@@ -432,10 +425,7 @@ async function browserApp(
         (...args: unknown[]) => Reflect.apply(msal[method], msal, args));
     }
   }
-  const config: BrowserConfig = {
-    ...(mode === 'local' ? previewConfig : entraConfig),
-    capabilities: { files: true, functions: false, processing: true, automaticProgress: true, progressIntervalMs: 1000 },
-  };
+  const config: BrowserConfig = mode === 'local' ? previewConfig : entraConfig;
   const responses = new Map(initialResponses);
   const requests: string[] = [];
   const fixture = sessionHost(async input => {
@@ -450,8 +440,7 @@ async function browserApp(
     if (response) return response;
     if (path === '/auth/config') return Response.json(config);
     if (path === '/auth/me') return Response.json({ oid: 'browser-user', tenantId: 'browser-tenant', access: { allowed: true } });
-    if (path === '/storage') return Response.json({ files: [] });
-    if (path === '/jobs') return Response.json({ jobs: [] });
+    if (path === config.readinessPath) return Response.json({ value: readinessRows });
     throw new Error(`Unexpected browser request: ${requestUrl}`);
   });
   if (withSession) fixture.values.set(localSessionKey, previewToken);
@@ -459,43 +448,23 @@ async function browserApp(
   browserGlobal(t, 'sessionStorage', fixture.host.storage);
   browserGlobal(t, 'window', mode === 'local' ? windowHost : undefined);
   browserGlobal(t, 'BroadcastChannel', undefined);
-  browserGlobal(t, 'document', {
-    getElementById: element, visibilityState: 'visible',
-    querySelectorAll: () => [element('refresh-files'), element('refresh-jobs')],
-  });
+  browserGlobal(t, 'document', { getElementById: element, visibilityState: 'visible' });
   t.mock.method(globalThis, 'fetch', fixture.host.fetch);
   await import(`../src/web/app.js?browser-test=${++browserImport}`);
   await settleBrowser();
-  return {
-    element, responses, requests, values: fixture.values, msal,
-    poll: async () => {
-      const tick = timers.shift();
-      assert.ok(tick, 'automatic progress should be scheduled');
-      tick();
-      await settleBrowser();
-    },
-  };
+  return { element, responses, requests, values: fixture.values, msal };
 }
-
-test('browser loads file pages only when the user asks for more', async t => {
-  const app = await browserApp(t, 'local', [
-    ['/storage', Response.json({ files: [], continuationToken: 'next page' })],
-    ['/storage?continuationToken=next+page', Response.json({ files: [] })],
-  ]);
-  assert.equal(app.element('load-more-files').hidden, false);
-  assert.deepEqual(app.requests.filter(path => path.startsWith('/storage')), ['/storage']);
-  app.element('load-more-files').onclick!();
-  await settleBrowser();
-  assert.deepEqual(app.requests.filter(path => path.startsWith('/storage')),
-    ['/storage', '/storage?continuationToken=next+page']);
-  assert.equal(app.element('load-more-files').hidden, true);
-});
 
 function pendingBrowserResponse() {
   let resolve!: (response: Response) => void;
   let reject!: (error: Error) => void;
   const promise = new Promise<Response>((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
+}
+
+async function checkData(app: Awaited<ReturnType<typeof browserApp>>) {
+  app.element('check-data').onclick!();
+  await settleBrowser();
 }
 
 function assertExpiredBrowser(app: Awaited<ReturnType<typeof browserApp>>, mode: 'local' | 'entra') {
@@ -507,10 +476,10 @@ function assertExpiredBrowser(app: Awaited<ReturnType<typeof browserApp>>, mode:
   assert.equal(app.element('auth-retry').hidden, true);
   assert.equal(app.element('logout').hidden, true);
   assert.equal(app.element('workspace').hidden, true);
+  assert.equal(app.element('data-result').textContent, '');
   assert.equal(app.values.has(localSessionKey), false);
-  if (mode === 'entra') assert.equal(app.msal.activeAccount, null);
-  for (const id of ['files', 'jobs', 'traces']) assert.deepEqual(app.element(id).children, []);
-  assert.equal(app.element('function-result').textContent, '');
+  if (mode === 'local') return;
+  assert.equal(app.msal.activeAccount, null);
 }
 
 const browserFailures = [
@@ -520,76 +489,63 @@ const browserFailures = [
 ];
 
 for (const mode of ['local', 'entra'] as const) {
+  const signedIn = mode === 'local' ? 'Local preview is open.' : `Signed in as ${account.username}`;
+
+  test(`${mode} authorized browser checks the readiness procedure once and shows its rows`, async t => {
+    const app = await browserApp(t, mode);
+    assert.deepEqual(app.requests, ['/auth/config', '/auth/me', '/api/AppReady']);
+    assert.equal(app.element('workspace').hidden, false);
+    assert.equal(app.element('status').textContent, signedIn);
+    assert.equal(app.element('data-result').textContent, JSON.stringify(readinessRows, null, 2));
+    assert.equal(app.element('check-data').disabled, false);
+    await checkData(app);
+    assert.deepEqual(app.requests.slice(3), ['/api/AppReady']);
+  });
+
+  test(`${mode} browser ignores repeated data checks while one is pending`, async t => {
+    const app = await browserApp(t, mode);
+    const pending = pendingBrowserResponse();
+    t.after(() => pending.resolve(Response.json({ value: [] })));
+    app.responses.set('/api/AppReady', pending.promise);
+    await checkData(app);
+    assert.equal(app.element('check-data').disabled, true);
+    assert.equal(app.element('status').textContent, 'Checking data...');
+    await checkData(app);
+    assert.deepEqual(app.requests.slice(3), ['/api/AppReady']);
+    pending.resolve(Response.json({ value: [] }));
+    await settleBrowser();
+    assert.equal(app.element('check-data').disabled, false);
+    assert.equal(app.element('data-result').textContent, '[]');
+  });
+
   for (const failure of [
-    ...browserFailures,
-    { name: 'repeated 401', response: () => new Response(null, { status: 401 }) },
-    { name: 'repeated session expiry', response: () => new SessionExpiredError('Session ended') },
+    { name: '401', response: () => new Response(null, { status: 401 }) },
+    { name: 'session expiry', response: () => new SessionExpiredError('Session ended') },
   ]) {
-    test(`${mode} browser preserves expired recovery after ordered jobs 401 then storage ${failure.name}`, async t => {
+    test(`${mode} browser expires the session and clears data after a data ${failure.name}`, async t => {
       const app = await browserApp(t, mode);
-      const jobs = pendingBrowserResponse();
-      const files = pendingBrowserResponse();
-      t.after(() => { jobs.resolve(new Response(null, { status: 401 })); files.resolve(new Response(null, { status: 503 })); });
-      app.responses.set('/jobs', jobs.promise);
-      app.responses.set('/storage', files.promise);
-      for (const id of ['files', 'jobs', 'traces']) app.element(id).children.push('owner data');
-      app.element('function-result').textContent = 'owner result';
-      const resets = app.element('file-form').resets;
-      await app.poll();
-      app.element('refresh-files').onclick!();
-      await settleBrowser();
-      assert.deepEqual(app.requests.slice(-2), ['/jobs', '/storage']);
-      jobs.resolve(new Response(null, { status: 401 }));
-      await settleBrowser();
-      assertExpiredBrowser(app, mode);
-      assert.ok(app.element('file-form').resets > resets);
-      const response = failure.response();
-      if (response instanceof Error) files.reject(response);
-      else files.resolve(response);
-      await settleBrowser();
+      app.responses.set('/api/AppReady', failure.response());
+      await checkData(app);
       assertExpiredBrowser(app, mode);
       const requests = app.requests.length;
-      await app.poll();
-      assert.equal(app.requests.length, requests, 'expired sessions must not resume polling');
+      await checkData(app);
+      assert.equal(app.requests.length, requests, 'expired sessions must not check data again');
     });
   }
 
-  test(`${mode} browser ignores stale polling availability after storage expires the session`, async t => {
-    const app = await browserApp(t, mode);
-    const jobs = pendingBrowserResponse();
-    const files = pendingBrowserResponse();
-    t.after(() => { jobs.resolve(new Response(null, { status: 503 })); files.resolve(new Response(null, { status: 401 })); });
-    app.responses.set('/jobs', jobs.promise);
-    app.responses.set('/storage', files.promise);
-    await app.poll();
-    app.element('refresh-files').onclick!();
-    await settleBrowser();
-    assert.deepEqual(app.requests.slice(-2), ['/jobs', '/storage']);
-    files.resolve(new Response(null, { status: 401 }));
-    await settleBrowser();
-    assertExpiredBrowser(app, mode);
-    const progress = app.element('job-progress').textContent;
-    jobs.resolve(new Response(null, { status: 503 }));
-    await settleBrowser();
-    assert.equal(app.element('job-progress').textContent, progress);
-    assertExpiredBrowser(app, mode);
-  });
-
   for (const failure of browserFailures) {
-    test(`${mode} authorized browser reports storage ${failure.name} without losing the account or workspace`, async t => {
+    test(`${mode} authorized browser reports data ${failure.name} without losing the account or workspace`, async t => {
       const app = await browserApp(t, mode);
       const accountStatus = app.element('auth-status').textContent;
-      app.element('files').children.push('owner data');
-      app.responses.set('/storage', failure.response());
-      app.element('refresh-files').onclick!();
-      await settleBrowser();
+      app.responses.set('/api/AppReady', failure.response());
+      await checkData(app);
       assert.equal(app.element('auth-status').textContent, accountStatus);
       assert.equal(app.element('status').textContent, failure.message);
       assert.equal(app.element('workspace').hidden, false);
       assert.equal(app.element('login').hidden, true);
       assert.equal(app.element('logout').hidden, false);
       assert.equal(app.element('auth-retry').hidden, true);
-      assert.deepEqual(app.element('files').children, ['owner data']);
+      assert.equal(app.element('check-data').disabled, false);
       if (mode === 'local') assert.equal(app.values.has(localSessionKey), true);
       else assert.equal(app.msal.activeAccount, account);
     });
@@ -608,23 +564,6 @@ for (const mode of ['local', 'entra'] as const) {
       });
     }
   }
-
-  test(`${mode} authorized browser keeps polling after a backend availability failure`, async t => {
-    const app = await browserApp(t, mode);
-    const accountStatus = app.element('auth-status').textContent;
-    app.responses.set('/jobs', new Response(null, { status: 503 }));
-    await app.poll();
-    assert.equal(app.element('auth-status').textContent, accountStatus);
-    assert.equal(app.element('workspace').hidden, false);
-    assert.equal(app.element('status').textContent, 'Backend service is unavailable (503). Try again.');
-    assert.equal(app.element('job-progress').textContent,
-      'Automatic progress is unavailable; retrying with backoff. Check local services.');
-    const requests = app.requests.length;
-    app.responses.delete('/jobs');
-    await app.poll();
-    assert.equal(app.requests.length, requests + 1);
-    assert.equal(app.element('job-progress').textContent, 'Job progress updates automatically.');
-  });
 
   test(`${mode} browser preserves access denial without offering an availability retry`, async t => {
     const app = await browserApp(t, mode, [['/auth/me', Response.json({
@@ -660,26 +599,23 @@ for (const mode of ['local', 'entra'] as const) {
 
   test(`${mode} browser preserves expired recovery when a pending sign-out failure arrives after expiry`, async t => {
     const app = await browserApp(t, mode);
-    const jobs = pendingBrowserResponse();
+    const data = pendingBrowserResponse();
     const signOut = pendingBrowserResponse();
-    t.after(() => { jobs.resolve(new Response(null, { status: 401 })); signOut.resolve(new Response(null, { status: 503 })); });
-    app.responses.set('/jobs', jobs.promise);
+    t.after(() => { data.resolve(new Response(null, { status: 401 })); signOut.resolve(new Response(null, { status: 503 })); });
+    app.responses.set('/api/AppReady', data.promise);
     if (mode === 'local') app.responses.set('/local/session', signOut.promise);
     else t.mock.method(app.msal, 'logoutRedirect', async () => { await signOut.promise; });
-    await app.poll();
+    await checkData(app);
     app.element('logout').onclick!();
     await settleBrowser();
     assert.equal(app.element('auth-status').textContent, mode === 'local' ? 'Ending local preview...' : 'Signing out...');
-    jobs.resolve(new Response(null, { status: 401 }));
+    data.resolve(new Response(null, { status: 401 }));
     await settleBrowser();
     assertExpiredBrowser(app, mode);
     if (mode === 'local') signOut.resolve(new Response(null, { status: 503 }));
     else signOut.reject(new Error('Microsoft sign-out failed'));
     await settleBrowser();
     assertExpiredBrowser(app, mode);
-    const requests = app.requests.length;
-    await app.poll();
-    assert.equal(app.requests.length, requests, 'expired sessions must not resume polling');
   });
 }
 
@@ -706,7 +642,7 @@ test('product markup exposes semantic account lifecycle controls without a devel
   assert.match(html, /id="login" hidden>Sign in with Microsoft</);
   assert.match(html, /id="auth-retry" hidden>Try again</);
   assert.match(html, /id="auth-status" role="status" aria-live="polite"/);
-  assert.match(html, /id="load-more-files" hidden>Load more files</);
+  assert.match(html, /id="check-data">Check data</);
   assert.match(html, /id="status" role="status" aria-live="polite"/);
-  assert.doesNotMatch(html, /development-user|select-user|local-identity|Alice|Bob/);
+  assert.doesNotMatch(html, /development-user|select-user|local-identity|Alice|Bob|load-more-files|id="jobs"/);
 });

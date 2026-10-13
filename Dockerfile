@@ -11,7 +11,6 @@ COPY dab ./dab
 COPY infra ./infra
 COPY tsconfig*.json ./
 COPY src ./src
-COPY functions ./functions
 COPY public ./public
 RUN npm run build && npm prune --omit=dev
 

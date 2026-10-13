@@ -70,7 +70,7 @@ test('pre-build diagnostics check proposed workspace ports instead of an occupie
     return port === 18080 ? 'occupied' : 'free';
   } });
   const report = await checkSetup({ root, workspace: '30000' }, deps);
-  assert.deepEqual(checked, [30000, 30001, 30003, 30004, 30002]);
+  assert.deepEqual(checked, [30000, 30001]);
   assert.equal(report.ready, true);
   assert.equal(report.workspace.mode, 'isolated');
   assert.deepEqual(parseArguments(['--workspace', '30000']), { workspace: '30000' });
@@ -122,7 +122,7 @@ test('role-based-data reports its application configuration without blocking too
   assert.equal(unimplemented.code, 'ROLE_BASED_PROCEDURE_MISSING', 'a DAB procedure absent from sql/ must be caught before SQL startup consent');
   assert.match(unimplemented.message, /dbo\.Ready/);
   assert.match(unimplemented.nextAction, /sql\//);
-  assert.equal((await checkSetup({}, base)).checks.some(c => c.id === 'role-based-config'), false);
+  assert.equal((await checkSetup({}, base)).checks.some(c => c.id === 'role-based-config'), true, 'the only profile is always checked');
   const actions = (await checkSetup({}, fixture({ exists: async () => false }))).checks
     .filter(c => ['dependencies', 'build'].includes(c.id)).map(c => c.nextAction).join(' ');
   assert.doesNotMatch(actions, /run npm (ci|run build)/, 'raw restore/build advice bypasses the guarded consent-run path');
@@ -323,9 +323,6 @@ for (const selection of [undefined, 'legacy', 33000]) {
     deps.port = async () => 'occupied';
     const containers = [
       { owner: 'data', workspace: runtime.id, ports: `127.0.0.1:${runtime.ports.data}->5000/tcp` },
-      { owner: 'storage', workspace: runtime.id,
-        ports: `127.0.0.1:${runtime.ports.blob}->10000/tcp, 127.0.0.1:${runtime.ports.queue}->10001/tcp` },
-      { owner: 'functions', workspace: runtime.id, ports: `127.0.0.1:${runtime.ports.functions}->80/tcp` },
     ];
     deps.run = (cmd, args) => {
       if (args[0] !== 'ps') return run(cmd, args);
@@ -333,7 +330,7 @@ for (const selection of [undefined, 'legacy', 33000]) {
       return Promise.resolve(containers.map(container => JSON.stringify(container)).join('\n'));
     };
     report = await checkSetup({ root }, deps);
-    assert.equal(report.checks.filter(c => c.code === 'OWNED_SERVICE_RUNNING').length, 4);
+    assert.equal(report.checks.filter(c => c.code === 'OWNED_SERVICE_RUNNING').length, 1);
     assert.equal(report.ready, false, 'Owned dependencies do not prove gateway ownership');
     deps.port = async () => 'unknown';
     assert.equal((await checkSetup({ root }, deps)).ready, false);

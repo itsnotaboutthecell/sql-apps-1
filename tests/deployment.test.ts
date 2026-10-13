@@ -7,44 +7,43 @@ import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { deploymentSchema, environmentKey, portFromEnvironment } from '../src/config.js';
 import {
-  armParameters, configureRedirect, deploy, expectedRbacAssignments, functionRoleId, preflight,
+  armParameters, configureRedirect, deploy, deploymentConfigHash, expectedRbacAssignments, grantsHandoffPath, preflight,
   rbacParameters, saveState, statePath, verifyRbacAssignments, withDeploymentLock,
   type DeploymentState, type DeploymentOutputs,
 } from '../src/deployment.js';
+import { roleBasedSchemaFingerprint } from '../src/role-based-profile.js';
 import type { Run } from '../src/process.js';
 
-const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps-foundation.example.json', 'utf8')));
+const example = JSON.parse(await readFile('sql-apps.example.json', 'utf8'));
+const config = deploymentSchema.parse({ ...example, imageSource: await roleBasedSchemaFingerprint(process.cwd()) });
 const outputs: DeploymentOutputs = {
   sqlServer: 'example.database.windows.net', databaseName: 'app',
   dabPrincipalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   gatewayPrincipalId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  functionPrincipalId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-  gatewayName: 'gateway', gatewayUrl: 'https://example.azurecontainerapps.io',
-  functionsName: 'functions', networkId: '/network', storageAccount: 'storage', vaultName: 'vault',
+  gatewayName: 'gateway', gatewayUrl: 'https://example.azurecontainerapps.io', networkId: '/network',
   sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo' as const, sqlAuditWorkspaceName: 'logs',
 };
-function fakeRunner(failSchema = false): { run: Run; calls: string[][] } {
+function fakeRunner(failSchema = false): { run: Run; calls: string[][]; environments: (NodeJS.ProcessEnv | undefined)[] } {
   const calls: string[][] = [];
-  const run: Run = async (command, args) => {
+  const environments: (NodeJS.ProcessEnv | undefined)[] = [];
+  const run: Run = async (command, args, options) => {
     calls.push([command, ...args]);
-    if (args[0] === 'account' && args[1] === 'get-access-token') return '{"accessToken":"test-only-sql-token"}';
+    environments.push(options?.env);
     if (args[0] === 'account') return JSON.stringify({ id: config.subscriptionId, tenantId: config.tenantId, environmentName: 'AzureCloud' });
     if (args[0] === 'ad' && args[1] === 'app') return JSON.stringify({
       id: config.apiClientId, signInAudience: 'AzureADMyOrg',
       api: { requestedAccessTokenVersion: 2, oauth2PermissionScopes: [{ value: 'access_as_user', isEnabled: true }] },
-      appRoles: [{ id: '15d91b1c-83c7-4cb6-b349-d7b8fd4b1425', value: 'Function.Invoke', isEnabled: true }],
+      appRoles: [{ id: '15d91b1c-83c7-4cb6-b349-d7b8fd4b1425', value: config.requiredRole, isEnabled: true, allowedMemberTypes: ['User'] }],
       spa: { redirectUris: ['http://localhost:8080'] },
     });
-    if (args[0] === 'ad' && args[1] === 'sp') return config.apiClientId;
     if (args[0] === 'provider') return 'Registered';
     if (args[0] === 'acr' && args[1] === 'repository') return `sha256:${'a'.repeat(64)}`;
     if (args[0] === 'role' && args[1] === 'assignment') return JSON.stringify(expectedRbacAssignments(config, outputs));
-    if (args[0] === 'rest' && args.includes('GET')) return '{"value":[]}';
     if (args[0] === 'deployment') return JSON.stringify(Object.fromEntries(Object.entries(outputs).map(([key, value]) => [key, { value }])));
     if (failSchema && args.includes('/Action:Publish')) throw new Error('SQL network unavailable');
     return '';
   };
-  return { run, calls };
+  return { run, calls, environments };
 }
 test('configuration rejects unknown platform settings and floating images', () => {
   assert.throws(() => deploymentSchema.parse({ ...config, fabric: {} }));
@@ -52,6 +51,8 @@ test('configuration rejects unknown platform settings and floating images', () =
   assert.throws(() => deploymentSchema.parse({ ...config, resourceGroup: 'rg;evil' }));
   assert.throws(() => deploymentSchema.parse({ ...config, gatewayImage: 'unrelated.azurecr.io/image:v1' }));
   assert.throws(() => deploymentSchema.parse({ ...config, gatewayImage: `${config.registryServer}/image;evil:v1` }));
+  assert.throws(() => deploymentSchema.parse({ ...config, profile: 'foundation' }));
+  assert.throws(() => deploymentSchema.parse({ ...config, functionsImage: `${config.registryServer}/fn:v1` }));
 });
 test('runtime port validation rejects empty, invalid, and out-of-range values', () => {
   assert.equal(portFromEnvironment(undefined), 8080);
@@ -60,32 +61,24 @@ test('runtime port validation rejects empty, invalid, and out-of-range values', 
 });
 test('ARM parameters exclude local routing settings and identify separate environments', () => {
   const parameters = armParameters(config, false).parameters;
-  assert.equal('subscriptionId' in parameters, false);
-  assert.equal('resourceGroup' in parameters, false);
+  for (const key of ['subscriptionId', 'resourceGroup', 'profile', 'imageSource', 'functionsImage']) {
+    assert.equal(key in parameters, false, key);
+  }
   assert.deepEqual(parameters.deployGateway, { value: false });
   assert.notEqual(environmentKey(config), environmentKey({ ...config, environment: 'prod' }));
 });
 test('RBAC handoff uses saved principals and exposes only template inputs', () => {
-  const parameters = rbacParameters(config, outputs).parameters;
-  assert.deepEqual(parameters.gatewayPrincipalId, { value: outputs.gatewayPrincipalId });
-  assert.deepEqual(parameters.dabPrincipalId, { value: outputs.dabPrincipalId });
-  assert.deepEqual(parameters.functionPrincipalId, { value: outputs.functionPrincipalId });
-  assert.equal('apiClientId' in parameters, false);
-  assert.equal('sqlAdminObjectId' in parameters, false);
-  assert.equal('gatewayImage' in parameters, false);
+  assert.deepEqual(rbacParameters(config, outputs).parameters, {
+    name: { value: config.name }, environment: { value: config.environment },
+    registryServer: { value: config.registryServer },
+    gatewayPrincipalId: { value: outputs.gatewayPrincipalId }, dabPrincipalId: { value: outputs.dabPrincipalId },
+  });
 });
-test('expected RBAC assignments are profile-specific and exactly scoped', () => {
-  const foundation = expectedRbacAssignments(config, outputs);
-  assert.equal(foundation.length, 8);
-  assert.equal(new Set(foundation.map(item => `${item.principalId}|${item.roleDefinitionId}|${item.scope}`)).size, 8);
-  assert.ok(foundation.every(item => item.scope.startsWith(
-    `/subscriptions/${config.subscriptionId}/resourceGroups/${config.resourceGroup}/providers/`,
-  )));
-  const roleBased = expectedRbacAssignments({
-    ...config, profile: 'role-based-data', requiredRole: 'AppUser', readinessPath: '/api/Ready', functionsImage: '',
-  }, { ...outputs, functionPrincipalId: '', functionsName: '', storageAccount: '', vaultName: '' });
-  assert.equal(roleBased.length, 2);
-  assert.ok(roleBased.every(item => item.label.startsWith('ACR pull')));
+test('expected RBAC assignments are exactly the two ACR pulls', () => {
+  const assignments = expectedRbacAssignments(config, outputs);
+  assert.deepEqual(assignments.map(item => item.label), ['ACR pull for gateway', 'ACR pull for data']);
+  assert.ok(assignments.every(item => item.scope ===
+    `/subscriptions/${config.subscriptionId}/resourceGroups/${config.resourceGroup}/providers/Microsoft.ContainerRegistry/registries/example`));
 });
 test('runtime RBAC verification fails closed and names every missing assignment', async () => {
   const calls: string[][] = [];
@@ -96,7 +89,7 @@ test('runtime RBAC verification fails closed and names every missing assignment'
   await assert.rejects(
     verifyRbacAssignments(config, outputs, run),
     error => error instanceof Error && /RBAC handoff is incomplete/.test(error.message) &&
-      /ACR pull for gateway/.test(error.message) && /Key Vault secrets for functions/.test(error.message) &&
+      /ACR pull for gateway/.test(error.message) && /ACR pull for data/.test(error.message) &&
       /rbac-deploy/.test(error.message),
   );
   assert.ok(calls.length > 0);
@@ -121,12 +114,13 @@ test('missing deployment images fail preflight before infrastructure side effect
   await assert.rejects(preflight(config, missing), /Image not found/);
   assert.equal(calls.some(call => call.includes('deployment')), false);
 });
-test('static build preflight does not require its not-yet-built output', async () => {
+test('preflight without image checks skips registry lookups and checks only role-based providers', async () => {
   const { run, calls } = fakeRunner();
   await preflight(config, run, false);
   assert.equal(calls.some(call => call.includes('repository')), false);
-  assert.equal(calls.some(call => call.includes('Registered')), false);
-  assert.equal(calls.filter(call => call.includes('provider')).length, 10);
+  const providers = calls.filter(call => call[1] === 'provider').map(call => call[call.indexOf('--namespace') + 1]);
+  assert.deepEqual(providers, ['Microsoft.App', 'Microsoft.Sql', 'Microsoft.Network', 'Microsoft.ManagedIdentity',
+    'Microsoft.OperationalInsights', 'Microsoft.Authorization']);
 });
 test('redirect registration preserves existing URIs and adds only the dedicated HTTPS callback', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'sql-apps-redirect-'));
@@ -167,7 +161,7 @@ async function cleanupArtifacts() {
 }
 test('deployment orders infrastructure, schema, service permission, runtime and readiness', async t => {
   t.after(cleanupArtifacts);
-  const { run, calls } = fakeRunner();
+  const { run, calls, environments } = fakeRunner();
   const stages: string[] = [];
   const state = await deploy(config, run, async () => new Response('{}'), async state => { stages.push(state.stage); });
   assert.equal(state.stage, 'ready');
@@ -177,7 +171,13 @@ test('deployment orders infrastructure, schema, service permission, runtime and 
   const runtime = calls.findIndex(call => call.includes(`${config.name}-${config.environment}-runtime`));
   assert.ok(infra < sql && sql < runtime);
   assert.ok(calls[sql]?.includes('/p:BlockOnPossibleDataLoss=True'));
-  assert.ok(calls[sql]?.includes('/AccessToken:test-only-sql-token'));
+  // A token argument is readable by other processes on the deployment host; SqlPackage must sign in itself.
+  assert.equal(calls.some(call => call.includes('get-access-token')), false);
+  assert.equal(calls[sql]?.some(arg => /^\/(AccessToken|at):/i.test(arg)), false);
+  assert.ok(calls[sql]?.some(arg => arg.startsWith('/TargetConnectionString:') &&
+    arg.includes('Authentication=Active Directory Default;')));
+  assert.equal(environments[sql]?.AZURE_TOKEN_CREDENTIALS, 'AzureCliCredential');
+  assert.equal(environments[sql]?.AZURE_TENANT_ID, config.tenantId);
 });
 test('failed schema publish does not start the data/gateway deployment or claim success', async t => {
   t.after(cleanupArtifacts);
@@ -187,33 +187,45 @@ test('failed schema publish does not start the data/gateway deployment or claim 
   assert.deepEqual(stages, ['infrastructure']);
   assert.equal(calls.some(call => call.includes(`${config.name}-${config.environment}-runtime`)), false);
 });
-test('existing function role on a later Graph page is not assigned again', async t => {
+test('deploy writes the grants handoff and passes the same grants to SqlPackage', async t => {
   t.after(cleanupArtifacts);
   const { run, calls } = fakeRunner();
-  let pages = 0;
-  const paginated: Run = async (command, args) => {
-    const result = await run(command, args);
-    if (args[0] !== 'rest' || !args.includes('GET')) return result;
-    pages++;
-    return JSON.stringify(pages === 1
-      ? { value: [], '@odata.nextLink': `https://graph.microsoft.com/v1.0/servicePrincipals/${outputs.gatewayPrincipalId}/appRoleAssignments?$skiptoken=next` }
-      : { value: [{ appRoleId: functionRoleId, resourceId: config.apiClientId }] });
-  };
-  await deploy(config, paginated, async () => new Response('{}'), async () => {});
-  assert.equal(pages, 2);
-  assert.equal(calls.some(call => call.includes('POST')), false);
+  await deploy(config, run, async () => new Response('{}'), async () => {});
+  const handoff = await readFile(grantsHandoffPath(), 'utf8');
+  assert.match(handoff, /GRANT EXECUTE ON (OBJECT::)?\[?dbo\]?\.\[?AppReady\]? TO \[sql_apps_dab\]/);
+  const argument = calls.find(call => call.includes('/Action:Publish'))?.find(arg => arg.startsWith('/v:RoleBasedProcedureGrants='));
+  assert.ok(argument);
+  assert.ok(handoff.includes(argument.slice('/v:RoleBasedProcedureGrants='.length)));
 });
-test('Graph pagination never forwards credentials to an unrelated URL', async t => {
+test('deploy refuses images built from different SQL/DAB source before any Azure change', async t => {
   t.after(cleanupArtifacts);
   const { run, calls } = fakeRunner();
-  const malicious: Run = async (command, args) => {
-    const result = await run(command, args);
-    return args[0] === 'rest' && args.includes('GET')
-      ? JSON.stringify({ value: [], '@odata.nextLink': 'https://unrelated.example/next' })
-      : result;
-  };
-  await assert.rejects(deploy(config, malicious, async () => new Response('{}'), async () => {}), /continuation URL/);
-  assert.equal(calls.some(call => call.includes('https://unrelated.example/next')), false);
+  await assert.rejects(deploy({ ...config, imageSource: 'f'.repeat(64) }, run, async () => new Response('{}'), async () => {}),
+    /run artifacts, then deploy/);
+  await assert.rejects(deploy({ ...config, imageSource: undefined }, run, async () => new Response('{}'), async () => {}),
+    /run artifacts, then deploy/);
+  assert.equal(calls.some(call => call[1] === 'deployment' || call.includes('/Action:Publish')), false);
+});
+test('a ready deployment resumes when unchanged and rolls every stage forward when the source hash changes', async t => {
+  t.after(async () => {
+    await cleanupArtifacts();
+    await unlink(statePath(config)).catch(() => {});
+  });
+  const home = await fs.realpath(process.cwd());
+  const ready = async (configHash: string) => saveState(statePath(config),
+    { environmentKey: environmentKey(config), configHash, stage: 'ready', outputs, applicationHome: home });
+  await mkdir(dirname(statePath(config)), { recursive: true });
+  await ready(await deploymentConfigHash(config));
+  const unchanged = fakeRunner();
+  await deploy(config, unchanged.run, async () => new Response('{}'), async () => {});
+  assert.equal(unchanged.calls.some(call => call[1] === 'deployment' || call.includes('/Action:Publish')), false);
+  await ready('previous-source-hash');
+  const changed = fakeRunner();
+  const stages: string[] = [];
+  await deploy(config, changed.run, async () => new Response('{}'), async state => { stages.push(state.stage); });
+  assert.deepEqual(stages, ['infrastructure', 'schema', 'runtime', 'ready']);
+  assert.ok(changed.calls.some(call => call.includes('/Action:Publish')));
+  assert.ok(changed.calls.some(call => call.includes(`${config.name}-${config.environment}-runtime`)));
 });
 test('atomic deployment state and local concurrency lock', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'sql-apps-'));

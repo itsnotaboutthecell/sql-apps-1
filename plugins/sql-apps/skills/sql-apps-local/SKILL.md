@@ -15,10 +15,10 @@ Read `docs/guides/getting-started.md` and `docs/reference/local-development.md` 
 
 ```powershell
 node "<absolute-script-path>" guide
-node "<absolute-script-path>" setup plan --profile <agreed-profile> --json
+node "<absolute-script-path>" setup plan --json
 ```
 
-Choose `role-based-data` for SQL/DAB/browser-only scope or `foundation` when files or background jobs were agreed. Stop gathering context when the plan names the next action or blocker.
+`role-based-data` (SQL, Data API builder and the browser gateway) is the only profile. If the agreed scope needs file storage or background jobs, route that part to the maintained Azure skills instead of SQL Apps. Stop gathering context when the plan names the next action or blocker.
 
 The setup coordinator probes prerequisites and is the source of truth for restore, build, workspace, startup, SQL terms and resume state. Use the standalone prerequisite diagnostic only when the plan directs you to diagnose a tool or access failure. Show the plan before approval. After explicit approval, run its printed `setup approve` command, then `setup run`; use `setup resume` after a stop or corrected blocker. Never manufacture a grant, bypass a blocker, repeat completed work or treat a nonzero result as success.
 
@@ -38,20 +38,20 @@ Run `workspace-check` before lifecycle commands. A source, binding, workspace or
 
 Reuse a responding service only when `/local/workspace` and `/health/ready` identify the intended checkout, source, workspace, profile, authentication and SQL container. A proposed URL or HTTP liveness alone is not a usable app.
 
-Use only the profile selected from the application scope:
+Lifecycle commands:
 
-- `role-based-app` and `role-based-serve`: SQL/DAB/browser for role-based data.
-- `app` and `serve`: full approved foundation.
-- `serve-sql`: advanced SQL-only work.
+- `app` (alias `role-based-app`): start SQL, Data API builder and the browser gateway (`start-sql` -> `init` -> `data` -> `serve`).
+- `serve` (alias `role-based-serve`): resume the gateway against running SQL and DAB.
+- `stop`: remove only the DAB container; SQL keeps running.
 
-Keep commands attached. Preserve SQL and Blob data on stop. Never reset volumes, regenerate credentials, stop unrelated processes or adopt a mismatched container. Recovery, maintenance, retention and destructive cleanup require their own reviewed plan and approval.
+Keep commands attached. Preserve SQL data on stop. Never reset volumes, regenerate credentials, stop unrelated processes or adopt a mismatched container. Recovery and destructive cleanup require their own reviewed plan and approval.
 
 Optional examples are a separate explicit choice. Keep root `selectedExamples: []`; do not suggest, restore or run an excluded example.
 
 ## Verify completion
 
-Publish a launch URL only after the intended server and readiness probe respond. Open that origin and verify the agreed browser action plus SQL save/reload. Verify files or jobs only when selected.
+Publish a launch URL only after the intended server and readiness probe respond. Open that origin and verify the agreed browser action plus SQL save/reload; for the starter, a signed-in user with the required role sees the readiness check pass.
 
-Give the verified URL, user flow, Ctrl+C behavior and profile-matched resume/stop command. Use `sql-apps-validation` for workflow evidence. Local preview identities are simulated; product screens use account/access states and keep test identities on the developer page.
+Give the verified URL, user flow, Ctrl+C behavior and the `serve`/`stop` resume and stop commands. Use `sql-apps-validation` for workflow evidence. Local preview identities are simulated; product screens use account/access states and keep test identities on the developer page.
 
 A useful local app is success. No Azure subscription or cloud deployment is required.

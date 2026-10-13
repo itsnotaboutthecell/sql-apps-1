@@ -128,61 +128,8 @@ test('client invokes the default fetch without binding it to the client instance
     assert.deepEqual(await client.listTodos(), []);
   } finally { globalThis.fetch = original; }
 });
-test('file and processing client methods validate output and preserve exact request shapes', async () => {
-  const id = '11111111-1111-4111-8111-111111111111';
-  const calls: { path: string; method: string; body: unknown }[] = [];
-  const client = new TodoExampleClient({
-    baseUrl: 'https://app.example', getAccessToken: async () => 'token',
-    fetch: async (url, options) => {
-      const path = new URL(String(url)).pathname;
-      const method = options?.method ?? 'GET';
-      calls.push({ path, method, body: options?.body });
-      if (method === 'DELETE') return new Response(null, { status: 204 });
-      if (method === 'POST') return Response.json({ id }, { status: 202 });
-      if (path === '/storage') return Response.json({ files: [{ name: 'note.txt', size: 12 }] });
-      return Response.json({ jobs: [{ id: id.toUpperCase(), filename: 'note.txt', status: 'queued',
-        sha256: null, byte_count: null, line_count: null, error: null }] });
-    },
-  });
-  assert.deepEqual(await client.listFiles(), { files: [{ name: 'note.txt', size: 12 }] });
-  assert.equal((await client.listJobs())[0]?.id, id);
-  assert.equal(await client.processFile('note.txt'), id);
-  await client.deleteJob(id);
-  assert.deepEqual(calls.slice(2), [
-    { path: '/jobs', method: 'POST', body: '{"name":"note.txt"}' },
-    { path: `/jobs/${id}`, method: 'DELETE', body: undefined },
-  ]);
-  for (const value of [{ files: [{ name: 'note.txt', size: -1 }] }, { jobs: [{ id: 'invalid', status: 'completed' }] }]) {
-    const invalid = new TodoExampleClient({ baseUrl: 'https://app.example', getAccessToken: async () => 'token',
-      fetch: async () => Response.json(value) });
-    await assert.rejects('files' in value ? invalid.listFiles() : invalid.listJobs());
-  }
-});
-test('file client loads bounded storage pages only when requested', async () => {
-  const requests: string[] = [];
-  const client = new TodoExampleClient({
-    baseUrl: 'https://app.example', getAccessToken: async () => 'token',
-    fetch: async url => {
-      const request = new URL(String(url));
-      requests.push(request.pathname + request.search);
-      return request.search
-        ? Response.json({ files: [{ name: 'second.txt', size: 2 }] })
-        : Response.json({ files: [{ name: 'first.txt', size: 1 }], continuationToken: 'next page' });
-    },
-  });
-  const first = await client.listFiles();
-  assert.deepEqual(first, {
-    files: [{ name: 'first.txt', size: 1 }], continuationToken: 'next page',
-  });
-  assert.deepEqual(requests, ['/storage']);
-  assert.deepEqual(await client.listFiles(first.continuationToken), {
-    files: [{ name: 'second.txt', size: 2 }],
-  });
-  assert.deepEqual(requests, ['/storage', '/storage?continuationToken=next+page']);
-});
 test('acceptance succeeds with isolated dependencies and cleans up its fixtures', async () => {
   const rows = new Map<string, { id: string; title: string; completed: boolean; owner: string }>();
-  const files = new Map<string, string>();
   const fetcher: typeof fetch = async (url, init) => {
     const path = new URL(String(url)).pathname;
     const user = new Headers(init?.headers).get('authorization');
@@ -203,23 +150,9 @@ test('acceptance succeeds with isolated dependencies and cleans up its fixtures'
       else if (init?.method === 'PATCH') row.completed = true;
       return response({});
     }
-    if (path.startsWith('/storage/')) {
-      const key = `${user}:${path}`;
-      if (init?.method === 'PUT') {
-        files.set(key, Buffer.from(init.body as ArrayBuffer).toString());
-        return new Response(null, { status: 204 });
-      }
-      if (!files.has(key)) return response({}, 404);
-      if (init?.method === 'DELETE') { files.delete(key); return new Response(null, { status: 204 }); }
-      return new Response(files.get(key));
-    }
     if (path === '/graphql') return response({ data: { todos: { items: [...rows.values()].filter(row => row.owner === user) } } });
-    if (path === '/functions/echo') return response({
-      result: { user: { oid: user, tenantId: 'tenant' }, input: JSON.parse(String(init?.body)) },
-    });
     throw new Error(`Unexpected acceptance path: ${path}`);
   };
   await smoke('https://app.example', 'a', 'b', fetcher);
   assert.equal(rows.size, 0);
-  assert.equal(files.size, 0);
 });

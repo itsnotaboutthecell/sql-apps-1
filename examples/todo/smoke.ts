@@ -10,7 +10,7 @@ const graphSchema = z.object({
 });
 
 export async function smoke(
-  origin: string, userToken: string, otherUserToken: string, fetcher: typeof fetch = fetch, functionsUrl?: string,
+  origin: string, userToken: string, otherUserToken: string, fetcher: typeof fetch = fetch,
 ): Promise<void> {
   const user = new SqlAppsClient({ baseUrl: origin, getAccessToken: async () => userToken, fetch: fetcher });
   const other = new SqlAppsClient({ baseUrl: origin, getAccessToken: async () => otherUserToken, fetch: fetcher });
@@ -20,9 +20,7 @@ export async function smoke(
     throw new Error('Two different verified users in the configured tenant are required');
   }
   const id = randomUUID();
-  const filename = `acceptance-${id}.txt`;
   let created = false;
-  let uploaded = false;
   const failures: unknown[] = [];
   try {
     await user.createTodo(`Acceptance ${id}`, id);
@@ -33,12 +31,6 @@ export async function smoke(
     if (!(await user.listTodos()).some(todo => todo.id === id && todo.completed)) throw new Error('Todo update did not persist');
     await expectDenied(() => other.updateTodo(id, { title: 'unauthorized' }));
     await expectDenied(() => other.deleteTodo(id));
-    await user.upload(filename, Buffer.from('private acceptance data'));
-    uploaded = true;
-    const downloaded = Buffer.from(await user.download(filename)).toString();
-    if (downloaded !== 'private acceptance data') throw new Error('File roundtrip payload mismatch');
-    await expectDenied(() => other.download(filename));
-    await expectDenied(() => other.deleteFile(filename));
     const graph = await user.request('/graphql', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ query: '{ todos { items { id title completed } } }' }),
@@ -54,27 +46,11 @@ export async function smoke(
     if (otherGraph.errors || !otherGraph.data || otherGraph.data.todos.items.some(todo => todo.id.toLowerCase() === id)) {
       throw new Error('GraphQL cross-user ownership check failed');
     }
-    const result = z.object({ result: z.object({
-      user: identitySchema, input: z.object({ acceptance: z.string() }),
-    }) }).parse(await user.echo({ acceptance: id }));
-    if (result.result.user.oid !== who.oid || result.result.user.tenantId !== who.tenantId || result.result.input.acceptance !== id) {
-      throw new Error('Function user context or payload mismatch');
-    }
-    if (functionsUrl) {
-      const direct = await fetcher(new URL('/api/echo', functionsUrl), {
-        method: 'POST', headers: { authorization: `Bearer ${userToken}`, 'content-type': 'application/json' },
-        body: '{}', signal: AbortSignal.timeout(10_000),
-      });
-      if (direct.status !== 401) throw new Error('Direct function user-token access was not rejected');
-    }
     const anonymous = await fetcher(new URL('/api/Todo', origin), { signal: AbortSignal.timeout(5_000) });
     if (anonymous.status !== 401) throw new Error('Anonymous API access was not rejected');
   } catch (error) {
     failures.push(error);
   } finally {
-    if (uploaded) {
-      try { await user.deleteFile(filename); } catch (error) { failures.push(error); }
-    }
     if (created) {
       try { await user.deleteTodo(id); } catch (error) { failures.push(error); }
     }

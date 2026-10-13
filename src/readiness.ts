@@ -1,4 +1,4 @@
-export type ReadinessDependency = 'data' | 'blob' | 'queue' | 'functions';
+export type ReadinessDependency = 'data';
 
 export class DependencyReadinessError extends Error {
   constructor(readonly dependency: ReadinessDependency, cause: unknown) {

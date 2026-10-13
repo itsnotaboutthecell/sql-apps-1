@@ -53,8 +53,7 @@ test('prerequisites ready never means workspace selected or launch approved', as
   assert.match(report.next.nextAction, new RegExp(`setup run --profile role-based-data --workspace ${suggested}\\b`));
   assert.doesNotMatch(report.next.nextAction, /workspace-plan/, 'workspace-plan needs a current build; setup must be usable before it');
   const launch = report.stages.find(stage => stage.id === 'launch');
-  const startup = options.profile === 'role-based-data' ? 'role-based-app' : 'app';
-  assert.match(launch.nextAction, new RegExp(`${startup} starts under the same setup approval`), 'the launch stage must say the startup is covered by the one approval');
+  assert.match(launch.nextAction, new RegExp(`app starts under the same setup approval`), 'the launch stage must say the startup is covered by the one approval');
 });
 
 test('a missing role-based configuration blocks launch with guidance instead of crashing consent planning', async t => {
@@ -70,7 +69,7 @@ test('a missing role-based configuration blocks launch with guidance instead of 
     assert.equal(launch.status, 'blocked');
     assert.equal(launch.code, 'ROLE_BASED_CONFIG_MISSING');
     assert.match(launch.nextAction, /^role-based-data\.json is not configured yet\. .*role-based-data\.example\.json/);
-    assert.equal(requested.includes('role-based-app'), false, 'startup consent must not be planned without the profile configuration');
+    assert.equal(requested.includes('app'), false, 'startup consent must not be planned without the profile configuration');
     assert.equal(report.stages.find(stage => stage.id === 'prerequisites').status, 'done');
   }
 });
@@ -199,7 +198,7 @@ test('setup passes its reviewed authentication environment to the attached launc
     },
     launch: async (root, operation, container, selected, profile, fetcher, injected) => {
       assert.equal(root, home);
-      assert.equal(operation, 'role-based-app');
+      assert.equal(operation, 'app');
       assert.equal(container, undefined);
       assert.equal(selected.id, runtime.id);
       assert.equal(profile, options.profile);
@@ -235,24 +234,24 @@ test('setup reuses the explicitly selected external SQL container without launch
 });
 
 for (const health of [
-  { name: 'absent worker', status: 503, body: { status: 'not-ready', dependency: 'functions' } },
-  { name: 'contradictory success', status: 200, body: { status: 'not-ready', dependency: 'queue' } },
+  { name: 'absent worker', status: 503, body: { status: 'not-ready', dependency: 'data' } },
+  { name: 'contradictory success', status: 200, body: { status: 'not-ready', dependency: 'data' } },
   { name: 'arbitrary success JSON', status: 200, body: {} },
   { name: 'wrong readiness state', status: 200, body: { status: 'live' } },
   { name: 'malformed JSON', status: 200, body: 'not-json' },
 ]) {
-  test(`matching unready foundation (${health.name}) is blocked without automatic relaunch`, async t => {
+  test(`matching unready gateway (${health.name}) is blocked without automatic relaunch`, async t => {
     const { home, deps } = await fixture(t);
     const runtime = runtimeFor(undefined, home);
     let executions = 0;
     let launches = 0;
-    const report = await setup.runSetup(home, { profile: 'foundation' }, {
+    const report = await setup.runSetup(home, { profile: 'role-based-data' }, {
       ...deps,
       check: async () => ({ checks: [{ required: true, status: 'action-required', code: 'EXISTING_GATEWAY_CHECK_OWNERSHIP' }] }),
       consent: async (_, request) => ({ allowed: true, request }),
       fetch: async url => String(url).endsWith('/local/workspace')
         ? Response.json({ version: 1, id: runtime.id, mode: runtime.mode, origins: runtime.origins,
-          profile: 'foundation', container: runtime.sqlContainer, sourceFingerprint: 'fixture-build', authentication: { mode: 'preview' } })
+          profile: 'role-based-data', container: runtime.sqlContainer, sourceFingerprint: 'fixture-build', authentication: { mode: 'preview' } })
         : typeof health.body === 'string' ? new Response(health.body, { status: health.status })
           : Response.json(health.body, { status: health.status }),
       execute: async () => { executions++; },
@@ -280,15 +279,15 @@ test('a reachable unready gateway does not trigger restores or builds before its
   const { home, deps } = await fixture(t);
   const runtime = runtimeFor(undefined, home);
   let commands = 0;
-  const report = await setup.runSetup(home, { profile: 'foundation' }, {
+  const report = await setup.runSetup(home, { profile: 'role-based-data' }, {
     ...deps,
     source: async () => ({ ready: true, fingerprint: 'fixture-build', build: { ready: false, code: 'BUILD_UNVERIFIED' } }),
     dependencies: async () => ({ ready: false }),
     consent: async (_, request) => ({ allowed: true, request }),
     fetch: async url => String(url).endsWith('/local/workspace')
       ? Response.json({ version: 1, id: runtime.id, mode: runtime.mode, origins: runtime.origins,
-        profile: 'foundation', container: runtime.sqlContainer, sourceFingerprint: 'fixture-build', authentication: { mode: 'preview' } })
-      : Response.json({ status: 'not-ready', dependency: 'functions' }, { status: 503 }),
+        profile: 'role-based-data', container: runtime.sqlContainer, sourceFingerprint: 'fixture-build', authentication: { mode: 'preview' } })
+      : Response.json({ status: 'not-ready', dependency: 'data' }, { status: 503 }),
     execute: async () => { commands++; },
     progress: () => {},
   });
@@ -326,7 +325,7 @@ test('external SQL startup guidance reviews the selected target instead of the o
   const { home, deps, options } = await fixture(t);
   const report = await setup.planSetup(home, { ...options, container: 'external-sql' }, deps);
   const text = setup.renderSetup(report).join('\n');
-  assert.match(text, /consent-plan role-based-app external-sql/);
+  assert.match(text, /consent-plan app external-sql/);
   assert.doesNotMatch(text, /setup approval --profile/, 'the setup bundle cannot approve external SQL selection');
 });
 
@@ -392,7 +391,7 @@ test('setup requires explicit supported capability profile and rejects cloud or 
   assert.deepEqual(setup.parseSetupArguments(['plan', '--profile', 'role-based-data', '--json']),
     { command: 'plan', options: { profile: 'role-based-data', json: true } });
   assert.throws(() => setup.parseSetupArguments(['run', '--profile', 'cloud']));
-  assert.throws(() => setup.parseSetupArguments(['run', '--profile', 'foundation', '--profile', 'foundation']));
+  assert.throws(() => setup.parseSetupArguments(['run', '--profile', 'role-based-data', '--profile', 'role-based-data']));
   assert.throws(() => setup.parseSetupArguments(['install', 'relative.json']));
 });
 
@@ -440,9 +439,9 @@ test('post-launch verification failure stops the attached child before reporting
 
 test('public setup planning rejects unsupported options before probing or selecting resources', async t => {
   const { home, deps } = await fixture(t);
-  await assert.rejects(setup.planSetup(home, { profile: 'foundation', container: '--invalid' }, deps), /Invalid/);
-  await assert.rejects(setup.planSetup(home, { profile: 'foundation', workspace: '30001' }, deps), /aligned/);
-  await assert.rejects(setup.planSetup(home, { profile: 'foundation', deploy: true }, deps), /Unknown/);
+  await assert.rejects(setup.planSetup(home, { profile: 'role-based-data', container: '--invalid' }, deps), /Invalid/);
+  await assert.rejects(setup.planSetup(home, { profile: 'role-based-data', workspace: '30001' }, deps), /aligned/);
+  await assert.rejects(setup.planSetup(home, { profile: 'role-based-data', deploy: true }, deps), /Unknown/);
 });
 
 test('approved restore and build re-plan readiness and skip already verified npm dependencies', async t => {
@@ -517,8 +516,8 @@ test('human setup output states completed results and names the checks behind a 
   const summary = setup.renderSetup({ stages: [workspace], next: workspace }).at(-1);
   assert.match(summary, /^Next: workspace/);
   assert.match(summary, /consent-plan workspace-init 21240/, 'the final next step must say what to approve, not only the effect');
-  const bundled = setup.renderSetup({ profile: 'foundation', stages: [workspace], next: workspace }).at(-1);
-  assert.match(bundled, /setup approval --profile foundation --workspace 21240/, 'profile reports point at the single approval');
+  const bundled = setup.renderSetup({ profile: 'role-based-data', stages: [workspace], next: workspace }).at(-1);
+  assert.match(bundled, /setup approval --profile role-based-data --workspace 21240/, 'profile reports point at the single approval');
 });
 
 async function processFixture(t, outcome, container) {
@@ -539,7 +538,7 @@ const server = createServer((request, response) => {
   const unready = ${JSON.stringify(outcome === 'unready')};
   response.statusCode = request.url === '/health/ready' && unready ? 503 : 200;
   response.end(JSON.stringify(request.url === '/local/workspace' ? identity :
-    unready ? { status: 'not-ready', dependency: 'functions' } : { status: 'ready' }));
+    unready ? { status: 'not-ready', dependency: 'data' } : { status: 'ready' }));
 });
 server.listen(0, '127.0.0.1', () => {
   writeFileSync('endpoint.txt', 'http://127.0.0.1:' + server.address().port);

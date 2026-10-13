@@ -23,7 +23,7 @@ export function assertConsent(home: string, request: LocalRequest): Promise<void
 export function revokeConsent(home: string, scope?: LocalScope | 'terms'): Promise<void>;
 export function acknowledgeTerms(home: string, document: string): Promise<void>;
 export const SQL_TERMS: { readonly url: string; readonly statement: string };
-export interface BundleRequest { profile: 'foundation' | 'role-based-data'; workspace?: string }
+export interface BundleRequest { profile: 'role-based-data'; workspace?: string }
 export interface BundlePlan {
   version: 1;
   home: string;

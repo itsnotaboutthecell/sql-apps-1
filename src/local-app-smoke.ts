@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { SqlAppsClient } from './client.js';
+import { ApiError, SqlAppsClient } from './client.js';
 import { developmentUsers, localAppOrigin } from './local-app.js';
-import { fileJobSchema } from './file-jobs.js';
+import type { RoleBasedProfile } from './role-based-profile.js';
 
-export async function testLocalApp(fetcher: typeof fetch = fetch): Promise<void> {
+export async function testLocalApp(profile: RoleBasedProfile, fetcher: typeof fetch = fetch): Promise<void> {
   const tokens: string[] = [];
   const failures: unknown[] = [];
   try {
-    for (const user of developmentUsers) {
+    for (const [index, user] of developmentUsers.entries()) {
       const response = await fetcher(`${localAppOrigin}/local/session`, {
         method: 'POST', headers: { origin: localAppOrigin, 'content-type': 'application/json' },
         body: JSON.stringify({ user: user.id }), signal: AbortSignal.timeout(10_000),
@@ -18,10 +18,13 @@ export async function testLocalApp(fetcher: typeof fetch = fetch): Promise<void>
       const client = new SqlAppsClient({ baseUrl: localAppOrigin, getAccessToken: async () => token, fetch: fetcher });
       const identity = z.object({ oid: z.string() }).parse(await (await client.request('/auth/me')).json());
       if (identity.oid !== user.id) throw new Error('Gateway assigned the wrong development identity');
-      z.object({ jobs: z.array(fileJobSchema.strict()) })
-        .parse(await (await client.request('/jobs')).json());
+      const status = await client.readiness(profile.readinessPath).then(() => 200,
+        (error: unknown) => { if (error instanceof ApiError) return error.status; throw error; });
+      const expected = index === 0 ? 200 : 403;
+      if (status !== expected) throw new Error(`${profile.readinessPath} returned ${status} for ${user.name}; expected ${expected}`);
     }
     if ((await fetcher(`${localAppOrigin}/auth/me`)).status !== 401) throw new Error('Gateway accepted anonymous access');
+    if ((await fetcher(`${localAppOrigin}${profile.readinessPath}`)).status !== 401) throw new Error('Gateway served data anonymously');
   } catch (error) { failures.push(error); }
   finally {
     for (const token of tokens) {

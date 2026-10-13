@@ -39,10 +39,10 @@ An AI assistant is optional for running the application. Guided app building can
 | --- | --- |
 | Node.js 22 or 24 with npm | Build and run the application and setup check. |
 | .NET SDK 8 or later | Build and publish the SQL schema. Choose SDK, not just Runtime. |
-| Docker with Linux containers | Run local SQL and application services. |
+| Docker with Linux containers | Run local SQL and Data API builder containers. |
 | Azure SQL Database container private-preview access | Download the SQL image for first use, unless a usable image is already cached or a current container is available. |
 
-Initial npm packages, SQL tools and container images require internet and disk space. Docker Desktop has [license conditions](https://docs.docker.com/subscription/desktop-license/) and is not free for every organization. No Azure CLI, host DAB, host sqlcmd or Functions Core Tools installation is needed.
+Initial npm packages, SQL tools and container images require internet and disk space. Docker Desktop has [license conditions](https://docs.docker.com/subscription/desktop-license/) and is not free for every organization. No Azure CLI, host DAB or host sqlcmd installation is needed.
 
 ### Windows
 
@@ -105,24 +105,23 @@ You do not need to acknowledge an unchanged reviewed document every session. [Re
 Once your app scope is agreed, use the dependency-free [setup coordinator](../reference/setup.md):
 
 ```powershell
-node scripts\setup.mjs plan --profile role-based-data --json
+node scripts\setup.mjs plan --json
 ```
 
-Use `role-based-data` only for the configured SQL/DAB/browser domain profile;
-use `foundation` for the agreed file/job foundation. Neither generates screens
-or selects an example. The report separates prerequisites, dependencies,
-current build, workspace, startup permissions and application acceptance.
+`role-based-data` is the only profile, so `--profile role-based-data` is
+optional. Setup does not generate screens or select an example. The report
+separates prerequisites, dependencies, current build, workspace, startup
+permissions and application acceptance.
 `setup plan` installs nothing. Install missing system tools with separate
 `setup install-plan <tool>` reviews. Everything else is one approval:
-`setup approval --profile <profile>` lists restore, build, workspace, startup
-and the SQL terms line; after you approve, `setup approve` records it and
-`setup run` continues. Licenses, preview credentials and required restarts
-remain human steps. See the reference for platform support and verification limits.
+`setup approval --profile role-based-data --workspace <base-port>` lists
+restore, build, workspace, startup and the SQL terms line; after you approve,
+`setup approve` records it and `setup run` continues. Licenses, preview
+credentials and required restarts remain human steps. See the reference for
+platform support and verification limits.
 
 - **Build your own app:** follow [Build your app](build-your-app.md).
 - **Try an implemented example:** follow the [Todo reference guide](../../examples/todo/README.md).
-- **Explore the file-processing foundation:** follow [Run locally](run-locally.md).
+- **Start, stop or resume the app:** follow [Run locally](run-locally.md).
 
-The paths use the same tools but start different capabilities. You do not need to run the full file-processing demonstration before building a data-only app.
-
-For service diagnostics and data-preserving recovery, see the [local runtime reference](../reference/local-development.md).
+For diagnostics and data-preserving recovery, see the [local runtime reference](../reference/local-development.md).

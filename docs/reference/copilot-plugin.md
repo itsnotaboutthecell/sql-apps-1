@@ -21,7 +21,7 @@ The installer:
 
 Rerunning the installer is safe for the same checkout/profile. It refuses to replace a conflicting marketplace, differently sourced plugin, or runtime binding. Unrelated existing plugins are not disabled or modified.
 
-Only [plugins/sql-apps](../../plugins/sql-apps) is the installed package: manifest, six focused skills, an MIT license and a Node launcher. Runtime code, `.sql-apps` credentials, dependencies and SQL/Blob volumes stay outside the package. **Use this local marketplace, not a direct repository-root installation**, which is the older compatibility package.
+Only [plugins/sql-apps](../../plugins/sql-apps) is the installed package: manifest, six focused skills, an MIT license and a Node launcher. Runtime code, `.sql-apps` credentials, dependencies and SQL volumes stay outside the package. **Use this local marketplace, not a direct repository-root installation**, which is the older compatibility package.
 
 ## Use the GitHub Copilot App
 
@@ -55,7 +55,7 @@ For beginners: **"Guide me through SQL Apps setup one step at a time. Ask before
 
 For building an app: **"Help me describe, run and change a useful SQL Apps app locally. Ask about its users, information and actions, not cloud architecture. Sharing is optional."** Follow the [build walkthrough](../guides/build-your-app.md). Use `guide` to recover saved decisions and `guide-save <absolute-brief-path>` to save an agreed brief. Historical evidence never replaces live acceptance or authorizes installations/cloud writes.
 
-For repeated local use, see [remembered permissions](local-consent.md). `setup approval --profile <p>` shows the single local approval (restore, build, workspace, startup, SQL terms) and `setup approve ... --approval <id>` records it after explicit human approval. The launcher's pre-build `consent-plan|consent-status <operation> [selection]`, `consent-grant|consent-grant-once <absolute-plan.json>`, `consent-terms <absolute-reviewed-document>`, `consent-revoke [scope|terms]` and `consent-run <operation> [selection]` remain for individual scopes and target the selected application checkout. Consult matching grants before asking again.
+For repeated local use, see [remembered permissions](local-consent.md). `setup approval --profile role-based-data --workspace <base-port>` shows the single local approval (restore, build, workspace, startup, SQL terms) and `setup approve ... --approval <id>` records it after explicit human approval. The launcher's pre-build `consent-plan|consent-status <operation> [selection]`, `consent-grant|consent-grant-once <absolute-plan.json>`, `consent-terms <absolute-reviewed-document>`, `consent-revoke [scope|terms]` and `consent-run <operation> [selection]` remain for individual scopes and target the selected application checkout. Consult matching grants before asking again.
 
 The local marketplace loads from disk (`source: live` in CLI output). Edit the bundled skills or launcher, run `npm run plugin:check`, then start a fresh session/restart to load changes. No Git push or plugin update is needed for this directory-backed source. After TypeScript runtime changes, separately build/restart the application as documented.
 
@@ -77,10 +77,11 @@ For a connected first-run or return journey, the same launcher exposes
 `setup plan|status|run|resume` before dependency restore or build. For example:
 
 ```powershell
-node "C:\git\sql-apps\plugins\sql-apps\scripts\sql-apps.mjs" setup plan --profile role-based-data --json
+node "C:\git\sql-apps\plugins\sql-apps\scripts\sql-apps.mjs" setup plan --json
 ```
 
-Select the profile from agreed app scope. See [Setup coordinator](setup.md) for
+`role-based-data` is the only profile, so `--profile role-based-data` is
+optional. See [Setup coordinator](setup.md) for
 workspace selection, approvals, installation plans and continuation. `setup`
 forwards arguments literally to the bound checkout's coordinator and retains
 source/binding checks. It does not change loaded skills, grant permissions,
@@ -123,7 +124,7 @@ node "C:\git\sql-apps\plugins\sql-apps\scripts\sql-apps.mjs" setup-check
 
 `guide` is also dependency-free and available before the runtime is built. It returns JSON with the four stages, saved brief, suggested next action and explicitly historical progress; it does not probe live services. `guide-save "<absolute-brief.json>"` validates and saves the agreed brief in `.sql-apps/guide.json` in the bound checkout. Both enforce the same runtime-home mismatch checks. Source changes flag saved progress for local re-verification. See [the brief contract](guide.md); do not include credentials or actual data.
 
-The guide also introduces cost awareness progressively; optional saved `costPreference` is not spending approval. The cloud-preview skill selects the approved application profile first. Azure estimates and spend analysis route to the Azure Cost plugin. The [role-based-data profile](role-based-data.md) `role-based-app`/`role-based-serve` commands are exposed by the launcher. Budgets are alerts, not spending caps. See [costs and paid growth](../guides/costs.md).
+The guide also introduces cost awareness progressively; optional saved `costPreference` is not spending approval. The cloud-preview skill confirms the `role-based-data` application first. Azure estimates and spend analysis route to the Azure Cost plugin. The launcher exposes the [role-based-data](role-based-data.md) `app`/`serve` commands and their `role-based-app`/`role-based-serve` aliases. Budgets are alerts, not spending caps. See [costs and paid growth](../guides/costs.md).
 
 If the active checkout differs from the installed binding, runtime execution is refused until you explicitly select the intended home. This also applies when the active worktree lacks the uncommitted foundation. Review the report, then select one checkout for this terminal/session:
 
@@ -134,7 +135,7 @@ node "C:\git\sql-apps\plugins\sql-apps\scripts\sql-apps.mjs" workspace-check
 
 This does not change the global binding, transfer source, or authorize copying files between worktrees. `home` and `workspace-check` remain available to diagnose mismatches. Runtime commands also require matching build provenance: `npm run build` records the source and compiled-artifact fingerprints and refuses to certify a build if source changes during compilation. Missing, stale, copied or tampered artifacts require a rebuild in the selected checkout. Source/build provenance is not live service ownership or cloud acceptance.
 
-`status` probes only loopback gateway liveness/data readiness and DAB HTTP health, with bounded timeouts and a nonzero exit on failure. It is read-only and does not create a development session or expose credentials. It does not certify worker/storage/SQL authorization. The launcher delegates local commands directly to the existing compiled CLI with the checkout as cwd, without shell interpolation; it never installs a second runtime.
+`status` probes only loopback gateway liveness/data readiness and DAB HTTP health, with bounded timeouts and a nonzero exit on failure. It is read-only and does not create a development session or expose credentials. It does not certify SQL authorization or the application's required role. The launcher delegates local commands directly to the existing compiled CLI with the checkout as cwd, without shell interpolation; it never installs a second runtime.
 
 `setup-check` instead runs the dependency-free diagnostic in the bound checkout and prints JSON before runtime compilation. An optional second argument selects an existing SQL container; it does not initialize it. Action-needed reports exit nonzero, including a healthy gateway whose ownership must still be confirmed. Do not mistake that for permission to restart it.
 It reports selected workspace mode/ports/origins and requires matching workspace labels for isolated occupied Docker ports. For a new checkout, use `workspace-plan` after building, review its proposal, and approve `workspace-init <base-port>`; use explicit `workspace-init legacy` to preserve an existing stack. The plugin passes omitted SQL arguments through to the workspace's derived default, not the global legacy container.
@@ -156,8 +157,8 @@ The `app` command remains running until stopped. If healthy services are already
 - This plugin adds skills, not MCP tools, custom UI, or another authentication layer.
 - No automatic startup hooks or cloud deployment commands are added.
 - Agents still use normal host approval/task controls; installing a plugin does not grant blanket tool permissions.
-- Retrying jobs and running maintenance mutate data; maintenance can delete expired data if retention is explicitly enabled.
-- `services-test` briefly stops/restarts owned worker/storage. Do not run it while another user is processing.
+- Writing records through the app or running SQL acceptance against shared data mutates or reads that data; confirm the target workspace first.
+- `app-test` starts its own approved stack and checks that Development Alice is admitted and Development Bob receives 403. Do not run it against a workspace another user is relying on.
 - Preserve owner checks, production authentication and unrelated/user-owned containers.
 - Cloud preparation requires separate authorization for mutations. The existing Azure template contains billed resources.
 
@@ -168,7 +169,7 @@ copilot plugin uninstall sql-apps@sql-apps-skills
 copilot plugin marketplace remove sql-apps-skills
 ```
 
-These operations remove only this plugin/marketplace registration, not the application checkout or SQL/Blob data. The small `sql-apps-local.json` runtime binding remains for future reinstalls; remove that exact file manually if no longer wanted. Do not remove the Copilot profile directory or unrelated plugins.
+These operations remove only this plugin/marketplace registration, not the application checkout or SQL data. The small `sql-apps-local.json` runtime binding remains for future reinstalls; remove that exact file manually if no longer wanted. Do not remove the Copilot profile directory or unrelated plugins.
 
 ## Replace a pre-rebrand installation
 

@@ -13,14 +13,13 @@ const checker = resolve('scripts/check-application.mjs');
 test('clean application validation rejects leftovers in each actual delivery surface', async t => {
   const root = await mkdtemp(join(tmpdir(), 'sql-apps-clean-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  for (const dir of ['src', 'public', 'dab', 'sql', 'tests', 'dist/tests', 'dist/src', 'dist/functions', 'functions']) await mkdir(join(root, dir), { recursive: true });
+  for (const dir of ['src', 'public', 'dab', 'sql', 'tests', 'dist/tests', 'dist/src']) await mkdir(join(root, dir), { recursive: true });
   await writeFile(join(root, 'application.json'), JSON.stringify({ name: 'test-app', selectedExamples: [] }));
   await writeFile(join(root, 'public/app.js'), 'console.log("orders");');
-  await mkdir(join(root, 'dist/functions/src'), { recursive: true });
-  for (const file of ['dist/src/client.js', 'dist/src/server.js', 'dist/functions/src/index.js']) {
+  for (const file of ['dist/src/client.js', 'dist/src/server.js']) {
     await writeFile(join(root, file), '');
   }
-  for (const file of ['Dockerfile', 'functions/Dockerfile', 'functions/local.Dockerfile']) {
+  for (const file of ['Dockerfile', 'dab/Dockerfile']) {
     await writeFile(join(root, file), 'COPY --from=build /app/dist/src ./dist/src');
   }
   assert.match(await run(process.execPath, [checker, root]), /Clean application passed/);
@@ -39,7 +38,7 @@ test('clean application validation rejects leftovers in each actual delivery sur
     ['sql/table.sql', 'CREATE TABLE dbo.Todos (id int);'],
     ['dist/src/client.js', 'class TodoExampleClient {}'],
     ['dist/src/component.mjs', 'class TodoExampleClient {}'],
-    ['dist/functions/worker.js', 'import "../examples/todo/client.js";'],
+    ['dist/src/worker.js', 'import "../examples/todo/client.js";'],
   ];
   for (const [path, content] of leftovers) {
     await writeFile(join(root, path), content);
@@ -79,10 +78,10 @@ const fixture = 'import { application } from "../examples/todo/application.js";'
     'COPY --from=build /app/dist/* /app/dist',
     'COPY --chown=node:node \\\n  tests ./tests',
   ]) {
-    await writeFile(join(root, 'functions/local.Dockerfile'), copy);
+    await writeFile(join(root, 'dab/Dockerfile'), copy);
     await assert.rejects(run(process.execPath, [checker, root]), /whole build/);
   }
-  await writeFile(join(root, 'functions/local.Dockerfile'), 'COPY --from=build /app/dist/src ./dist/src');
+  await writeFile(join(root, 'dab/Dockerfile'), 'COPY --from=build /app/dist/src ./dist/src');
   await rm(join(root, 'dist/src/server.js'));
   await assert.rejects(run(process.execPath, [checker, root]), /ENOENT/);
 });
@@ -141,34 +140,35 @@ test('API cleanliness requires missing entities, not auth/backend errors, and al
   assert.equal(called, false);
 });
 
-test('foundation gateway acceptance validates raw public job shape before client parsing can hide fields', async () => {
-  for (const exposePrivateKey of [false, true]) {
+test('local gateway acceptance checks role access and always cleans up sessions', async () => {
+  const profile = { profile: 'role-based-data' as const, requiredRole: 'AppUser', readinessPath: '/api/AppReady' };
+  for (const scenario of [{ bobStatus: 403, succeeds: true }, { bobStatus: 200, succeeds: false }]) {
     const identities = new Map<string, string>();
     const cleaned: string[] = [];
+    let issued = 0;
     const fetcher: typeof fetch = async (input, options) => {
       const url = new URL(String(input));
-      const token = new Headers(options?.headers).get('authorization')?.slice('Bearer '.length);
+      const token = new Headers(options?.headers).get('authorization')?.split(' ')[1];
       if (url.pathname === '/local/session' && options?.method === 'POST') {
         const { user } = JSON.parse(String(options.body));
-        const issued = `acceptance-${user}`;
-        identities.set(issued, user);
-        return Response.json({ token: issued });
+        const session = `acceptance-session-${++issued}-`.padEnd(40, 'x');
+        identities.set(session, user);
+        return Response.json({ token: session });
       }
       if (options?.method === 'DELETE') {
         assert.ok(token);
         cleaned.push(token);
         return new Response(null, { status: 204 });
       }
-      if (url.pathname === '/auth/me') return token ?
-        Response.json({ oid: identities.get(token) }) : new Response(null, { status: 401 });
-      return Response.json({ jobs: [{
-        id: '11111111-1111-4111-8111-111111111111', filename: 'acceptance.txt', status: 'queued',
-        sha256: null, byte_count: null, line_count: null, error: null,
-        ...(exposePrivateKey ? { blob_key: 'must-not-be-public' } : {}),
-      }] });
+      const user = token ? identities.get(token) : undefined;
+      if (!user) return new Response(null, { status: 401 });
+      if (url.pathname === '/auth/me') return Response.json({ oid: user });
+      assert.equal(url.pathname, profile.readinessPath);
+      const alice = user === '11111111-1111-4111-8111-111111111111';
+      return alice ? Response.json({ value: [{ ready: 1 }] }) : new Response(null, { status: scenario.bobStatus });
     };
-    if (exposePrivateKey) await assert.rejects(testLocalApp(fetcher), /Local gateway acceptance/);
-    else await testLocalApp(fetcher);
-    assert.equal(cleaned.length, exposePrivateKey ? 1 : 2);
+    if (scenario.succeeds) await testLocalApp(profile, fetcher);
+    else await assert.rejects(testLocalApp(profile, fetcher), /Local gateway acceptance/);
+    assert.equal(cleaned.length, 2);
   }
 });

@@ -1,7 +1,0 @@
-{
-  "name": "sql-apps-local-functions",
-  "version": "0.2.0",
-  "private": true,
-  "type": "module",
-  "main": "dist/functions/src/local-index.js"
-}

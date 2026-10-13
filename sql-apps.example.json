@@ -13,6 +13,5 @@
   "name": "sqlapps",
   "gatewayImage": "example.azurecr.io/sql-apps:0.2.0",
   "dabImage": "example.azurecr.io/sql-apps-dab:0.2.0",
-  "functionsImage": "",
   "registryServer": "example.azurecr.io"
 }

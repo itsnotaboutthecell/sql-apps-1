@@ -9,7 +9,7 @@
   <body>
     <main>
       <h1>SQL Apps</h1>
-      <p>Azure-native data, files, and functions.</p>
+      <p>Azure SQL Database behind Data API builder, with Microsoft Entra roles.</p>
       <section aria-label="Account and application access">
         <p id="auth-notice" hidden></p>
         <button id="login" hidden>Sign in with Microsoft</button>
@@ -19,32 +19,10 @@
       </section>
       <p id="status" role="status" aria-live="polite"></p>
       <section id="workspace" hidden>
-        <p id="service-notice" hidden>File storage and Functions are unavailable in this local SQL stack.</p>
-        <form id="file-form"><label>File <input id="file" type="file" required></label><button>Upload</button></form>
-        <section id="file-workspace" hidden>
-          <h2>Files</h2>
-          <p>Up to 4 MiB each. Uploading the same name replaces your file. Processing uses an immutable snapshot.</p>
-          <button id="refresh-files">Refresh files</button>
-          <button id="load-more-files" hidden>Load more files</button>
-          <ul id="files"></ul>
-          <p id="no-files" hidden>No files uploaded.</p>
-        </section>
-        <section id="job-workspace" hidden>
-          <h2>File processing</h2>
-          <p>Jobs run in the real local Azure Functions host. Results include SHA-256, byte and text-line counts. Failed jobs can retry their saved snapshot as a new job, preserving history.</p>
-          <p id="job-progress" role="status"></p>
-          <button id="refresh-jobs">Refresh jobs</button>
-          <ul id="jobs"></ul>
-          <p id="no-jobs" hidden>No processing jobs yet.</p>
-        </section>
-        <section id="trace-workspace" hidden>
-          <h2>Local tracing</h2>
-          <p>OpenTelemetry spans for your gateway requests and processing jobs. Queue messages connect submission and worker spans. Latest 100 spans; no file contents or credentials are recorded.</p>
-          <button id="refresh-traces">Refresh traces</button>
-          <ul id="traces"></ul>
-        </section>
-        <button id="echo">Invoke Azure Function</button>
-        <p id="function-result" role="status"></p>
+        <h2>Data</h2>
+        <p>Calls the read-only readiness procedure through the gateway and Data API builder.</p>
+        <button id="check-data">Check data</button>
+        <pre id="data-result"></pre>
       </section>
     </main>
     <script type="module" src="/app.js"></script>

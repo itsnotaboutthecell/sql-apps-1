@@ -94,14 +94,14 @@ export async function checkApplication(root = process.cwd(), model) {
     }
   }
   for (const directory of ['src', 'public', 'dab', 'sql']) await inspect(join(root, directory));
-  for (const directory of ['dist/src', 'dist/functions']) await inspect(join(root, directory));
+  await inspect(join(root, 'dist', 'src'));
   for (const directory of ['tests', 'dist/tests']) await inspect(join(root, directory), true, true);
-  for (const filename of ['dist/src/client.js', 'dist/src/server.js', 'dist/functions/src/index.js']) {
+  for (const filename of ['dist/src/client.js', 'dist/src/server.js']) {
     await inspect(join(root, filename));
   }
   await inspect(join(root, 'public', 'app.js'));
   if (model) await inspect(resolve(model));
-  for (const filename of ['Dockerfile', 'functions/Dockerfile', 'functions/local.Dockerfile']) {
+  for (const filename of ['Dockerfile', 'dab/Dockerfile']) {
     const content = await readFile(join(root, filename), 'utf8');
     for (const line of content.replace(/\\\r?\n\s*/g, ' ').split(/\r?\n/)) {
       const copy = /^\s*COPY\s+(.+)$/i.exec(line);

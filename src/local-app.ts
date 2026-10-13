@@ -7,13 +7,10 @@ import { readLocalAuthentication, type LocalAuthentication } from './local-auth.
 import { authRedirectPath } from './browser-config.js';
 import { createGateway } from './gateway.js';
 import { localOrigin, localPrincipal } from './local.js';
-import { localFunctionsOrigin, localServiceAdapters } from './local-services.js';
 import { runtimeFor } from './workspace.mjs';
 import type { RoleBasedProfile } from './role-based-profile.js';
 import { probeReadiness } from './readiness.js';
 import { projectPath } from './runtime-roots.js';
-
-type LocalAdapters = Awaited<ReturnType<typeof localServiceAdapters>>;
 
 export const localAppOrigin = runtimeFor().origins.app;
 const tenantId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -22,10 +19,9 @@ export const developmentUsers = [
   { id: '22222222-2222-4222-8222-222222222222', name: 'Development Bob' },
 ];
 
-export async function createLocalApp(fetcher: typeof fetch = fetch, services?: LocalAdapters, authorized?: RoleBasedProfile,
+export async function createLocalApp(fetcher: typeof fetch, authorized: RoleBasedProfile,
   container = runtimeFor().defaultSql, authentication: LocalAuthentication = readLocalAuthentication(), entraKey?: JWTVerifyGetKey) {
   if (process.env.NODE_ENV === 'production') throw new Error('Local development server is disabled in production');
-  if (authorized && services) throw new Error('Role-based-data excludes storage and Functions adapters');
   const provenance = z.object({ version: z.literal(2), home: z.literal(runtimeFor().home),
     sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
     toolingFingerprint: z.string().regex(/^[a-f0-9]{64}$/) })
@@ -38,59 +34,40 @@ export async function createLocalApp(fetcher: typeof fetch = fetch, services?: L
       sessions.delete(token);
       throw new Error('Local session expired; select a development user again');
     }
-    return { oid: session.oid, tenantId, ...(authorized ? {
-      roles: session.oid === developmentUsers[0]!.id ? [authorized.requiredRole] : [],
-    } : {}) };
+    return { oid: session.oid, tenantId,
+      roles: session.oid === developmentUsers[0]!.id ? [authorized.requiredRole] : [] };
   };
   const identity: VerifyUser = authentication.mode === 'entra'
     ? entraVerifier(authentication.tenantId, authentication.clientId, entraKey) : previewIdentity;
   const gatewayTenant = authentication.mode === 'entra' ? authentication.tenantId : tenantId;
   const gatewayClient = authentication.mode === 'entra' ? authentication.clientId : tenantId;
-  const unavailable = async (): Promise<never> => {
-    throw Object.assign(new Error('This service is not configured in the local SQL development stack'), { statusCode: 503 });
-  };
   const ready = async (): Promise<void> => {
     const signal = AbortSignal.timeout(4_000);
     await probeReadiness('data', async () => {
-      const role = authorized?.requiredRole ?? 'authenticated';
-      const response = await fetcher(new URL(authorized?.readinessPath ?? '/api/FileJob?$first=1', localOrigin), {
+      const role = authorized.requiredRole;
+      const response = await fetcher(new URL(authorized.readinessPath, localOrigin), {
         headers: { 'x-ms-client-principal': localPrincipal(developmentUsers[0]!.id, 'access_as_user', role),
           'x-ms-api-role': role },
         signal, redirect: 'error',
       });
       if (!response.ok) throw new Error(`Authorized data readiness returned HTTP ${response.status}`);
-      if (authorized) await response.body?.cancel();
-      else z.object({ value: z.array(z.object({ id: z.string().uuid() })).max(1) }).parse(await response.json());
+      await response.body?.cancel();
     });
-    if (services) await services.ready(fetcher, signal);
   };
-  const capabilities = {
-    files: Boolean(services), functions: Boolean(services), ...(services ? {
-      processing: true, jobSubmission: services.settings.processing,
-      jobRetry: services.settings.processing && services.settings.jobRetry,
-      automaticProgress: services.settings.automaticProgress,
-      tracing: services.settings.tracing, progressIntervalMs: services.settings.progressIntervalMs,
-    } : {}),
-  };
-  const users = authorized ? developmentUsers.map((user, index) => ({
+  const users = developmentUsers.map((user, index) => ({
     ...user, name: `${user.name} (${index === 0 ? 'simulated user with required role' : 'simulated user without required role'})`,
-  })) : developmentUsers;
+  }));
   const app = await createGateway({
-    ...authorized,
+    requiredRole: authorized.requiredRole, readinessPath: authorized.readinessPath,
     tenantId: gatewayTenant, apiClientId: gatewayClient, dabUrl: localOrigin,
-    blobAccountUrl: 'https://unconfigured.invalid', blobContainer: 'files',
-    functionsUrl: services ? localFunctionsOrigin : 'https://unconfigured.invalid',
     publicDirectory: projectPath('public'),
   }, {
     verifyUser: identity,
-    files: services?.files ?? { put: unavailable, get: unavailable, delete: unavailable },
-    functionToken: services?.functionToken ?? unavailable,
-    ...(services ? { processing: services.processing, ...(services.telemetry ? { telemetry: services.telemetry } : {}) } : {}),
     ready,
     browserConfig: authentication.mode === 'entra' ? {
       mode: 'entra', tenantId: authentication.tenantId, clientId: authentication.clientId,
-      scope: `api://${authentication.clientId}/access_as_user`, localBackend: true, capabilities,
-    } : { mode: 'local', capabilities },
+      scope: `api://${authentication.clientId}/access_as_user`, localBackend: true, readinessPath: authorized.readinessPath,
+    } : { mode: 'local', readinessPath: authorized.readinessPath },
     requestGuard: async (request, reply) => {
       if (request.headers.host !== new URL(localAppOrigin).host) {
         return reply.code(403).send({ error: 'Use the loopback development origin' });
@@ -101,7 +78,6 @@ export async function createLocalApp(fetcher: typeof fetch = fetch, services?: L
     },
     fetch: async (url, options) => {
       const target = new URL(String(url));
-      if (services && target.origin === localFunctionsOrigin && target.pathname === '/api/echo') return fetcher(target, options);
       if (target.origin !== localOrigin) throw new Error('Local adapter only connects to the loopback data service');
       if (target.pathname === '/health') return fetcher(target, options);
       const headers = new Headers(options?.headers);
@@ -110,8 +86,8 @@ export async function createLocalApp(fetcher: typeof fetch = fetch, services?: L
       const user = await identity(token);
       headers.delete('authorization');
       headers.delete('x-ms-api-role');
-      headers.set('x-ms-client-principal', localPrincipal(user.oid, 'access_as_user', authorized?.requiredRole ?? 'authenticated'));
-      if (authorized) headers.set('x-ms-api-role', authorized.requiredRole);
+      headers.set('x-ms-client-principal', localPrincipal(user.oid, 'access_as_user', authorized.requiredRole));
+      headers.set('x-ms-api-role', authorized.requiredRole);
       return fetcher(target, { ...options, headers });
     },
   });
@@ -119,7 +95,7 @@ export async function createLocalApp(fetcher: typeof fetch = fetch, services?: L
     const runtime = runtimeFor();
     return { version: 1, id: runtime.id, mode: runtime.mode, origins: runtime.origins,
       container, sourceFingerprint: provenance.sourceFingerprint, authentication,
-      profile: authorized ? 'role-based-data' : services ? 'foundation' : 'sql-only' };
+      profile: 'role-based-data' };
   });
   if (authentication.mode === 'preview') {
     app.get('/__dev/identity', async (_request, reply) => {
@@ -163,7 +139,7 @@ export async function createLocalApp(fetcher: typeof fetch = fetch, services?: L
 const readinessStatus = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('ready') }),
   z.strictObject({ status: z.literal('not-ready'),
-    dependency: z.enum(['data', 'blob', 'queue', 'functions']).optional() }),
+    dependency: z.enum(['data']).optional() }),
 ]);
 const readinessPause = () => new Promise<void>(done => setTimeout(done, 1_000));
 type LocalApp = Awaited<ReturnType<typeof createLocalApp>>;
@@ -204,13 +180,13 @@ export async function startLocalGateway(app: LocalApp, container: string, pause 
   }
 }
 
-export async function serveLocalApp(container = runtimeFor().defaultSql, sqlOnly = false, authorized?: RoleBasedProfile): Promise<void> {
+export async function serveLocalApp(container: string, authorized: RoleBasedProfile): Promise<void> {
   const authentication = readLocalAuthentication();
-  const app = await createLocalApp(fetch, sqlOnly ? undefined : await localServiceAdapters(container), authorized, container, authentication);
+  const app = await createLocalApp(fetch, authorized, container, authentication);
   await startLocalGateway(app, container);
   console.log(`Local browser app ready at ${localAppOrigin}.`);
   console.log(authentication.mode === 'preview' ? 'Local preview identities are simulated; do not expose remotely.'
-    : 'Microsoft Entra sign-in is verified; local DAB claims and backend services remain development simulations.');
+    : 'Microsoft Entra sign-in is verified; local DAB claims remain a development simulation.');
   if (authentication.mode === 'preview') console.log(`Developer identity testing: ${new URL('/__dev/identity', localAppOrigin).href}`);
   if (authentication.mode === 'entra') console.log(`Microsoft sign-in redirect URI: ${new URL(authRedirectPath, localAppOrigin).href}`);
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {

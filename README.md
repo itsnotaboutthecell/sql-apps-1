@@ -11,7 +11,7 @@ SQL Apps gives you a working application foundation and guides for creating your
 - An equipment checkout app that records loans and returns.
 - An inventory app that helps a team find and update stock.
 - A registration app that collects and manages signups.
-- A small team workflow with records, file uploads or background file processing.
+- A small team workflow where signed-in members with the right role review and update shared records.
 
 These are ideas for your own application, not prebuilt templates. SQL Apps includes a separate [Todo reference app](examples/todo/README.md) if you want to try a concrete example first.
 
@@ -57,7 +57,7 @@ For one connected setup journey, ask your assistant to use the [setup coordinato
 
 **Your application.** Work with your AI assistant to implement and test its screens and SQL behavior in its generated repository. The project factory creates the runtime foundation, not a finished domain app. The default project has no Todo screen or sample data; examples are selected explicitly.
 
-**A useful first result.** Run the app, create a record, reload it, and make a change such as adding a field or filter. A launch URL is usable only after the intended server responds. [Run locally](docs/guides/run-locally.md) explains startup paths, scoped approvals and how to keep your data between sessions.
+**A useful first result.** Run the app, sign in as a development user and see its readiness check pass, then add your first table, stored procedure and screen. A launch URL is usable only after the intended server responds. [Run locally](docs/guides/run-locally.md) explains startup paths, scoped approvals and how to keep your data between sessions.
 
 **Sharing is optional.** Azure is the cloud target. Free tier means recurring allowances, not trial credits or unlimited usage. When you are ready to share, read [Sharing your app](docs/guides/sharing.md) and [Costs and growth](docs/guides/costs.md) before choosing a cloud path.
 
@@ -73,7 +73,7 @@ For one connected setup journey, ask your assistant to use the [setup coordinato
 | Share with other people | [Sharing your app](docs/guides/sharing.md) |
 | Find detailed commands or contribute | [Documentation index](docs/README.md) |
 
-Under the hood, every profile uses TypeScript, Azure SQL Database and Data API builder. Profiles that need files or background jobs also use Blob Storage and Azure Functions. You do not need to choose or configure cloud services to begin building locally.
+Under the hood, SQL Apps uses TypeScript, Azure SQL Database and Data API builder, with a sign-in gateway that admits only users holding the app's role. If your app later needs file storage or background jobs, add them with the maintained Azure skills rather than SQL Apps. You do not need to choose or configure cloud services to begin building locally.
 
 ## Trademarks
 

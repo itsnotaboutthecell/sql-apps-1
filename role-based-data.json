@@ -1,0 +1,5 @@
+{
+  "profile": "role-based-data",
+  "requiredRole": "AppUser",
+  "readinessPath": "/api/AppReady"
+}

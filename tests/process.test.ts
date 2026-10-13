@@ -15,16 +15,14 @@ test('command runner passes arguments literally without shell interpolation', as
   assert.equal(output, argument);
 });
 
-test('command runner redacts SQL access tokens and secret values from errors', async () => {
-  const sqlToken = 'test-only-database-access-token';
-  const secret = 'test-only-vault-value';
+test('command runner redacts declared secret values from errors', async () => {
+  const secret = 'test-only-sql-password';
   await assert.rejects(run(process.execPath, [
     '-e', 'process.stderr.write(process.argv.slice(1).join(" "));process.exitCode=7',
-    `/AccessToken:${sqlToken}`, '--value', secret,
-  ]), (error: unknown) => {
+    'password', secret,
+  ], { redact: [secret] }), (error: unknown) => {
     assert.ok(error instanceof Error);
     assert.match(error.message, /failed \(7\)/);
-    assert.equal(error.message.includes(sqlToken), false);
     assert.equal(error.message.includes(secret), false);
     assert.match(error.message, /\[REDACTED\]/);
     return true;

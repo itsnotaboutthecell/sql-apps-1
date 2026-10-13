@@ -22,14 +22,13 @@ Read the saved brief with `guide`, then the current request. Treat the requested
 - users and access;
 - records and required fields;
 - actions and validation;
-- needed capabilities;
 - the requested outcome.
 
 Read `docs/guides/build-your-app.md` only when the scope is not settled. Read the relevant part of `docs/maintainers/application-boundary.md` before implementing its contract. Summarize new decisions and explicit exclusions before editing; do not repeat settled discovery.
 
 Keep `application.json` named for the app with `selectedExamples: []`. Do not copy an example, scaffold another runtime or add capabilities outside the agreed scope.
 
-Choose `role-based-data` for SQL/DAB/browser-only apps and `foundation` only when files or background jobs are required. State any unsupported local or cloud combination instead of silently substituting a profile.
+SQL Apps has one profile, `role-based-data` (SQL, DAB and the browser gateway); the saved brief's capabilities are exactly `["data"]`. If the app needs file storage or background jobs, say so and route that part to the maintained Azure skills (for example `azure-storage`, `azure-prepare`, `azure-deploy`) instead of adding it to SQL Apps.
 
 ## Implement the slice
 

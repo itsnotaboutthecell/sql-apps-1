@@ -1,12 +1,12 @@
 # Authenticated Azure deployment reference
 
-Use this reference when deploying an authenticated application with the full Azure infrastructure template. Start with [sharing your app](../guides/sharing.md) to choose the appropriate path. For an existing pre-rebrand deployment, review [migration notes](../maintainers/naming-transition.md) first.
+Use this reference when deploying an authenticated application with the SQL Apps Azure infrastructure template. Start with [sharing your app](../guides/sharing.md) to choose the appropriate path. For an existing pre-rebrand deployment, review [migration notes](../maintainers/naming-transition.md) first.
 
-> **Existing deployments:** This reference documents SQL Apps' retained Azure deployment for the role-based-data and foundation profiles. For new projects, use maintained Azure Skills (`azure-app-onboard` when architecture is open, then `azure-prepare` -> `azure-validate` -> `azure-deploy`) and retain SQL Apps' application-specific identity, DAB, schema, and acceptance requirements. Do not mix `.azure` deployment state with the custom `npm run azure` state.
+> **Existing deployments:** This reference documents SQL Apps' retained Azure deployment for the role-based-data profile. For new projects, use maintained Azure Skills (`azure-app-onboard` when architecture is open, then `azure-prepare` -> `azure-validate` -> `azure-deploy`, with `azure-cost-optimization` and `azure-diagnostics`) and the Azure SQL skills (`build-app-on-azure-sql`, `dab-rest-and-graphql`, `deploy-app-to-azure`, `entra-id-auth`), and retain SQL Apps' application-specific identity, DAB, schema, and acceptance requirements. Do not mix `.azure` deployment state with the custom `npm run azure` state.
 
 ## Profile and deployment subject
 
-The default authenticated cloud path is the [role-based-data profile](role-based-data.md): two scale-to-zero images, human application roles, free-limit SQL and no file/job services. The foundation profile is an explicit paid full-stack opt-in that adds Functions, storage, Key Vault, S0 SQL and private endpoints. Do not add excluded services or use an anonymous demo without an agreed scope change. Review actual regional/account prices with the Azure Cost plugin before approving paid steps.
+The authenticated cloud path is the [role-based-data profile](role-based-data.md), the only SQL Apps profile: a private Azure SQL Database, Azure Container Registry images for the gateway and Data API builder (DAB), and two scale-to-zero Container Apps, with human application roles and free-limit SQL. There are no Functions, Storage or Key Vault resources. File storage or background jobs belong to maintained Azure skills, outside SQL Apps. Do not use an anonymous demo without an agreed scope change. Review actual regional/account prices with the Azure Cost plugin before approving paid steps.
 
 Keep the confirmed new application checkout/configuration/artifacts as the deployment subject. With read-only Azure authorization, discovered older resources are potential collisions, not permission to reuse or modify them. Reuse requires an explicit request and a separate compatibility/migration/cost review; existing data remains untouched.
 
@@ -16,15 +16,15 @@ The project uses Azure CLI/Bicep for infrastructure and Microsoft.Build.Sql/SqlP
 
 Run the validation commands in [Contributing](../../CONTRIBUTING.md) first. Sign into the correct tenant using `az login`; CI uses Azure Login federation. All resource commands specify the configured subscription instead of changing your global default subscription.
 
-The runtime uses stateless bearer tokens. User tokens must be v2 access tokens for the configured API, with the `access_as_user` scope. Functions require an application token with `Function.Invoke` and the exact gateway managed-identity principal. No caller-supplied identity headers are trusted.
+The runtime uses stateless bearer tokens. User tokens must be v2 access tokens for the configured API, with the `access_as_user` scope. No caller-supplied identity headers are trusted.
 
-`DAB_URL`, `FUNCTIONS_URL` and `BLOB_ACCOUNT_URL` must be exact HTTPS origins without embedded credentials, paths, queries or fragments. Runtime validation fails before startup rather than forwarding a bearer token to an insecure or ambiguous endpoint.
+`DAB_URL` must be an exact HTTPS origin without embedded credentials, paths, queries or fragments. Runtime validation fails before startup rather than forwarding a bearer token to an insecure or ambiguous endpoint.
 
 DAB returns relative REST continuation links so clients remain on the public gateway origin. The isolated Todo example tests pagination, preserving opaque tokens and rejecting unsafe links; it is not part of application delivery. Application-specific clients need equivalent pagination validation.
 
 Develop and verify the SQL/data layer first using [local development](local-development.md), without provisioning cloud resources. Local claim simulation must never be deployed; cloud DAB continues to validate Entra bearer tokens.
 
-The default cloud DAB identity gets table-scoped read and `VIEW DEFINITION` for owner-filtered FileJob reads, with private snapshot keys excluded. The local processor uses separately gated CRUD; shared SQL filter/block predicates enforce ownership independently of any Todo sample. Cloud job production remains future work. Real applications must define domain-specific entities/grants and acceptance; use update-only PATCH with `If-Match: *` where required rather than implicit upsert.
+The cloud DAB managed identity receives only `EXECUTE` and object-scoped `VIEW DEFINITION` on the authorized DAB stored procedures. Real applications must define domain-specific procedures/grants and acceptance; implement row or owner restrictions in SQL where required.
 
 ## Resource group and images
 
@@ -35,41 +35,37 @@ az group create --subscription <subscription-id> --name <resource-group> --locat
 az acr create --subscription <subscription-id> --resource-group <resource-group> --name <registry-name> --sku Basic --admin-enabled false
 ```
 
-All three image references must use an explicit version tag or digest. After filling in the configuration, build from the repository root:
+Both image references (`gatewayImage` and `dabImage`) must use an explicit version tag or digest. After filling in the configuration, build from the repository root:
 
 ```powershell
 npm run azure -- artifacts sql-apps.json
 ```
 
-`artifacts` invokes ACR builds for all three services using distinct configured version tags, resolves each result to its digest, then atomically updates your configuration only after every build succeeds. If a build fails, earlier images may exist in ACR but configuration remains unchanged. Use new version tags for each build; do not overwrite release tags. This command publishes your source to your configured Azure registry, and requires ACR build/push/read permissions.
+`artifacts` invokes ACR builds for the gateway and DAB images, resolves each result to its digest, and records `imageSource`, a fingerprint of the SQL/DAB source the images were built from. It atomically updates your configuration only after both builds succeed. If a build fails, an earlier image may exist in ACR but configuration remains unchanged. Already pinned images are rebuilt under a fresh timestamp tag, so release tags are never overwritten. This command publishes your source to your configured Azure registry, and requires ACR build/push/read permissions.
 
 Alternatively use the underlying standard Azure CLI commands:
 
 ```powershell
 az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps:0.2.0 --file Dockerfile .
 az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps-dab:0.2.0 --file dab/Dockerfile .
-az acr build --subscription <subscription-id> --registry <registry-name> --image sql-apps-functions:0.2.0 --file functions/Dockerfile .
 ```
 
-ACR tasks require suitable Azure permissions and may have region/subscription restrictions. Images are not built by `deploy`. Use immutable digests for release, not tags that are overwritten. Publishing code to a registry is an explicit operator action.
+Images built this way have no recorded `imageSource`, so `deploy` refuses them; use `artifacts` for SQL Apps deployments. ACR tasks require suitable Azure permissions and may have region/subscription restrictions. Images are not built by `deploy`. Use immutable digests for release, not tags that are overwritten. Publishing code to a registry is an explicit operator action. A legacy `functionsImage` setting is accepted only as an empty string.
 
 ## Shortest path
 
 After `az login` as the person who will administer SQL, generate a configuration
-read-only; tenant, subscription, SQL administrator and (for `role-based-data`)
-role settings are derived, so only placement is asked for:
+read-only; tenant, subscription, SQL administrator and role settings are
+derived, so only placement is asked for:
 
 ```powershell
 npm run azure -- init sql-apps.json --location westus2 --resource-group rg-sql-apps-poc --registry <name>.azurecr.io
 npm run azure -- deploy-all sql-apps.json
 ```
 
-`init` defaults to the role-based-data POC profile: free-limit serverless SQL,
-scale-to-zero gateway and DAB containers, capped logs, and no Functions,
-Storage or Key Vault. It reads `requiredRole` and `readinessPath` from
-`role-based-data.json`. The full foundation stack requires the explicit
-`--profile foundation` flag and a separate review of its EP1, S0, always-on
-replicas and private-endpoint cost floor.
+`init` writes a role-based-data configuration: free-limit serverless SQL,
+scale-to-zero gateway and DAB containers and capped logs. It reads
+`requiredRole` and `readinessPath` from `role-based-data.json`.
 
 `deploy-all` without `--approve` only lists the pending paid steps (`identity`,
 `artifacts`, `provision`, `deploy`, `status`), the exclusions and an id. Review
@@ -84,16 +80,28 @@ and rerun it to resume. Application-role assignment and smoke tests stay
 separate.
 
 Completed stages are skipped only when their saved fingerprint still matches
-the configuration and, for `role-based-data`, the SQL/DAB source. Changed image
-digests or role-based schema inputs stop `deploy-all` before any child command.
-Review that release change separately; do not delete saved state to force a
-resume or treat an old healthy gateway as the changed release.
+the configuration and the SQL/DAB source. A changed configuration or source
+makes `artifacts` and `deploy` pending again, with a new approval id to review.
+Do not delete saved state to force a resume or treat an old healthy gateway as
+the changed release.
+
+## Updating a deployment
+
+To release a change to an existing deployment:
+
+1. Edit the SQL project, `dab/dab-config.json` or the deployment configuration.
+2. Run `npm run azure -- artifacts sql-apps.json`. It rebuilds both images, retags pinned digests and records the new `imageSource`.
+3. Run `npm run azure -- deploy sql-apps.json`.
+
+`deploy` refuses images built from different SQL/DAB source than the current checkout (DAB bakes `dab-config.json` into its image); run `artifacts` again, then `deploy`. When the configuration or SQL/DAB source changed, `deploy` rolls every stage forward (infrastructure, non-destructive schema publication, runtime and readiness); an unchanged configuration resumes from its saved stage. Verify with `status` and `role-based-smoke` afterward.
+
+If a maintained deployment route (Azure skills or `azd`) applies the schema instead, run `npm run azure -- grants sql-apps.json`. It writes `dist/sql/role-based-grants.sql`, the exact DAB stored-procedure `EXECUTE` and `VIEW DEFINITION` grants SQL Apps applies, for that route to apply after it creates the DAB database user.
 
 ## Entra configuration
 
 Copy [the example](../../sql-apps.example.json) to `sql-apps.json`, or use `init` above. Fill in the target tenant/subscription, SQL administrator, resource group/region, and images.
 
-The starter uses `"name": "sqlapps"`. With environment `dev`, the gateway's Azure-generated hostname starts with `sqlapps-dev-gateway.`; the Functions hostname starts with `sqlapps-dev-fn-`. Azure supplies the remaining domain/suffix, so use the actual deployment outputs rather than constructing a URL yourself. Image repository names can remain `sql-apps`; they do not determine the browser URL.
+The starter uses `"name": "sqlapps"`. With environment `dev`, the gateway's Azure-generated hostname starts with `sqlapps-dev-gateway.`. Azure supplies the remaining domain/suffix, so use the actual deployment outputs rather than constructing a URL yourself. Image repository names can remain `sql-apps`; they do not determine the browser URL.
 
 An existing configuration with a different `name` still selects resources using that prefix. Review it before deployment. Changing the name creates/selects a different resource set and does not rename or migrate an existing app, database or URL. Preserve existing data and review Entra redirects and dependent endpoints before a separate migration.
 
@@ -103,9 +111,9 @@ Create a dedicated app registration once:
 npm run azure -- identity sql-apps.json
 ```
 
-This is an explicit create operation, not an idempotent lookup by display name. It creates one single-tenant SPA/API registration, a delegated `access_as_user` scope, a `Function.Invoke` application role, and a service principal. When the configuration came from `init` (placeholder `apiClientId`), the printed ID is saved into it; otherwise replace `apiClientId` in your real configuration with the printed ID.
+This is an explicit create operation, not an idempotent lookup by display name. It creates one single-tenant SPA/API registration, a delegated `access_as_user` scope, the configured human application role such as `AppUser` (allowed member type `User`), and a service principal. When the configuration came from `init` (placeholder `apiClientId`), the printed ID is saved into it; otherwise replace `apiClientId` in your real configuration with the printed ID.
 
-For a `role-based-data` configuration, `identity` instead creates the configured human role such as `AppUser` with allowed member type `User`; `role-based-assign` explicitly assigns approved users/groups. Verify API access-token role claims, trusted gateway-selected DAB role, entity/procedure permissions and SQL grants end to end with `role-based-smoke` and browser acceptance. Local simulation and app-side role enforcement alone do not prove Entra/cloud authorization.
+`role-based-assign` explicitly assigns approved users/groups. Verify API access-token role claims, trusted gateway-selected DAB role, procedure permissions and SQL grants end to end with `role-based-smoke` and browser acceptance. Local simulation and app-side role enforcement alone do not prove Entra/cloud authorization.
 
 An account email address is not a tenant ID. Confirm the intended directory's tenant ID, or retrieve it with an authorized read-only account query, before tenant-specific sign-in. Do not change subscription defaults or repeat generic login instructions to resolve that mismatch.
 
@@ -114,21 +122,21 @@ The registration requests v2 access tokens. The same registration is used by the
 Alternatively configure an existing dedicated registration with the same scope and application role:
 
 - Delegated scope ID: `6bb296dd-f397-4dcc-a69b-d37dfce3c555`, value `access_as_user`.
-- Application role ID: `15d91b1c-83c7-4cb6-b349-d7b8fd4b1425`, value `Function.Invoke`, allowed member type `Application`.
+- An enabled application role whose value matches `requiredRole`, allowed member type `User`.
 - Identifier URI: `api://<apiClientId>`.
 - Sign-in audience: `AzureADMyOrg`; requested access-token version: `2`.
 
-The deployment operator needs directory rights to update redirects and grant that application role to the gateway managed identity. Graph permissions and Azure resource RBAC are separate.
+The deployment operator needs directory rights to update redirects. Graph permissions and Azure resource RBAC are separate.
 
 ## SQL network deployment
 
-Both profiles disable SQL's public endpoint and retain a private endpoint.
+SQL's public endpoint is disabled and a private endpoint is retained.
 Run schema deployment on a machine/runner that can reach the VNet through
 peering/VPN or another approved network path. The `networkId` deployment
 output identifies it. The default network range is `10.42.0.0/16`; review
 conflicts before deployment.
 
-The configured `sqlAdminObjectId` must identify your migration principal or an Entra group containing it. The CLI obtains a SQL access token using Azure CLI for the configured subscription and passes it to SqlPackage without saving it. Check the selected SQL identity explicitly; Azure resource permissions do not automatically authorize database schema publishing. Error output is redacted for this token. As with SqlPackage's standard access-token interface, the deployment host must be trusted because privileged local processes can inspect process arguments.
+The configured `sqlAdminObjectId` must identify your migration principal or an Entra group containing it. SqlPackage signs in with `Authentication=Active Directory Default`, pinned to your Azure CLI sign-in (`AZURE_TOKEN_CREDENTIALS=AzureCliCredential`) and the configured tenant, so no access token is passed on the command line or saved. Sign in with `az login --tenant <tenant>` first. Check the selected SQL identity explicitly; Azure resource permissions do not automatically authorize database schema publishing.
 
 No public SQL firewall exception is added to make migrations pass. Use
 `provision` to create infrastructure and obtain its network ID before
@@ -148,10 +156,8 @@ npm run azure -- rbac-plan sql-apps.json
 npm run azure -- rbac-deploy sql-apps.json
 ```
 
-For `foundation`, this grants the three managed identities the exact ACR,
-Storage, Blob-container, and Key Vault data-plane roles required by the
-runtime. For `role-based-data`, it grants only the gateway and DAB identities
-ACR pull. `rbac-deploy` reads the resulting assignments back from their exact
+This grants only the gateway and DAB managed identities ACR pull.
+`rbac-deploy` reads the resulting assignments back from their exact
 resource scopes and fails if any principal, role, or scope does not match.
 Broader inherited grants do not satisfy this least-privilege contract.
 
@@ -172,56 +178,46 @@ npm run azure -- rbac-deploy sql-apps.json
 npm run azure -- deploy sql-apps.json
 npm run azure -- status sql-apps.json
 npm run azure -- schema sql-apps.json
-npm run azure -- smoke sql-apps.json
-npm run azure -- gateway sql-apps.json
-npm run azure -- functions sql-apps.json
-npm run azure -- static sql-apps.json
-npm run azure -- secret-set sql-apps.json example-secret
+npm run azure -- grants sql-apps.json
+npm run azure -- redirect sql-apps.json
+npm run azure -- role-based-assign sql-apps.json <user-or-group-object-id>
+npm run azure -- role-based-smoke sql-apps.json
 ```
 
-Preflight checks cloud/tenant, Bicep/SqlPackage availability, registration shape, registry existence, availability of all three images (and matching digests where specified), and required registered resource providers. Static-only builds skip the prebuilt-image check because their output does not exist yet. It does not prove all resource/Graph permissions, SKU availability, network reachability, or quota. ARM/Graph/SqlPackage failures remain explicit.
+Preflight checks cloud/tenant, Bicep/SqlPackage availability, registration shape, registry existence, availability of both images (and matching digests where specified), and required registered resource providers. It does not prove all resource/Graph permissions, SKU availability, network reachability, or quota. ARM/Graph/SqlPackage failures remain explicit.
 
-`gateway` and `functions` update only the selected service to its configured prebuilt image; they do not build images or publish SQL. Verify readiness and authenticated smoke afterward.
-
-`static` requires the currently deployed gateway image to be an immutable ACR digest and `gatewayImage` in configuration to specify a new version tag. It builds frontend assets with esbuild, layers only `public/` onto that existing runtime digest using an ACR build, resolves the result to a digest, and updates the gateway with that digest. It then atomically updates the configuration's gateway image. It does not rebuild backend code or publish SQL.
-
-`secret-set` reads `SQL_APPS_SECRET_VALUE` from the trusted deployment process. Never place a secret value in the configuration or command history. See [operations and release checks](../maintainers/operations.md) for the operator's Key Vault permissions and the server-side secret helper.
+`schema` republishes only the DACPAC and procedure grants against the deployed database; destructive changes remain blocked. `redirect` re-adds the exact SPA callback on the deployed gateway origin without removing existing redirects.
 
 Deployment sequence:
 
 1. Provision/update infrastructure and durable identities without starting new data/gateway apps.
-2. Publish the DACPAC with `BlockOnPossibleDataLoss=True` and `DropObjectsNotInSource=False`.
-3. Grant the gateway's function invocation role if absent.
-4. Deploy data and gateway apps.
-5. Add the exact HTTPS SPA callback at `/auth/redirect.html` on the actual gateway origin, preserving existing redirect URIs.
-6. Probe data-service readiness through the gateway.
+2. Verify the ACR pull assignments, then publish the DACPAC with `BlockOnPossibleDataLoss=True` and `DropObjectsNotInSource=False`, granting the DAB identity only the authorized procedure permissions.
+3. Deploy data and gateway apps.
+4. Add the exact HTTPS SPA callback at `/auth/redirect.html` on the actual gateway origin, preserving existing redirect URIs.
+5. Probe data-service readiness through the gateway.
 
 Local state is keyed by subscription/group/app/environment under `.sql-apps`. A local exclusive lock prevents simultaneous commands from this checkout. CI must also use an environment concurrency group.
 
-Readiness checks do not authenticate a user or exercise data/files/functions. Set `SQL_APPS_USER_TOKEN` and `SQL_APPS_SECOND_USER_TOKEN` to short-lived delegated access tokens for two distinct users, then run `smoke`. For both users it reads the `FileJob` entity over REST and GraphQL through the gateway, so the gateway -> DAB -> SQL path, the database policy and the excluded `blob_key` field are all proven on the deployed environment. It then checks file roundtrip, cross-user file denial, function invocation, anonymous rejection of `/auth/me`, `/api/FileJob` and `/graphql`, and cleanup. It never persists tokens. Obtain tokens through your approved sign-in tooling; do not put them in the configuration file or shell history.
-
-The smoke reads data but does not write it: DAB grants the foundation entity read-only, so cross-user *row* isolation under writes remains a live acceptance step below. The smoke creates uniquely named files and cleans them up on success/failure. Cleanup failures are reported, not ignored. It also checks direct private Function endpoint rejection, so run it from a trusted network-connected machine. It does not replace the other live acceptance steps below.
+Readiness checks do not authenticate a user or exercise domain operations. Set `SQL_APPS_USER_TOKEN` to a delegated access token for a user with the required role and `SQL_APPS_SECOND_USER_TOKEN` to one for a user without it, then run `role-based-smoke`. It checks real authorized procedure execution, denial for the user without the role, anonymous denial and rejection of caller-forged role headers. It does not create domain records and never persists tokens. Obtain tokens through your approved sign-in tooling; do not put them in the configuration file or shell history.
 
 ## Live acceptance
 
-Use two distinct Entra workforce users:
+Use two distinct Entra workforce users, one with the required role and one without:
 
-1. Sign in as A and create/update an application-specific record. Sign in as B in another browser profile; A's row must be absent. Test direct REST and GraphQL operations as both users. The foundation's file/function smoke is not a substitute for domain-specific database acceptance.
-2. Try setting/changing `owner_oid`; DAB must reject excluded fields. Test insert/update block predicates through an authorized SQL test session with `oid` and `scp` session context.
-3. Upload a file as A. B requesting/deleting the same filename must not access A's file. Test overwrite and the 4 MiB limit.
-4. Invoke `/functions/echo` with a user token. Call the private Function endpoint directly with that token from a network-connected test host; it must reject it. A missing/wrong application role must also fail.
-5. Reject missing, expired, wrong-audience, and wrong-tenant tokens. Confirm logout clears the browser account state.
-6. Redeploy without changes; resource IDs, rows, and files must remain. Test an additive schema change and a destructive change blocked by SqlPackage.
-7. Test dependency outage/readiness, runtime replica replacement, and role propagation. Record exact commands/results, not just screenshots.
-8. Run DAB's full configuration/database validation in the private environment. JSON schema validation alone is insufficient.
+1. Sign in as the authorized user and create/update an application-specific record; reload to confirm persistence. Test direct REST and GraphQL operations where the app exposes them. `role-based-smoke` is not a substitute for domain-specific database acceptance.
+2. Sign in as the user without the role. `/auth/me` must report access not allowed, and domain requests must return HTTP 403. Where the app has owner rules, confirm one authorized user cannot read or change another's rows.
+3. Reject missing, expired, wrong-audience, and wrong-tenant tokens. Confirm logout clears the browser account state.
+4. Redeploy without changes; resource IDs and rows must remain. Test an additive schema change and a destructive change blocked by SqlPackage.
+5. Test dependency outage/readiness, runtime replica replacement, and role propagation. Record exact commands/results, not just screenshots.
+6. Run DAB's full configuration/database validation in the private environment. JSON schema validation alone is insufficient.
 
-No live acceptance is implied by `npm test`; its Azure/Blob/DAB dependencies are controlled test doubles.
+No live acceptance is implied by `npm test`; its Azure/DAB dependencies are controlled test doubles.
 
 ## Browser sign-in contract
 
 Follow **Build -> Sign in -> Give access -> Publish** and the [canonical authentication reference](authentication.md). The dedicated MSAL v5 bridge is `/auth/redirect.html`, not the application root. Register the exact HTTPS callback on the actual deployed gateway origin, including its path, before accepting a new browser build with an existing registration. Preserve previously approved redirect URIs. The bridge runs only its redirect script, makes no application API calls and must not receive a `Cross-Origin-Opener-Policy` header.
 
-Public browser configuration exposes only the minimal sign-in settings, never tokens, storage credentials or service secrets. The gateway verifies signature, issuer, audience, expiry, tenant, `oid` and the delegated `access_as_user` scope. Required human application roles come from verified token claims, not caller headers. Verify approved role assignments, DAB entity/procedure permissions, SQL grants and any `oid`/`tid` owner restrictions end to end.
+Public browser configuration exposes only the minimal sign-in settings, never tokens or service secrets. The gateway verifies signature, issuer, audience, expiry, tenant, `oid` and the delegated `access_as_user` scope. Required human application roles come from verified token claims, not caller headers. Verify approved role assignments, DAB procedure permissions, SQL grants and any `oid`/`tid` owner restrictions end to end.
 
 `/auth/me` reports HTTP 200 verified identity and access even for an account without the required role; its domain requests receive HTTP 403 before DAB. An access-denied account can still sign out. HTTP 401 clears owner-specific browser data and stops authenticated requests; HTTP 403 is an operation denial, not logout. A backend outage remains a separate retryable failure and keeps the authorized account signed in.
 

@@ -56,14 +56,11 @@ test('SQL Apps identity is consistent across packages, platform manifests and ma
   assert.equal(kimi.displayName, 'SQL Apps');
   assert.equal(kimi.source, repository);
   assert.equal(JSON.parse(await readFile('gemini-extension.json', 'utf8')).name, 'sql-apps');
-  for (const [path, name] of [
-    ['package.json', 'sql-apps'], ['functions/package.json', 'sql-apps-functions'],
-    ['functions/local-package.json', 'sql-apps-local-functions'],
-  ] as const) assert.equal(JSON.parse(await readFile(path, 'utf8')).name, name);
+  assert.equal(JSON.parse(await readFile('package.json', 'utf8')).name, 'sql-apps');
   const lock = JSON.parse(await readFile('package-lock.json', 'utf8'));
   assert.equal(lock.name, 'sql-apps');
   assert.equal(lock.packages[''].name, 'sql-apps');
-  assert.deepEqual(JSON.parse(await readFile('application.json', 'utf8')), { name: 'sql-apps-foundation', selectedExamples: [] });
+  assert.deepEqual(JSON.parse(await readFile('application.json', 'utf8')), { name: 'sql-apps', selectedExamples: [] });
   assert.match(await readFile('skills/sql-apps-getting-started/SKILL.md', 'utf8'), /^---\r?\nname: sql-apps-getting-started\r?\n/);
 });
 
@@ -76,7 +73,6 @@ test('SQL Apps UI, wordmark and private-state exclusions use the new brand', asy
     const lines = (await readFile(path, 'utf8')).split(/\r?\n/);
     assert.ok(lines.includes(path === '.gitignore' ? '.sql-apps/' : '.sql-apps'));
     assert.ok(lines.includes('sql-apps.json'));
-    assert.ok(lines.includes('functions/local.settings.json'));
   }
 });
 
@@ -97,9 +93,9 @@ test('product guidance documents authentication boundaries and hosting accuratel
   ]) assert.match(authentication, requirement);
 });
 
-test('completed job output wraps long hashes in the shared browser UI', async () => {
+test('readiness output wraps long values in the shared browser UI', async () => {
   const css = await readFile(resolve('public', 'style.css'), 'utf8');
-  assert.match(css, /#jobs\s+li\s*\{[^}]*overflow-wrap:\s*anywhere\s*;?[^}]*\}/);
+  assert.match(css, /pre\s*\{[^}]*overflow-wrap:\s*anywhere\s*;?[^}]*\}/);
 });
 
 test('setup safety is enforced by executable coordinator paths', async () => {

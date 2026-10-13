@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { deploymentSchema, environmentKey, type DeploymentConfig } from './config.js';
 import { authRedirectPath } from './browser-config.js';
 import { type Run } from './process.js';
-import { imageDigest, deploymentImageFields } from './artifacts.js';
+import { imageDigest, imageFields } from './artifacts.js';
 import { validateRoleBasedCloudDab, roleBasedProcedureGrants, roleBasedSchemaFingerprint } from './role-based-profile.js';
 import { withFileLock } from './file-lock.mjs';
 import { toolingAsset } from './runtime-roots.js';
@@ -15,19 +15,14 @@ const outputSchema = z.object({
   databaseName: z.literal('app'),
   dabPrincipalId: z.string().uuid(),
   gatewayPrincipalId: z.string().uuid(),
-  functionPrincipalId: z.union([z.string().uuid(), z.literal('')]),
   gatewayName: z.string(),
   gatewayUrl: z.string(),
-  functionsName: z.string(),
   networkId: z.string(),
-  storageAccount: z.string(),
-  vaultName: z.string(),
   sqlBackupRetentionDays: z.number().int().min(1).max(35),
   sqlBackupRedundancy: z.enum(['Local', 'Zone', 'Geo', 'GeoZone']),
   sqlAuditWorkspaceName: z.string().min(1),
 });
 export type DeploymentOutputs = z.infer<typeof outputSchema>;
-export const functionRoleId = '15d91b1c-83c7-4cb6-b349-d7b8fd4b1425';
 export const delegatedScopeId = '6bb296dd-f397-4dcc-a69b-d37dfce3c555';
 export const applicationRoleId = '530d74b7-cf30-41f4-a44c-9f594cba7c63';
 export const deploymentTemplatePath = () => toolingAsset('infra', 'main.bicep');
@@ -52,58 +47,38 @@ export const deploymentStateSchema = z.strictObject({
 });
 
 export async function readState(config: DeploymentConfig): Promise<DeploymentState> {
-  let candidate: unknown = JSON.parse(await readFile(statePath(config), 'utf8'));
-  const legacy = z.object({ outputs: z.record(z.string(), z.unknown()) }).passthrough().safeParse(candidate);
-  if (legacy.success && !Object.hasOwn(legacy.data.outputs, 'functionPrincipalId')) {
-    if (config.profile !== 'role-based-data') {
-      throw new Error('Legacy foundation deployment state lacks functionPrincipalId; rerun provision before continuing.');
-    }
-    candidate = { ...legacy.data, outputs: { ...legacy.data.outputs, functionPrincipalId: '' } };
-  }
-  const state = deploymentStateSchema.parse(candidate);
+  const state = deploymentStateSchema.parse(JSON.parse(await readFile(statePath(config), 'utf8')));
   if (state.environmentKey !== environmentKey(config)) throw new Error('Deployment state belongs to a different environment');
-  if (config.profile === 'role-based-data' && state.applicationHome !== await realpath(deploymentProjectRoot())) {
-    throw new Error('Role-based deployment state belongs to a different application checkout; discovery or copied state is not reuse approval');
+  if (state.applicationHome !== await realpath(deploymentProjectRoot())) {
+    throw new Error('Deployment state belongs to a different application checkout; discovery or copied state is not reuse approval');
   }
   return state;
 }
 
 export async function deploymentConfigHash(config: DeploymentConfig): Promise<string> {
-  const hash = createHash('sha256').update(JSON.stringify(config));
-  if (config.profile === 'role-based-data') {
-    const home = await realpath(deploymentProjectRoot());
-    hash.update(home).update(await roleBasedSchemaFingerprint(home));
-  }
-  return hash.digest('hex');
+  const home = await realpath(deploymentProjectRoot());
+  return createHash('sha256').update(JSON.stringify(deploymentSchema.parse(config))).update(home)
+    .update(await roleBasedSchemaFingerprint(home)).digest('hex');
 }
 
 export function armParameters(config: DeploymentConfig, deployGateway: boolean) {
-  const { subscriptionId: _subscription, resourceGroup: _group, readinessPath: _readiness, ...parameters } = config;
-  return { parameters: Object.fromEntries(Object.entries({ ...parameters,
-    ...(config.profile === 'role-based-data' ? { readinessPath: config.readinessPath } : {}), deployGateway })
-    .filter(([, value]) => value !== undefined).map(([key, value]) => [key, { value }])) };
+  const { subscriptionId: _subscription, resourceGroup: _group, profile: _profile, functionsImage: _legacy,
+    imageSource: _source, ...parameters } = config;
+  return { parameters: Object.fromEntries(Object.entries({ ...parameters, deployGateway })
+    .map(([key, value]) => [key, { value }])) };
 }
 
 export function rbacParameters(config: DeploymentConfig, outputs: DeploymentOutputs) {
   return { parameters: {
     name: { value: config.name },
     environment: { value: config.environment },
-    profile: { value: config.profile },
     registryServer: { value: config.registryServer },
     gatewayPrincipalId: { value: outputs.gatewayPrincipalId },
     dabPrincipalId: { value: outputs.dabPrincipalId },
-    functionPrincipalId: { value: outputs.functionPrincipalId },
   } };
 }
 
-const roleIds = {
-  acrPull: '7f951dda-4ed3-4680-a7ca-43fe172d538d',
-  blobContributor: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe',
-  blobOwner: 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b',
-  queueContributor: '974c5e8b-45b9-4653-ba55-5f855dd0fb88',
-  tableContributor: '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3',
-  secretsUser: '4633458b-17de-408a-b874-0445c86b69e6',
-} as const;
+const acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d';
 
 export interface ExpectedRbacAssignment {
   label: string;
@@ -118,28 +93,11 @@ export function expectedRbacAssignments(
   const root = `/subscriptions/${config.subscriptionId}/resourceGroups/${config.resourceGroup}/providers`;
   const role = (id: string) => `/subscriptions/${config.subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/${id}`;
   const registry = `${root}/Microsoft.ContainerRegistry/registries/${config.registryServer.split('.')[0]}`;
-  const assignments: ExpectedRbacAssignment[] = [
+  return [
     { label: 'ACR pull for gateway', principalId: outputs.gatewayPrincipalId,
-      roleDefinitionId: role(roleIds.acrPull), scope: registry },
+      roleDefinitionId: role(acrPullRoleId), scope: registry },
     { label: 'ACR pull for data', principalId: outputs.dabPrincipalId,
-      roleDefinitionId: role(roleIds.acrPull), scope: registry },
-  ];
-  if (config.profile === 'role-based-data') return assignments;
-  const storage = `${root}/Microsoft.Storage/storageAccounts/${outputs.storageAccount}`;
-  const functions = outputs.functionPrincipalId;
-  return [...assignments,
-    { label: 'ACR pull for functions', principalId: functions,
-      roleDefinitionId: role(roleIds.acrPull), scope: registry },
-    { label: 'Blob data for gateway', principalId: outputs.gatewayPrincipalId,
-      roleDefinitionId: role(roleIds.blobContributor), scope: `${storage}/blobServices/default/containers/files` },
-    { label: 'Blob host storage for functions', principalId: functions,
-      roleDefinitionId: role(roleIds.blobOwner), scope: storage },
-    { label: 'Queue host storage for functions', principalId: functions,
-      roleDefinitionId: role(roleIds.queueContributor), scope: storage },
-    { label: 'Table host storage for functions', principalId: functions,
-      roleDefinitionId: role(roleIds.tableContributor), scope: storage },
-    { label: 'Key Vault secrets for functions', principalId: functions,
-      roleDefinitionId: role(roleIds.secretsUser), scope: `${root}/Microsoft.KeyVault/vaults/${outputs.vaultName}` },
+      roleDefinitionId: role(acrPullRoleId), scope: registry },
   ];
 }
 
@@ -282,43 +240,35 @@ export async function preflight(config: DeploymentConfig, run: Run, checkImages 
       allowedMemberTypes: z.array(z.string()).optional() })),
   }).parse(JSON.parse(await run('az', ['ad', 'app', 'show', '--id', config.apiClientId, '-o', 'json'])));
   if (!identity.api.oauth2PermissionScopes.some(scope => scope.value === 'access_as_user' && scope.isEnabled) ||
-      !identity.appRoles.some(role => config.profile === 'role-based-data' ?
-        role.value === config.requiredRole && role.isEnabled && role.allowedMemberTypes?.includes('User') :
-        role.id === functionRoleId && role.value === 'Function.Invoke' && role.isEnabled)) {
-    throw new Error(config.profile === 'role-based-data' ?
-      'App registration must expose access_as_user and the enabled human application role' :
-      'App registration must expose access_as_user and the documented Function.Invoke role');
+      !identity.appRoles.some(role => role.value === config.requiredRole && role.isEnabled && role.allowedMemberTypes?.includes('User'))) {
+    throw new Error('App registration must expose access_as_user and the enabled human application role');
   }
   await run('az', ['acr', 'show', '--name', config.registryServer.split('.')[0]!, '--resource-group', config.resourceGroup, '--subscription', config.subscriptionId, '-o', 'none']);
   if (checkImages) {
-    for (const field of deploymentImageFields(config)) await imageDigest(config[field], config, run);
+    for (const field of imageFields) await imageDigest(config[field], config, run);
   }
-  if (config.profile === 'role-based-data') validateRoleBasedCloudDab(JSON.parse(await readFile(deploymentProjectPath('dab', 'dab-config.json'), 'utf8')), {
-    profile: 'role-based-data', requiredRole: config.requiredRole!, readinessPath: config.readinessPath!,
-  });
-  const providers = ['Microsoft.App', 'Microsoft.Sql', 'Microsoft.Network', 'Microsoft.ManagedIdentity',
-    'Microsoft.OperationalInsights', 'Microsoft.Authorization'];
-  if (config.profile !== 'role-based-data') providers.push('Microsoft.Storage', 'Microsoft.Web', 'Microsoft.KeyVault', 'Microsoft.Insights');
-  for (const namespace of providers) {
+  validateRoleBasedCloudDab(JSON.parse(await readFile(deploymentProjectPath('dab', 'dab-config.json'), 'utf8')), config);
+  for (const namespace of ['Microsoft.App', 'Microsoft.Sql', 'Microsoft.Network', 'Microsoft.ManagedIdentity',
+    'Microsoft.OperationalInsights', 'Microsoft.Authorization']) {
     const status = (await run('az', ['provider', 'show', '--namespace', namespace, '--subscription', config.subscriptionId, '--query', 'registrationState', '-o', 'tsv'])).trim();
     if (status !== 'Registered') throw new Error(`Register resource provider ${namespace} before deploying`);
+  }
+}
+
+export async function readSavedState(config: DeploymentConfig): Promise<DeploymentState | undefined> {
+  try { return await readState(config); }
+  catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return undefined;
+    throw error;
   }
 }
 
 export async function provision(config: DeploymentConfig, run: Run): Promise<DeploymentState> {
   const configHash = await deploymentConfigHash(config);
   await preflight(config, run);
-  if (config.profile === 'role-based-data') {
-    let previous: DeploymentState | undefined;
-    try { previous = await readState(config); }
-    catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
-    if (previous) {
-      if (previous.configHash !== configHash) {
-        throw new Error('Role-based configuration or SQL/DAB source changed; provisioning cannot overwrite the saved deployment subject');
-      }
-      return previous;
-    }
-  }
+  const previous = await readSavedState(config);
+  if (previous?.configHash === configHash) return previous;
+  // A changed configuration or SQL/DAB source re-applies the idempotent infrastructure stage; deploy then rolls it out.
   const outputs = parseOutputs(await run('az', [
     'deployment', 'group', 'create', '--subscription', config.subscriptionId, '--resource-group', config.resourceGroup,
     '--name', `${config.name}-${config.environment}-infrastructure`, '--template-file', deploymentTemplatePath(),
@@ -329,7 +279,7 @@ export async function provision(config: DeploymentConfig, run: Run): Promise<Dep
     configHash,
     stage: 'infrastructure',
     outputs,
-    ...(config.profile === 'role-based-data' ? { applicationHome: await realpath('.') } : {}),
+    applicationHome: await realpath(deploymentProjectRoot()),
   };
 }
 
@@ -347,23 +297,31 @@ export async function rbacParametersFile(config: DeploymentConfig, outputs: Depl
   return path;
 }
 
+export const grantsHandoffPath = () => deploymentProjectPath('dist', 'sql', 'role-based-grants.sql');
+
+/** Writes the exact DAB procedure grants SQL Apps applies, so a maintained deployment route can apply the same set. */
+export async function writeGrantsHandoff(config: DeploymentConfig): Promise<string> {
+  const grants = roleBasedProcedureGrants(
+    JSON.parse(await readFile(deploymentProjectPath('dab', 'dab-config.json'), 'utf8')), config, 'sql_apps_dab');
+  await mkdir(dirname(grantsHandoffPath()), { recursive: true });
+  await writeFile(grantsHandoffPath(), '-- Generated by SQL Apps from dab/dab-config.json; do not edit.\n' +
+    '-- Requires the database user [sql_apps_dab] for the DAB managed identity (see sql/grant-runtime.sql).\n' +
+    `${grants}\n`);
+  return grants;
+}
+
 export async function publishSchema(config: DeploymentConfig, outputs: DeploymentOutputs, run: Run) {
-  const roleBasedGrants = config.profile === 'role-based-data' ? roleBasedProcedureGrants(
-    JSON.parse(await readFile(deploymentProjectPath('dab', 'dab-config.json'), 'utf8')),
-    { profile: 'role-based-data', requiredRole: config.requiredRole!, readinessPath: config.readinessPath! }, 'sql_apps_dab',
-  ) : '';
+  const grants = await writeGrantsHandoff(config);
   await run('dotnet', ['build', deploymentProjectPath('sql', 'database.sqlproj'), '--output', deploymentProjectPath('dist', 'sql')]);
-  const { accessToken } = z.object({ accessToken: z.string().min(1) }).parse(JSON.parse(await run('az', [
-    'account', 'get-access-token', '--subscription', config.subscriptionId, '--resource', 'https://database.windows.net/', '-o', 'json',
-  ])));
+  // SqlPackage signs in through the Azure CLI itself, so no bearer token appears in the process list.
   await run('dotnet', ['tool', 'run', 'sqlpackage', '--',
     '/Action:Publish', `/SourceFile:${deploymentProjectPath('dist', 'sql', 'database.dacpac')}`,
-    `/TargetConnectionString:Server=tcp:${outputs.sqlServer},1433;Database=app;Encrypt=True;TrustServerCertificate=False;`,
-    `/AccessToken:${accessToken}`,
+    `/TargetConnectionString:Server=tcp:${outputs.sqlServer},1433;Database=app;Encrypt=True;TrustServerCertificate=False;` +
+      'Authentication=Active Directory Default;',
     `/v:DabPrincipalId=${outputs.dabPrincipalId}`,
-    ...(config.profile === 'role-based-data' ? [`/v:RoleBasedProcedureGrants=${roleBasedGrants}`] : []),
+    `/v:RoleBasedProcedureGrants=${grants}`,
     '/p:BlockOnPossibleDataLoss=True', '/p:DropObjectsNotInSource=False',
-  ]);
+  ], { env: { AZURE_TOKEN_CREDENTIALS: 'AzureCliCredential', AZURE_TENANT_ID: config.tenantId } });
 }
 
 export async function deploy(
@@ -372,80 +330,31 @@ export async function deploy(
 ): Promise<DeploymentState> {
   await preflight(config, run);
   const configHash = await deploymentConfigHash(config);
+  if (config.imageSource !== await roleBasedSchemaFingerprint(await realpath(deploymentProjectRoot()))) {
+    throw new Error('Images were built from different SQL/DAB source (DAB bakes dab-config.json into its image); run artifacts, then deploy');
+  }
   const deployResources = async (enabled: boolean) => parseOutputs(await run('az', [
     'deployment', 'group', 'create', '--subscription', config.subscriptionId, '--resource-group', config.resourceGroup,
     '--name', `${config.name}-${config.environment}-${enabled ? 'runtime' : 'infrastructure'}`,
     '--template-file', deploymentTemplatePath(), '--parameters', `@${await parametersFile(config, enabled)}`,
     '--query', 'properties.outputs', '-o', 'json',
   ]));
-  let previous: DeploymentState | undefined;
-  if (config.profile === 'role-based-data') {
-    try { previous = await readState(config); }
-    catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
-    if (previous && previous.configHash !== configHash) throw new Error('Role-based deployment configuration or SQL/DAB source changed; review the prior deployment before resuming');
-  }
+  const saved = await readSavedState(config);
+  // Same configuration and source: resume from the saved stage. Anything changed: roll every stage forward again.
+  const previous = saved?.configHash === configHash ? saved : undefined;
   let state: DeploymentState = previous ?? { environmentKey: environmentKey(config), configHash, stage: 'infrastructure',
-    outputs: await deployResources(false), ...(config.profile === 'role-based-data' ? { applicationHome: await realpath('.') } : {}) };
+    outputs: await deployResources(false), applicationHome: await realpath(deploymentProjectRoot()) };
   await persist(state);
   await verifyRbacAssignments(config, state.outputs, run);
   if (!previous || previous.stage === 'infrastructure') await publishSchema(config, state.outputs, run);
-  if (config.profile === 'role-based-data') {
-    if (!previous || ['infrastructure', 'schema'].includes(previous.stage)) {
-      state = { ...state, stage: 'schema' };
-      await persist(state);
-      state = { ...state, stage: 'runtime', outputs: await deployResources(true) };
-      await persist(state);
-    }
-    await configureRedirect(config, state.outputs.gatewayUrl, run);
-    return await waitForReadiness(config, state, fetcher, persist);
+  if (!previous || ['infrastructure', 'schema'].includes(previous.stage)) {
+    state = { ...state, stage: 'schema' };
+    await persist(state);
+    state = { ...state, stage: 'runtime', outputs: await deployResources(true) };
+    await persist(state);
   }
-  state = { ...state, stage: 'schema' };
-  await persist(state);
-  const apiServicePrincipal = z.string().uuid().parse(
-    (await run('az', ['ad', 'sp', 'show', '--id', config.apiClientId, '--query', 'id', '-o', 'tsv'])).trim(),
-  );
-  const assignmentsUrl = `https://graph.microsoft.com/v1.0/servicePrincipals/${state.outputs.gatewayPrincipalId}/appRoleAssignments`;
-  let pageUrl: string | undefined = assignmentsUrl;
-  let hasFunctionRole = false;
-  const visited = new Set<string>();
-  while (pageUrl) {
-    if ((pageUrl !== assignmentsUrl && !pageUrl.startsWith(`${assignmentsUrl}?`)) || visited.has(pageUrl)) {
-      throw new Error('Invalid or repeated Graph role-assignment continuation URL');
-    }
-    visited.add(pageUrl);
-    const page = z.object({
-      value: z.array(z.object({ appRoleId: z.string(), resourceId: z.string() })),
-      '@odata.nextLink': z.url().optional(),
-    }).parse(JSON.parse(await run('az', ['rest', '--method', 'GET', '--url', pageUrl, '-o', 'json'])));
-    if (page.value.some(role => role.appRoleId === functionRoleId && role.resourceId === apiServicePrincipal)) {
-      hasFunctionRole = true;
-      break;
-    }
-    pageUrl = page['@odata.nextLink'];
-  }
-  if (!hasFunctionRole) {
-    const path = `${statePath(config)}.role.json`;
-    await writeFile(path, JSON.stringify({ principalId: state.outputs.gatewayPrincipalId, resourceId: apiServicePrincipal, appRoleId: functionRoleId }));
-    await run('az', ['rest', '--method', 'POST', '--url',
-      `https://graph.microsoft.com/v1.0/servicePrincipals/${state.outputs.gatewayPrincipalId}/appRoleAssignments`, '--body', `@${path}`, '-o', 'none']);
-  }
-  state = { ...state, stage: 'runtime', outputs: await deployResources(true) };
-  await persist(state);
   await configureRedirect(config, state.outputs.gatewayUrl, run);
-  for (let attempt = 0; attempt < 30; attempt++) {
-    try {
-      const response = await fetcher(new URL('/health/ready', state.outputs.gatewayUrl), { signal: AbortSignal.timeout(5_000) });
-      if (response.ok) {
-        state = { ...state, stage: 'ready' };
-        await persist(state);
-        return state;
-      }
-    } catch (error) {
-      console.error(`Readiness attempt ${attempt + 1} failed: ${error instanceof Error ? error.name : 'UnknownError'}`);
-    }
-    if (attempt < 29) await new Promise(done => setTimeout(done, 10_000));
-  }
-  throw new Error('Runtime deployed but readiness failed. Deployment state remains at runtime; inspect Container Apps logs.');
+  return await waitForReadiness(config, state, fetcher, persist);
 }
 
 export async function waitForReadiness(

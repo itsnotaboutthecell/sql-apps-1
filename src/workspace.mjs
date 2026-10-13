@@ -5,8 +5,10 @@ import { join } from 'node:path';
 import { createServer } from 'node:net';
 
 const hash = value => createHash('sha256').update(value).digest('hex').slice(0, 12);
-const keys = ['gateway', 'data', 'functions', 'blob', 'queue', 'sql'];
-const legacyPorts = { gateway: 18080, data: 15000, functions: 17071, blob: 10000, queue: 10001, sql: null };
+// Offsets inside the 10-port block stay fixed so existing isolated workspaces keep their SQL port.
+const offsets = { gateway: 0, data: 1, sql: 5 };
+const keys = Object.keys(offsets);
+const legacyPorts = { gateway: 18080, data: 15000, sql: null };
 const validBlock = value => Number.isInteger(value) && value >= 20000 && value <= 60000 && value % 10 === 0;
 
 export const workspaceFile = (root = process.cwd()) => join(root, '.sql-apps', 'workspace.json');
@@ -47,7 +49,7 @@ export function runtimeFor(container, root = process.cwd(), proposed) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(sqlContainer)) throw new Error('Invalid SQL container name');
   const suffix = hash(isolated ? `${id}/${sqlContainer}` : sqlContainer);
   const stateDirectory = isolated ? join(home, '.sql-apps', 'workspaces', id) : join(home, '.sql-apps');
-  const ports = isolated ? Object.fromEntries(keys.map((key, index) => [key, descriptor.basePort + index])) : { ...legacyPorts };
+  const ports = isolated ? Object.fromEntries(keys.map(key => [key, descriptor.basePort + offsets[key]])) : { ...legacyPorts };
   const prefix = isolated ? `sql-apps-${id}` : 'sql-apps';
   return {
     home, id, mode: descriptor?.mode ?? 'legacy-unselected', defaultSql, sqlContainer,
@@ -56,31 +58,15 @@ export function runtimeFor(container, root = process.cwd(), proposed) {
     ownsSqlName: isolated && sqlContainer === defaultSql, stateDirectory, ports,
     origins: {
       app: `http://127.0.0.1:${ports.gateway}`, data: `http://127.0.0.1:${ports.data}`,
-      functions: `http://127.0.0.1:${ports.functions}`,
     },
     names: {
-      storage: `${prefix}-storage-${suffix}`, functions: `${prefix}-functions-${suffix}`,
-      data: `${prefix}-local-data-${suffix}`, network: `${prefix}-services-${suffix}`,
+      data: `${prefix}-local-data-${suffix}`,
       sqlNetwork: `${prefix}-sql-network`,
-      state: join(stateDirectory, `services-${suffix}.json`),
       sqlState: join(stateDirectory, `local-${suffix}.json`),
       dataConfig: join(stateDirectory, `dab-local-${suffix}.json`),
     },
-    settingsPath: join(stateDirectory, 'local-settings.json'),
-    imageRepository: isolated ? `${prefix}-functions` : 'sql-apps-functions',
     labels: isolated ? ['--label', `sql-apps.workspace=${id}`] : [],
   };
-}
-
-export function functionsImage(runtime = runtimeFor()) {
-  if (runtime.mode !== 'isolated') return `${runtime.imageRepository}:local`;
-  let metadata;
-  try { metadata = JSON.parse(readFileSync(join(runtime.home, 'dist', 'build-provenance.json'), 'utf8')); }
-  catch { throw new Error('Verified build provenance is required before building a workspace Functions image. Run npm run build here.'); }
-  if (metadata.version !== 1 || metadata.home !== runtime.home || !/^[a-f0-9]{64}$/.test(metadata.artifactFingerprint)) {
-    throw new Error('Workspace Functions build provenance is invalid; rebuild in the selected checkout.');
-  }
-  return `${runtime.imageRepository}:${metadata.artifactFingerprint}`;
 }
 
 export async function portState(port) {
@@ -101,8 +87,8 @@ function candidate(home, basePort) {
 }
 
 async function inspectPorts(descriptor, probe) {
-  return Promise.all(keys.map(async (name, index) => ({ name, port: descriptor.basePort + index,
-    state: await probe(descriptor.basePort + index) })));
+  return Promise.all(keys.map(async name => ({ name, port: descriptor.basePort + offsets[name],
+    state: await probe(descriptor.basePort + offsets[name]) })));
 }
 
 export async function proposeWorkspace(root = process.cwd(), probe = portState) {

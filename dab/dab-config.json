@@ -19,16 +19,11 @@
     }
   },
   "entities": {
-    "FileJob": {
-      "source": { "object": "dbo.FileJobs", "type": "table" },
-      "rest": { "enabled": true },
-      "graphql": { "enabled": true },
-      "permissions": [{
-        "role": "authenticated",
-        "actions": [
-          { "action": "read", "fields": { "exclude": ["blob_key"] }, "policy": { "database": "@item.owner_oid eq @claims.oid" } }
-        ]
-      }]
+    "AppReady": {
+      "source": { "object": "dbo.AppReady", "type": "stored-procedure" },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": false },
+      "permissions": [{ "role": "AppUser", "actions": ["execute"] }]
     }
   }
 }

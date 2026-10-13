@@ -1,11 +1,10 @@
 export interface LocalStartupActions {
   command: (step: 'start-sql' | 'init' | 'data', container: string) => Promise<void>;
-  services: (container: string) => Promise<void>;
   serve: (container: string) => Promise<void>;
 }
 
 export async function startLocalApplication(
-  container: string, actions: LocalStartupActions, report: (message: string) => void = console.log, dataOnly = false,
+  container: string, actions: LocalStartupActions, report: (message: string) => void = console.log,
 ): Promise<void> {
   const stages = [
     {
@@ -20,10 +19,6 @@ export async function startLocalApplication(
       name: 'Data API', run: () => actions.command('data', container),
       recovery: 'Check the workspace data container and selected DAB port reported by workspace-check. Retry data for this SQL container after resolving the conflict; never stop unrelated services.',
     },
-    ...(!dataOnly ? [{
-      name: 'Storage and Functions', run: () => actions.services(container),
-      recovery: 'Preserve volumes. Check downloads/builds and workspace Blob/Queue/Functions ports reported by workspace-check; retry services for the same SQL container.',
-    }] : []),
     {
       name: 'Browser gateway', run: () => actions.serve(container),
       recovery: 'Check who owns the workspace gateway port and reuse the intended app. If free, retry serve for this SQL container; choose your development user after restart.',

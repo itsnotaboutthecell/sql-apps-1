@@ -35,8 +35,6 @@ test('cloud runtime rejects insecure or credential-bearing upstream URLs', () =>
   for (const changed of [
     { DAB_URL: 'http://data.internal' },
     { DAB_URL: 'https://user:password@data.internal' },
-    { FUNCTIONS_URL: 'http://functions.internal' },
-    { FUNCTIONS_URL: 'https://user:password@functions.internal' },
   ]) assert.throws(() => loadRuntimeConfig({ ...environment, ...changed }), /HTTPS|credentials/);
 });
 test('role-based local commands require their profile before starting any services', async t => {
@@ -80,13 +78,12 @@ test('authorized claims are retained only from validated delegated tokens', () =
   assert.deepEqual(userFromClaims({ oid, tid, scp: 'access_as_user', roles: ['AppUser'] }, tid).roles, ['AppUser']);
   assert.throws(() => userFromClaims({ oid, tid, scp: 'access_as_user', roles: 'AppUser' }, tid));
 });
-test('authorized startup omits storage and Functions stages', async () => {
+test('authorized startup runs only SQL, data and gateway stages', async () => {
   const steps: string[] = [];
   await startLocalApplication('owned-sql', {
     command: async step => { steps.push(step); },
-    services: async () => { throw new Error('Excluded service started'); },
     serve: async () => { steps.push('serve'); },
-  }, () => {}, true);
+  }, () => {});
   assert.deepEqual(steps, ['start-sql', 'init', 'data', 'serve']);
 });
 test('local authorized profile denies users without the required role and forwards only trusted authorized role', async t => {
@@ -94,7 +91,7 @@ test('local authorized profile denies users without the required role and forwar
   const app = await createLocalApp(async (_url, options) => {
     forwarded = new Headers(options?.headers);
     return Response.json({ value: [] });
-  }, undefined, profile);
+  }, profile);
   t.after(() => app.close());
   const headers = { host: new URL(localAppOrigin).host, origin: localAppOrigin };
   const session = async (user: string) => (await app.inject({
@@ -112,12 +109,14 @@ test('local authorized profile denies users without the required role and forwar
   assert.equal((await app.inject({ url: '/storage', headers: { ...headers, authorization: `Bearer ${authorized}` } })).statusCode, 404);
   assert.equal((await app.inject({ url: '/health/ready', headers })).statusCode, 200);
 });
-test('authorized deployment needs no Functions image but requires authorized role and readiness', () => {
+test('authorized deployment requires the authorized role and readiness', () => {
   const base = { subscriptionId: developmentUsers[0]!.id, tenantId: developmentUsers[0]!.id,
     apiClientId: developmentUsers[0]!.id, sqlAdminObjectId: developmentUsers[0]!.id, sqlAdminName: 'operator',
     resourceGroup: 'data-app', location: 'eastus', environment: 'dev', name: 'data-app',
     gatewayImage: 'app.azurecr.io/gateway:1', dabImage: 'app.azurecr.io/data:1', registryServer: 'app.azurecr.io' };
-  assert.equal(deploymentSchema.parse({ ...base, ...profile }).functionsImage, '');
+  assert.equal('functionsImage' in deploymentSchema.parse({ ...base, ...profile }), false);
+  assert.equal(deploymentSchema.parse({ ...base, ...profile, functionsImage: '' }).functionsImage, '');
+  assert.throws(() => deploymentSchema.parse({ ...base, ...profile, functionsImage: 'app.azurecr.io/functions:1' }));
   assert.throws(() => deploymentSchema.parse({ ...base, profile: 'role-based-data' }));
   assert.throws(() => deploymentSchema.parse(base));
 });
@@ -130,11 +129,9 @@ test('cloud authorized gateway derives the DAB role from verified claims and has
   });
   let forwarded = new Headers();
   let calls = 0;
-  const unavailable = async (): Promise<never> => { throw new Error('Excluded adapter used'); };
   const app = await createGateway(config, {
     verifyUser: async token => ({ oid: developmentUsers[0]!.id, tenantId: tid,
       roles: token === 'authorized' ? ['AppUser'] : [] }),
-    files: { put: unavailable, get: unavailable, delete: unavailable }, functionToken: unavailable,
     fetch: async (_url, options) => { calls++; forwarded = new Headers(options?.headers); return Response.json({ value: [] }); },
   });
   t.after(() => app.close());
@@ -151,11 +148,12 @@ test('cloud authorized gateway derives the DAB role from verified claims and has
   }
   const browser = (await app.inject('/auth/config')).json();
   assert.equal(browser.mode, 'entra');
-  assert.deepEqual(browser.capabilities, { files: false, functions: false });
+  assert.equal(browser.readinessPath, profile.readinessPath);
+  assert.equal('capabilities' in browser, false);
 });
 
 test('authorized local readiness exposes actual procedure failures', async t => {
-  const app = await createLocalApp(async () => new Response('{}', { status: 403 }), undefined, profile);
+  const app = await createLocalApp(async () => new Response('{}', { status: 403 }), profile);
   t.after(() => app.close());
   assert.equal((await app.inject({ url: '/health/ready', headers: { host: new URL(localAppOrigin).host } })).statusCode, 503);
 });
@@ -168,7 +166,7 @@ test('role-based initial readiness uses only the configured authorized procedure
     assert.equal(new URL(String(url)).pathname, profile.readinessPath);
     assert.equal(new Headers(options?.headers).get('x-ms-api-role'), profile.requiredRole);
     return Response.json({ value: [] });
-  }, undefined, profile);
+  }, profile);
   t.after(() => app.close());
   await waitForLocalReadiness(app, async () => { assert.fail('ready procedure must not retry'); });
   assert.equal(queries, 1);
@@ -177,7 +175,6 @@ test('role-based initial readiness uses only the configured authorized procedure
 test('role-based current-user access does not authorize denied users for domain routes', async t => {
   const tid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   let upstream = 0;
-  const unavailable = async (): Promise<never> => { throw new Error('Excluded adapter used'); };
   const app = await createGateway(loadRuntimeConfig({
     SQL_APPS_PROFILE: profile.profile, SQL_APPS_REQUIRED_ROLE: profile.requiredRole,
     SQL_APPS_READINESS_PATH: profile.readinessPath, AZURE_TENANT_ID: tid, API_CLIENT_ID: tid,
@@ -188,7 +185,6 @@ test('role-based current-user access does not authorize denied users for domain 
       return { oid: developmentUsers[0]!.id, tenantId: tid,
         roles: token === 'allowed' ? [profile.requiredRole] : [] };
     },
-    files: { put: unavailable, get: unavailable, delete: unavailable }, functionToken: unavailable,
     fetch: async () => { upstream++; return Response.json({ value: [] }); },
   });
   t.after(() => app.close());

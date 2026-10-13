@@ -11,7 +11,7 @@ If no suitable design skill is available, follow the application's existing comp
 
 `sql-apps-application` remains authoritative for domain behavior, identity, capabilities, and functional acceptance. Preserve these SQL Apps-specific UI requirements:
 
-- Product screens show real account and access states, never persona selectors.
+- Product screens show real account and access states, never persona selectors. A signed-in user without the required role sees a clear no-access state (the gateway returns 403 and `/auth/me` reports `access.allowed: false`).
 - Local test identities stay on the developer page and are not real-user onboarding.
 - Loading, empty, error, disabled, save, and reload states must reflect actual SQL/DAB outcomes.
 - Visual approval does not authorize schema, identity, data, or startup changes.

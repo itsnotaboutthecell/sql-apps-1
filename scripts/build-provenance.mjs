@@ -16,7 +16,7 @@ async function exists(path) {
 
 const generatedOutputs = [
   'dist/src',
-  'dist/functions',
+  'dist/functions', // 0.1.x output; removed on upgrade
   'dist/scripts',
   'dist/tests',
   'public/app.js',
@@ -104,9 +104,6 @@ async function buildFoundation(home) {
 async function buildProject(project, tools) {
   await mkdir(join(project, 'dist'), { recursive: true });
   await cp(join(tools, 'dist', 'src'), join(project, 'dist', 'src'), { recursive: true, force: true });
-  if (await exists(join(tools, 'dist', 'functions'))) {
-    await cp(join(tools, 'dist', 'functions'), join(project, 'dist', 'functions'), { recursive: true, force: true });
-  }
   await compileTypeScript(project, tools, 'tsconfig.json');
   const { build } = await esbuild(tools);
   if (await exists(join(project, 'src', 'web', 'app.ts'))) {

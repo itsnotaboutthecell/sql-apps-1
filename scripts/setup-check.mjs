@@ -53,9 +53,9 @@ export function parseArguments(args) {
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--json' && !options.json) options.json = true;
     else if (args[i] === '--container' && !options.container && containerPattern.test(args[i + 1] ?? '')) options.container = args[++i];
-    else if (args[i] === '--profile' && !options.profile && ['foundation', 'role-based-data'].includes(args[i + 1])) options.profile = args[++i];
+    else if (args[i] === '--profile' && !options.profile && args[i + 1] === 'role-based-data') options.profile = args[++i];
     else if (args[i] === '--workspace' && !options.workspace && (args[i + 1] === 'legacy' || /^\d{5}$/.test(args[i + 1] ?? ''))) options.workspace = args[++i];
-    else throw new Error('Usage: node scripts/setup-check.mjs [--json] [--container <existing-sql-container>] [--profile <foundation|role-based-data>] [--workspace <base-port|legacy>]');
+    else throw new Error('Usage: node scripts/setup-check.mjs [--json] [--container <existing-sql-container>] [--profile role-based-data] [--workspace <base-port|legacy>]');
   }
   return options;
 }
@@ -77,7 +77,7 @@ export async function checkSetup(options = {}, injected = {}, context = {}) {
   }
   const runtime = proposed ? runtimeFor(options.container, root, proposed) : selected;
   if (options.container && !containerPattern.test(options.container)) throw new Error('Invalid SQL container name');
-  if (options.profile && !['foundation', 'role-based-data'].includes(options.profile)) throw new Error('Invalid setup profile');
+  if (options.profile && options.profile !== 'role-based-data') throw new Error('Invalid setup profile');
   const deps = {
     platform: process.platform, architecture: process.arch, nodeVersion: process.versions.node,
     memoryBytes: totalmem(), read: path => readFile(path, 'utf8'), exists, port: portState, fetch, sqlSources: readSqlSources,
@@ -214,9 +214,7 @@ export async function checkSetup(options = {}, injected = {}, context = {}) {
         'Inspect only safe project ownership labels before reusing services.', false);
     }
   }
-  const ports = [[runtime.ports.gateway, null], [runtime.ports.data, 'data'],
-    ...(options.profile === 'role-based-data' ? [] :
-      [[runtime.ports.blob, 'storage'], [runtime.ports.queue, 'storage'], [runtime.ports.functions, 'functions']])];
+  const ports = [[runtime.ports.gateway, null], [runtime.ports.data, 'data']];
   for (const [port, owner] of ports) {
     const state = await deps.port(port);
     if (state === 'free') add(`port-${port}`, 'ready', 'PORT_FREE', `Local port ${port} is free.`, 'Available for application startup.');
@@ -239,7 +237,7 @@ export async function checkSetup(options = {}, injected = {}, context = {}) {
         'Identify the existing process/service with the user. Reuse only the intended application; never kill it automatically.');
     }
   }
-  if (options.profile === 'role-based-data') {
+  {
     const guidance = 'Copy role-based-data.example.json to role-based-data.json, choose your application role and read-only readiness path, then implement that procedure and its DAB entity (docs/reference/role-based-data.md).';
     let text;
     try { text = await deps.read(join(root, 'role-based-data.json')); }
@@ -522,7 +520,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     if (process.argv.includes('--json')) console.log(JSON.stringify({
       version: 1, ready: false, checks: [{
         id: 'diagnostic', status: 'action-required', code: 'DIAGNOSTIC_FAILED', message,
-        nextAction: 'Confirm this checkout, file permissions and usage: node scripts/setup-check.mjs [--json] [--container <existing-sql-container>] [--profile <foundation|role-based-data>] [--workspace <base-port|legacy>].',
+        nextAction: 'Confirm this checkout, file permissions and usage: node scripts/setup-check.mjs [--json] [--container <existing-sql-container>] [--profile role-based-data] [--workspace <base-port|legacy>].',
         required: true,
       }],
     }, null, 2));

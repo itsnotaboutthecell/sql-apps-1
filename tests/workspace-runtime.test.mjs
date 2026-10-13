@@ -23,17 +23,17 @@ test('workspace candidates derive distinct ports, names and state from canonical
   const one = runtimeFor(undefined, first);
   const two = runtimeFor(undefined, second);
   assert.notEqual(one.defaultSql, two.defaultSql);
-  assert.notEqual(one.names.network, two.names.network);
+  assert.notEqual(one.names.data, two.names.data);
   assert.notEqual(one.stateDirectory, two.stateDirectory);
   assert.notEqual(one.database, two.database);
   assert.notEqual(one.login, two.login);
-  assert.equal(new Set(Object.values(one.ports)).size, 6);
+  assert.deepEqual(one.ports, { gateway: a.descriptor.basePort, data: a.descriptor.basePort + 1, sql: a.descriptor.basePort + 5 },
+    'fixed offsets keep existing isolated workspaces on the same SQL port');
   assert.equal(one.origins.app, `http://127.0.0.1:${one.ports.gateway}`);
   assert.equal(one.defaultSql, `sql-apps-${one.id}-sql`);
   assert.equal(one.database, `sql_apps_local_${one.id}`);
   assert.equal(one.login, `sql_apps_local_dab_${one.id}`);
   assert.equal(one.stateDirectory, join(first, '.sql-apps', 'workspaces', one.id));
-  assert.equal(one.imageRepository, `sql-apps-${one.id}-functions`);
   assert.deepEqual(one.labels, ['--label', `sql-apps.workspace=${one.id}`]);
   assert.deepEqual(runtimeFor(undefined, first), one);
 });
@@ -42,8 +42,8 @@ test('occupied deterministic candidate produces a free alternate proposal withou
   const root = await home(t);
   const { proposeWorkspace, workspaceFile } = await load();
   let checks = 0;
-  const report = await proposeWorkspace(root, async () => ++checks <= 6 ? 'occupied' : 'free');
-  assert.equal(report.conflicts.length, 6);
+  const report = await proposeWorkspace(root, async () => ++checks <= 3 ? 'occupied' : 'free');
+  assert.equal(report.conflicts.length, 3);
   assert.ok(report.alternative);
   assert.notEqual(report.descriptor.basePort, report.alternative.basePort);
   await assert.rejects(readFile(workspaceFile(root)), { code: 'ENOENT' });

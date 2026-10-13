@@ -28,21 +28,12 @@ async function fixture(t, selected = false) {
     'dab/dab-config.json': '{}',
     'src/local.ts': '// SQL operations',
     'src/local-cli.ts': '// dispatch',
-    'src/local-services.ts': '// services',
-    'src/local-settings.ts': '// defaults',
-    'src/local-maintenance.ts': '// maintenance',
-    'src/local-services-smoke.ts': '// restart test',
     'src/local-app-smoke.ts': '// browser/API test',
-    'src/local-job-data.ts': '// fixtures',
     'src/local-app.ts': '// gateway',
     'src/selected-local.ts': '// selected app',
     'src/artifacts.ts': '// pinned images',
     'scripts/build-provenance.mjs': '// build',
     'tsconfig.runtime.json': '{}',
-    'functions/local.Dockerfile': 'FROM fixture',
-    'functions/local-package.json': '{}',
-    'functions/local-host.json': '{}',
-    'functions/src/local-index.ts': '// timer',
     'role-based-data.json': '{"profile":"role-based-data","requiredRole":"AppUser","readinessPath":"/api/Ready"}',
     'src/role-based-profile.ts': '// role procedure grants',
     'examples/todo/demo/smoke.mjs': '// selected acceptance',
@@ -67,7 +58,7 @@ test('composite startup lists every missing scope before any mutation', async t 
   const home = await fixture(t, true);
   const plan = await planConsent(home, { operation: 'role-based-app' });
   assert.equal(plan.allowed, false);
-  assert.deepEqual(plan.requirements.map(item => item.scope), ['restore', 'build', 'sql-start', 'schema', 'services']);
+  assert.deepEqual(plan.requirements.map(item => item.scope), ['restore', 'build', 'sql-start', 'schema', 'services', 'synthetic']);
   await assert.rejects(assertConsent(home, { operation: 'role-based-app' }), /Missing local permission/);
   await assert.rejects(readFile(join(home, '.sql-apps', 'consent.json')), { code: 'ENOENT' });
 });
@@ -81,7 +72,7 @@ test('unknown operations and missing workspace fail explicitly', async t => {
   const configless = await fixture(t, true);
   await rm(join(configless, 'role-based-data.json'));
   assert.deepEqual((await planConsent(configless, { operation: 'role-based-app' })).requirements.map(item => item.scope),
-    ['restore', 'build', 'sql-start', 'schema', 'services'],
+    ['restore', 'build', 'sql-start', 'schema', 'services', 'synthetic'],
     'permission planning must not require domain configuration that launch validates separately');
 });
 
@@ -324,12 +315,12 @@ test('concurrent grants preserve both scopes and repeated grants are deduplicate
   assert.equal((await planConsent(home, { operation: 'restore' })).allowed, true);
 });
 
-test('destructive recovery and maintenance grants are one-operation only', async t => {
+test('destructive SQL recovery grants are one-operation only', async t => {
   const home = await fixture(t, true);
   const document = join(home, 'terms.txt');
   await writeFile(document, 'Fixture terms');
   await acknowledgeTerms(home, document);
-  for (const operation of ['recover-sql', 'maintain']) {
+  for (const operation of ['recover-sql']) {
     const plan = await planConsent(home, { operation });
     assert.ok(plan.requirements.every(item => !item.reusable));
     await assert.rejects(grantConsent(home, plan), /one-operation/);
@@ -410,19 +401,16 @@ test('direct local CLI denies before workspace mutation', async t => {
   assert.equal(JSON.parse(await readFile(join(home, '.sql-apps', 'workspace.json'))).basePort, 30000);
 });
 
-test('startup planning includes implicit SQL fixtures and background retention effects', async t => {
+test('startup planning includes the implicit SQL acceptance check; data restarts only DAB', async t => {
   const home = await fixture(t, true);
-  for (const operation of ['app', 'init', 'data']) {
+  for (const operation of ['app', 'role-based-app', 'init']) {
     const plan = await planConsent(home, { operation });
     assert.ok(plan.requirements.some(item => item.scope === 'synthetic'), operation);
   }
-  const service = await planConsent(home, { operation: 'services' });
-  assert.match(service.requirements[0].effects.join(' '), /retention/);
-  await grantConsent(home, service);
-  const directory = join(home, '.sql-apps', 'workspaces', JSON.parse(await readFile(join(home, '.sql-apps', 'workspace.json'))).id);
-  await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, 'local-settings.json'), '{"retentionDays":7}');
-  assert.equal((await planConsent(home, { operation: 'services' })).allowed, false);
+  assert.deepEqual((await planConsent(home, { operation: 'data' })).requirements.map(item => item.scope), ['services']);
+  for (const removed of ['services', 'maintain', 'serve-sql', 'stop-services', 'services-test', 'api-test']) {
+    await assert.rejects(planConsent(home, { operation: removed }), /Unsupported consent operation/, removed);
+  }
 });
 
 test('SQL startup grant is shared across matching profiles, not container targets', async t => {
@@ -437,13 +425,12 @@ test('every runtime command declares its required scopes', async t => {
   const commands = {
     app: ['restore', 'build', 'sql-start', 'schema', 'services', 'synthetic'],
     init: ['restore', 'build', 'schema', 'synthetic'],
-    data: ['services', 'synthetic'],
-    serve: ['services'], 'serve-sql': ['services'], services: ['services'],
-    'role-based-app': ['restore', 'build', 'sql-start', 'schema', 'services'],
+    data: ['services'],
+    serve: ['services'],
+    'role-based-app': ['restore', 'build', 'sql-start', 'schema', 'services', 'synthetic'],
     'role-based-serve': ['services'], 'start-sql': ['sql-start'],
-    test: ['synthetic'], 'api-test': ['synthetic'], 'app-test': ['synthetic'],
-    'services-test': ['services', 'synthetic'],
-    stop: ['stop'], 'stop-services': ['stop'], maintain: ['maintenance'], 'recover-sql': ['sql-start'],
+    test: ['synthetic'], 'app-test': ['synthetic'],
+    stop: ['stop'], 'recover-sql': ['sql-start'],
   };
   for (const [operation, expected] of Object.entries(commands)) {
     const plan = await planConsent(home, { operation });
@@ -462,7 +449,7 @@ test('application content edits keep grants; launcher and worker changes invalid
   await writeFile(join(home, 'role-based-data.json'), '{"profile":"role-based-data","requiredRole":"Volunteer","readinessPath":"/api/Ready"}');
   assert.deepEqual((await planConsent(home, { operation: 'app' })).missing, []);
   assert.deepEqual((await planConsent(home, { operation: 'role-based-app' })).missing, []);
-  await writeFile(join(home, 'functions', 'src', 'local-index.ts'), '// changed worker effects');
+  await writeFile(join(home, 'src', 'local-app.ts'), '// changed gateway');
   assert.deepEqual((await planConsent(home, { operation: 'app' })).missing.map(item => item.scope), ['services']);
   await writeFile(join(home, 'src', 'role-based-profile.ts'), '// changed grant code');
   assert.deepEqual((await planConsent(home, { operation: 'role-based-app' })).missing.map(item => item.scope), ['schema', 'services']);
@@ -472,8 +459,8 @@ test('one bundle approval covers workspace, startup scopes and inline SQL terms'
   const { planBundle, grantBundle, SQL_TERMS } = await import('../src/local-consent.mjs');
   const home = await fixture(t);
   const bundle = await planBundle(home, { profile: 'role-based-data', workspace: '30000' });
-  assert.equal(bundle.operation, 'role-based-app');
-  assert.deepEqual(bundle.requirements.map(item => item.scope), ['workspace', 'restore', 'build', 'sql-start', 'schema', 'services']);
+  assert.equal(bundle.operation, 'app');
+  assert.deepEqual(bundle.requirements.map(item => item.scope), ['workspace', 'restore', 'build', 'sql-start', 'schema', 'services', 'synthetic']);
   assert.equal(bundle.terms.required, true);
   assert.equal(bundle.terms.url, SQL_TERMS.url);
   assert.match(bundle.terms.statement, /ACCEPT_EULA=Y/);
@@ -501,18 +488,22 @@ test('bundle planning validates profile and workspace and reuses an existing sel
   const { planBundle } = await import('../src/local-consent.mjs');
   const home = await fixture(t);
   await assert.rejects(planBundle(home, { profile: 'azure' }), /profile/);
-  await assert.rejects(planBundle(home, { profile: 'foundation' }), /workspace/);
-  await assert.rejects(planBundle(home, { profile: 'foundation', workspace: '30001' }), /port block/);
+  await assert.rejects(planBundle(home, { profile: 'foundation' }), /Select bundle profile role-based-data/);
+  await assert.rejects(planBundle(home, { profile: 'role-based-data' }), /workspace/);
+  await assert.rejects(planBundle(home, { profile: 'role-based-data', workspace: '30001' }), /port block/);
   const selected = await fixture(t, true);
-  const bundle = await planBundle(selected, { profile: 'foundation' });
+  const bundle = await planBundle(selected, { profile: 'role-based-data' });
   assert.equal(bundle.operation, 'app');
   assert.deepEqual(bundle.requirements.map(item => item.scope), ['restore', 'build', 'sql-start', 'schema', 'services', 'synthetic']);
-  await assert.rejects(planBundle(selected, { profile: 'foundation', workspace: '30010' }), /differs/);
+  await assert.rejects(planBundle(selected, { profile: 'role-based-data', workspace: '30010' }), /differs/);
 });
 
 test('concurrent dispatch consumes a one-operation grant only once, including failed execution', async t => {
   const home = await fixture(t, true);
-  const request = { operation: 'maintain' };
+  const document = join(home, 'terms.txt');
+  await writeFile(document, 'Fixture terms');
+  await acknowledgeTerms(home, document);
+  const request = { operation: 'recover-sql' };
   await grantConsent(home, await planConsent(home, request), { once: true });
   const results = await Promise.allSettled([assertConsent(home, request), assertConsent(home, request)]);
   assert.equal(results.filter(item => item.status === 'fulfilled').length, 1);

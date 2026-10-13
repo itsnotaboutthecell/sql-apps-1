@@ -22,11 +22,13 @@ Do not put real or sensitive information in the anonymous synthetic-data referen
 
 The `npm run azure` commands deploy the role-based-data profile: private Azure SQL, an internal DAB with managed-identity database grants, and live SQL Apps acceptance. They remain supported for existing deployments. Follow the [deployment reference](../reference/deployment.md) and [role-based-data profile](../reference/role-based-data.md); you will review your Azure target, identities, images, networking and schema before creating resources.
 
-If the approved app excludes files/jobs, select `role-based-data` rather than expanding to the full template or changing authorized access to an anonymous demo. Its `identity` command creates the configured human role and `role-based-assign` manages explicitly approved assignments; the foundation profile still creates `Function.Invoke`. Verify token claims and trusted DAB forwarding in the real environment.
+Do not change authorized access to an anonymous demo to fit a template. If the app needs file storage or background jobs, add them with maintained Azure skills such as `azure-storage`, outside SQL Apps. The `identity` command creates only the configured human role and `role-based-assign` manages explicitly approved assignments. Verify token claims and trusted DAB forwarding in the real environment.
+
+To update an existing deployment after changing SQL, DAB or configuration, run `artifacts` and then `deploy`; see [Updating a deployment](../reference/deployment.md#updating-a-deployment).
 
 Existing-resource discovery must not change the deployment subject. Older matching Azure resources are potential collisions and remain untouched. Keep the new checkout and its artifacts as the source unless reuse is explicitly requested and separately reviewed. Preparation is not permission to create, modify or delete resources.
 
-After an approved deployment, test sign-in, each user's access, saved data, selected capabilities and recovery in that environment. Local tests and template compilation do not prove those cloud behaviors.
+After an approved deployment, test sign-in, each user's access, saved data and recovery in that environment. Local tests and template compilation do not prove those cloud behaviors.
 
 ## Public synthetic demos
 

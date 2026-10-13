@@ -130,7 +130,7 @@ async function inspectBuild(home, sourceFingerprint, implementationFingerprint) 
     return { ready: false, code: 'BUILD_TOOLING_MISMATCH',
       nextAction: 'Tooling changed after the build; review the upgrade, then use consent-run build (the guarded build).' };
   }
-  const artifacts = await fingerprint(home, ['dist/src', 'dist/functions'], [...generatedBrowserArtifacts]);
+  const artifacts = await fingerprint(home, ['dist/src'], [...generatedBrowserArtifacts]);
   if (!artifacts.files || artifacts.hash !== metadata.artifactFingerprint) {
     return { ready: false, code: 'BUILD_ARTIFACT_MISMATCH',
       nextAction: 'Runtime artifacts changed or are missing; after approval, use consent-run build (the guarded build).' };
@@ -156,7 +156,7 @@ export async function inspectSource(value, options = {}) {
           nextAction: 'Review the tooling source application/runtime contract.' };
       }
       const inputs = await fingerprint(home,
-        ['src', 'functions/src', 'public', 'sql', 'dab', 'infra', 'scripts', 'packages/sql-apps'],
+        ['src', 'public', 'sql', 'dab', 'infra', 'scripts', 'packages/sql-apps'],
         ['package.json', 'package-lock.json', 'application.json', 'runtime-contract.json',
           'tsconfig.json', 'tsconfig.runtime.json'], { source: true });
       const implementation = await toolingFingerprint(tools);
@@ -295,7 +295,7 @@ export async function recordBuild(value, expectedFingerprint, expectedToolingFin
   if (expectedToolingFingerprint && expectedToolingFingerprint !== source.toolingFingerprint) {
     throw new Error('Tooling changed during build; rebuild before running the application');
   }
-  const artifacts = await fingerprint(source.home, ['dist/src', 'dist/functions'], [...generatedBrowserArtifacts]);
+  const artifacts = await fingerprint(source.home, ['dist/src'], [...generatedBrowserArtifacts]);
   if (!artifacts.files) throw new Error('No runtime artifacts to record');
   const target = join(source.home, 'dist', 'build-provenance.json');
   const temporary = `${target}.${randomUUID()}.tmp`;

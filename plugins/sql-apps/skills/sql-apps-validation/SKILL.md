@@ -1,6 +1,6 @@
 ---
 name: sql-apps-validation
-description: "Use when testing SQL Apps changes or verifying application, plugin, SQL, API, browser, ownership, file-processing or deployment contracts."
+description: "Use when testing SQL Apps changes or verifying application, plugin, SQL, API, browser, role-based access, ownership or deployment contracts."
 ---
 
 # Validate SQL Apps
@@ -19,7 +19,7 @@ Choose the smallest checks that cover the change:
 
 Use the exact commands in `docs/maintainers/application-boundary.md` for SQL model, live API and database absence checks. A targeted pass is not a full-suite pass.
 
-For an approved running application, invoke the launcher checks matching its selected capabilities. Run acceptance commands sequentially. Tests that stop or restart owned services, create fixtures, mutate data or perform maintenance need their documented approval.
+For an approved running application, use the launcher checks: `app-check` for the clean application database acceptance, `test` for the read-only SQL acceptance and `app-test` for the two-user role check (Development Alice admitted, Development Bob 403). Run acceptance commands sequentially. Tests that stop or restart owned services, create fixtures or mutate data need their documented approval.
 
 ## Live workflow evidence
 

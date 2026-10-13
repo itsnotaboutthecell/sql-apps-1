@@ -33,13 +33,13 @@ Example input:
 }
 ```
 
-Required text fields are nonblank, at most 500 characters, without control characters. `records` and `actions` contain 1-12 unique nonblank strings. `capabilities` must include `data`; optional values are `files` and `background-jobs`. The existing file processor requires `files` with `background-jobs`.
+Required text fields are nonblank, at most 500 characters, without control characters. `records` and `actions` contain 1-12 unique nonblank strings. `capabilities` must be exactly `["data"]`. File storage or background jobs are outside SQL Apps; add them with the maintained Azure skills (for example `azure-storage`, `azure-prepare` and `azure-deploy`).
 
-These are scope decisions, not switches that dynamically compose services. The foundation `app` command still starts its full file/job stack. Role-authorized data apps use the configured [role-based-data profile](role-based-data.md), `role-based-app` and `role-based-serve`; `serve-sql` remains an advanced SQL-only gateway. The selected Todo reference has a separate synthetic-only startup. See [Run locally](../guides/run-locally.md).
+The brief is a scope decision, not a switch that composes services. Apps use the [role-based-data profile](role-based-data.md): `app` (alias `role-based-app`) starts SQL, Data API builder and the browser gateway, and `serve` (alias `role-based-serve`) resumes the gateway. The selected Todo reference has a separate synthetic-only startup. See [Run locally](../guides/run-locally.md).
 
 Optional `costPreference` is `zero-azure-spend` or `review-paid-costs`. It is never spending consent.
 
-The report's `profile` is `role-based-data` when `role-based-data.json` exists in the checkout, otherwise `null`. `suggestedProfile` is that configured profile; without one, a saved brief suggests `role-based-data` for data-only capabilities and `foundation` when it includes `files` or `background-jobs` (`null` before a brief). The suggestion fills the `setup plan --profile` hint; cloud cost review routes to the Azure Cost plugin. It is advice, not configuration: a suggested `role-based-data` still needs `role-based-data.json`, which `setup plan` reports.
+The report's `profile` is `role-based-data` when `role-based-data.json` exists in the checkout, otherwise `null`. `suggestedProfile` is always `role-based-data`, the only profile. Cloud cost review routes to the Azure Cost plugin. The suggestion is advice, not configuration: it still needs `role-based-data.json`, which `setup plan` reports.
 
 ## Record historical evidence
 

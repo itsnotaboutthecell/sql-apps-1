@@ -1,16 +1,8 @@
-import { fileJobSchema, type FileJob } from './file-jobs.js';
-import { z } from 'zod';
-import { traceRecordSchema, type TraceRecord } from './trace-contract.js';
 
 export interface ClientOptions {
   baseUrl: string;
   getAccessToken: () => Promise<string>;
   fetch?: typeof fetch;
-}
-
-export interface ClientFilePage {
-  files: { name: string; size: number }[];
-  continuationToken?: string;
 }
 
 export class ApiError extends Error {
@@ -42,51 +34,12 @@ export class SqlAppsClient {
     if (!response.ok) throw new ApiError(response.status);
     return response;
   }
-  async upload(name: string, bytes: Blob | Uint8Array): Promise<void> {
-    await this.request(`/storage/${encodeURIComponent(name)}`, {
-      method: 'PUT', headers: { 'content-type': 'application/octet-stream' },
-      body: bytes instanceof Blob ? bytes : new Uint8Array(bytes).buffer,
-    });
-  }
-  async download(name: string): Promise<ArrayBuffer> {
-    return (await this.request(`/storage/${encodeURIComponent(name)}`)).arrayBuffer();
-  }
-  async deleteFile(name: string): Promise<void> {
-    await this.request(`/storage/${encodeURIComponent(name)}`, { method: 'DELETE' });
-  }
-  async listFiles(continuationToken?: string): Promise<ClientFilePage> {
-    const path = continuationToken === undefined ? '/storage' :
-      `/storage?${new URLSearchParams({ continuationToken })}`;
-    const page = z.object({
-      files: z.array(z.object({ name: z.string(), size: z.number().nonnegative() })),
-      continuationToken: z.string().min(1).max(2048).optional(),
-    }).parse(await (await this.request(path)).json());
-    return {
-      files: page.files,
-      ...(page.continuationToken ? { continuationToken: page.continuationToken } : {}),
-    };
-  }
-  async listJobs(signal?: AbortSignal): Promise<FileJob[]> {
-    return z.object({ jobs: z.array(fileJobSchema) }).parse(await (await this.request('/jobs', signal ? { signal } : {})).json()).jobs;
-  }
-  async processFile(name: string): Promise<string> {
-    const response = await this.request('/jobs', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }),
-    });
-    return z.object({ id: z.string().uuid() }).parse(await response.json()).id;
-  }
-  async deleteJob(id: string): Promise<void> {
-    await this.request(`/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  }
-  async retryJob(id: string): Promise<string> {
-    return z.object({ id: z.string().uuid() }).parse(await (await this.request(`/jobs/${encodeURIComponent(id)}/retry`, { method: 'POST' })).json()).id;
-  }
-  async listTraces(): Promise<TraceRecord[]> {
-    return z.object({ traces: z.array(traceRecordSchema) }).parse(await (await this.request('/diagnostics/traces')).json()).traces;
-  }
-  async echo(input: unknown): Promise<unknown> {
-    return (await this.request('/functions/echo', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
-    })).json();
+  /** Calls the application's read-only readiness procedure through the gateway and returns DAB's rows. */
+  async readiness(path: string): Promise<unknown[]> {
+    const body: unknown = await (await this.request(path)).json();
+    if (!body || typeof body !== 'object' || !('value' in body) || !Array.isArray(body.value)) {
+      throw new Error('Invalid readiness procedure response');
+    }
+    return body.value;
   }
 }

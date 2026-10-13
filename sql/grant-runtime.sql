@@ -13,11 +13,8 @@ END
 ELSE IF (SELECT sid FROM sys.database_principals WHERE name = N'sql_apps_dab') <> @sid
     THROW 50002, 'Existing DAB user belongs to a different identity; review before changing permissions.', 1;
 
+-- The exact EXECUTE / VIEW DEFINITION grants for every DAB procedure entity, generated from dab/dab-config.json.
 DECLARE @roleBasedGrants nvarchar(max) = N'$(RoleBasedProcedureGrants)';
-IF LEN(@roleBasedGrants) > 0
-    EXEC sys.sp_executesql @roleBasedGrants;
-ELSE
-BEGIN
-    GRANT SELECT ON dbo.FileJobs TO [sql_apps_dab];
-    GRANT VIEW DEFINITION ON dbo.FileJobs TO [sql_apps_dab];
-END
+IF LEN(@roleBasedGrants) = 0
+    THROW 50003, 'RoleBasedProcedureGrants is required; publish through SQL Apps or apply dist/sql/role-based-grants.sql.', 1;
+EXEC sys.sp_executesql @roleBasedGrants;

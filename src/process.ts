@@ -25,14 +25,6 @@ function execute(command: string, args: readonly string[], env = process.env, op
     child.once('close', (code, signal) => {
       if (code !== 0) {
         let message = options.sensitiveOutput ? 'sensitive command output omitted' : stderr.trim() || stdout.trim();
-        for (const arg of args) {
-          if (arg.startsWith('/AccessToken:')) message = message.replaceAll(arg.slice('/AccessToken:'.length), '[REDACTED]');
-        }
-        const secretIndex = args.indexOf('--value');
-        if (secretIndex >= 0 && args[secretIndex + 1]) message = message.replaceAll(args[secretIndex + 1]!, '[REDACTED]');
-        for (const arg of args) {
-          if (arg.startsWith('/TargetPassword:')) message = message.replaceAll(arg.slice('/TargetPassword:'.length), '[REDACTED]');
-        }
         for (const value of options.redact ?? []) {
           if (value) message = message.replaceAll(value, '[REDACTED]');
         }

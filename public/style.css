@@ -1,10 +1,7 @@
 body { font: 1rem system-ui, sans-serif; background: #f3f6fa; color: #182635; margin: 0; }
 main { max-width: 48rem; margin: 3rem auto; padding: 2rem; background: white; border-radius: .75rem; }
-button, input, select { font: inherit; padding: .6rem; margin: .25rem; }
-button { cursor: pointer; }
+button { font: inherit; padding: .6rem; margin: .25rem; cursor: pointer; }
 button:disabled { cursor: wait; opacity: .65; }
 #auth-notice { background: #fff4d6; padding: 1rem; border: 1px solid #d6aa37; border-radius: .5rem; }
-form { margin: 1rem 0; }
 #status { min-height: 1.5rem; }
-li { padding: .5rem 0; }
-#jobs li { overflow-wrap: anywhere; }
+pre { overflow-wrap: anywhere; white-space: pre-wrap; }

@@ -11,11 +11,12 @@ import {
 import { buildArtifacts } from '../src/artifacts.js';
 import { assignApplicationRole } from '../src/role-based-identity.js';
 import { roleBasedSmoke } from '../src/role-based-smoke.js';
+import { roleBasedSchemaFingerprint } from '../src/role-based-profile.js';
 import type { Run } from '../src/process.js';
 
 const toolingRoot = resolve('.');
 const original = process.cwd();
-const config = deploymentSchema.parse(JSON.parse(await readFile('azure-role-based.example.json', 'utf8')));
+const example = JSON.parse(await readFile('azure-role-based.example.json', 'utf8'));
 const directory = await mkdtemp(join(tmpdir(), 'sql-apps-role-based-deploy-'));
 process.chdir(directory);
 after(async () => { process.chdir(original); await rm(directory, { recursive: true, force: true }); });
@@ -31,13 +32,12 @@ await writeFile(join('dab', 'dab-config.json'), JSON.stringify({
     rest: { enabled: true, methods: ['get'] }, permissions: [{ role: 'AppUser', actions: ['execute'] }],
   } },
 }));
+const config = deploymentSchema.parse({ ...example, imageSource: await roleBasedSchemaFingerprint(directory) });
 const outputs = {
   sqlServer: 'data-app.database.windows.net', databaseName: 'app',
   dabPrincipalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   gatewayPrincipalId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  functionPrincipalId: '',
-  gatewayName: 'app-gateway', gatewayUrl: 'https://data-app.azurecontainerapps.io',
-  functionsName: '', networkId: '/network', storageAccount: '', vaultName: '',
+  gatewayName: 'app-gateway', gatewayUrl: 'https://data-app.azurecontainerapps.io', networkId: '/network',
   sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo' as const, sqlAuditWorkspaceName: 'logs',
 } as const;
 const digest = `sha256:${'a'.repeat(64)}`;
@@ -72,9 +72,19 @@ function runner(failRuntime = false) {
 test('authorized artifacts publish only gateway and DAB images', async () => {
   const { run, calls } = runner();
   const pinned = await buildArtifacts(config, run);
-  assert.equal(pinned.functionsImage, '');
+  assert.equal(pinned.imageSource, config.imageSource);
+  assert.equal(pinned.gatewayImage, `yourregistry.azurecr.io/app-gateway@${digest}`);
   assert.deepEqual(calls.filter(call => call.includes('build')).map(call => call[call.indexOf('--file') + 1]),
     [join(toolingRoot, 'Dockerfile'), join(toolingRoot, 'dab', 'Dockerfile')]);
+});
+test('rebuilding pinned images publishes fresh timestamp tags instead of overwriting the pinned tag', async () => {
+  const { run, calls } = runner();
+  const previous = { ...config, gatewayImage: `yourregistry.azurecr.io/app-gateway:0.2.0@${digest}`,
+    dabImage: `yourregistry.azurecr.io/app-data@${digest}`, imageSource: 'f'.repeat(64) };
+  const pinned = await buildArtifacts(previous, run, new Date('2025-03-04T05:06:07.890Z'));
+  assert.deepEqual(calls.filter(call => call.includes('build')).map(call => call[call.indexOf('--image') + 1]),
+    ['app-gateway:20250304-050607', 'app-data:20250304-050607']);
+  assert.equal(pinned.imageSource, config.imageSource);
 });
 test('authorized preflight and deployment omit excluded providers and function-role grants', async t => {
   const { run, calls } = runner();
@@ -89,7 +99,10 @@ test('authorized preflight and deployment omit excluded providers and function-r
   assert.equal(calls.some(call => call.includes('POST') && call.includes('rest')), false);
   const publish = calls.find(call => call.includes('/Action:Publish'))!;
   assert.ok(publish.some(value => value.startsWith('/v:RoleBasedProcedureGrants=GRANT EXECUTE ON OBJECT::[dbo].[AppReady]')));
-  assert.deepEqual(armParameters(config, true).parameters.profile, { value: 'role-based-data' });
+  const parameters = armParameters(config, true).parameters;
+  for (const local of ['profile', 'imageSource', 'functionsImage', 'subscriptionId', 'resourceGroup']) {
+    assert.equal(local in parameters, false, `${local} is not a Bicep parameter`);
+  }
 });
 test('authorized deploy resumes retained schema stage without provisioning or publishing again', async t => {
   const prior: DeploymentState = {
@@ -103,16 +116,14 @@ test('authorized deploy resumes retained schema stage without provisioning or pu
   await deploy(config, run, async () => new Response('{}'), async () => {});
   assert.equal(calls.some(call => call.includes('/Action:Publish') || call.includes(`${config.name}-${config.environment}-infrastructure`)), false);
 });
-test('legacy role-based state defaults the absent function principal to empty', async t => {
-  const { functionPrincipalId: _functionPrincipalId, ...legacyOutputs } = outputs;
-  const prior: DeploymentState = {
-    environmentKey: environmentKey(config),
-    configHash: await deploymentConfigHash(config),
-    stage: 'schema', outputs: legacyOutputs as DeploymentState['outputs'], applicationHome: directory,
+test('0.1.x deployment state with foundation outputs still parses', async t => {
+  const prior = {
+    environmentKey: environmentKey(config), configHash: await deploymentConfigHash(config), stage: 'schema',
+    outputs: { ...outputs, functionPrincipalId: '', functionsName: '', storageAccount: '', vaultName: '' }, applicationHome: directory,
   };
-  await saveState(statePath(config), prior);
+  await saveState(statePath(config), prior as DeploymentState);
   t.after(() => unlink(statePath(config)));
-  assert.equal((await readState(config)).outputs.functionPrincipalId, '');
+  assert.equal((await readState(config)).outputs.gatewayUrl, outputs.gatewayUrl);
 });
 
 test('failed authorized runtime retains schema stage and never claims readiness', async t => {
@@ -135,9 +146,11 @@ test('authorized deployment refuses copied state and changed SQL source before r
     await saveState(statePath(config), { ...prior, applicationHome: directory });
     assert.equal((await provision(config, run)).stage, 'schema');
     await writeFile(join('sql', 'AppReady.sql'), 'CREATE PROCEDURE dbo.AppReady AS SELECT 2 AS ready;');
-    await assert.rejects(deploy(config, run, async () => new Response('{}'), async () => {}), /SQL\/DAB source changed/);
-    await assert.rejects(provision(config, run), /SQL\/DAB source changed/);
+    await assert.rejects(deploy(config, run, async () => new Response('{}'), async () => {}), /run artifacts, then deploy/);
     assert.equal(calls.some(call => call.includes('deployment') || call.includes('/Action:Publish')), false);
+    // Changed source re-applies infrastructure instead of trapping the environment on its first version.
+    assert.equal((await provision(config, run)).stage, 'infrastructure');
+    assert.ok(calls.some(call => call.includes(`${config.name}-${config.environment}-infrastructure`)));
   } finally {
     await writeFile(join('sql', 'AppReady.sql'), 'CREATE PROCEDURE dbo.AppReady AS SELECT 1 AS ready;');
     await unlink(statePath(config));

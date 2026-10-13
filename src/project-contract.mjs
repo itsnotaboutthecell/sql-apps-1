@@ -32,9 +32,11 @@ export async function parseProjectManifest(value) {
   if (typeof value.id !== 'string' || !uuid.test(value.id)) invalid('Project id must be a UUID.');
   if (typeof value.name !== 'string' || !value.name.trim()) invalid('Project name must not be empty.');
   if (typeof value.slug !== 'string' || !slug.test(value.slug)) invalid('Project slug is invalid.');
-  if (!['data', 'files-jobs'].includes(value.starter)) invalid('Project starter is invalid.');
-  const expectedProfile = value.starter === 'data' ? 'role-based-data' : 'foundation';
-  if (value.profile !== expectedProfile) invalid('Project starter and profile are incompatible.');
+  if (value.starter === 'files-jobs') {
+    invalid('The files-jobs starter (foundation profile) was removed in SQL Apps 0.2.0; keep this project on 0.1.x tooling.');
+  }
+  if (value.starter !== 'data') invalid('Project starter is invalid.');
+  if (value.profile !== 'role-based-data') invalid('Project starter and profile are incompatible.');
   if (!Number.isInteger(value.scaffoldVersion) || value.scaffoldVersion < 1) {
     invalid('Project scaffoldVersion must be a positive integer.');
   }

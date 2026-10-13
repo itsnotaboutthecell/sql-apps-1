@@ -13,12 +13,6 @@ const assets = [
   'public/index.html',
   'public/style.css',
   'public/auth/redirect.html',
-  'functions/Dockerfile',
-  'functions/local.Dockerfile',
-  'functions/package.json',
-  'functions/local-package.json',
-  'functions/host.json',
-  'functions/local-host.json',
   'infra',
   'Dockerfile',
   'runtime-contract.json',
@@ -77,7 +71,6 @@ async function stageToolingPackage(destination) {
   await copyEntry(join(canonicalRoot, 'packages', 'sql-apps', 'package.json'), join(expected, 'package.json'));
   await copyEntry(join(canonicalRoot, 'packages', 'sql-apps', 'bin'), join(expected, 'bin'));
   await copyEntry(join(canonicalRoot, 'dist', 'src'), join(expected, 'dist', 'src'));
-  await copyEntry(join(canonicalRoot, 'dist', 'functions'), join(expected, 'dist', 'functions'));
   await copyEntry(join(canonicalRoot, 'dist', 'scripts'), join(expected, 'dist', 'scripts'));
   await copyEntry(join(canonicalRoot, 'LICENSE'), join(expected, 'LICENSE'));
   for (const asset of assets) {

@@ -10,7 +10,7 @@ import { readLocalAuthentication, localAuthenticationMatches } from '../src/loca
 import { runtimeFor, proposeWorkspace } from '../src/workspace.mjs';
 import { projectHome, toolingHome } from '../src/tooling-context.mjs';
 
-const profiles = ['foundation', 'role-based-data'];
+const profiles = ['role-based-data'];
 
 export function parseSetupArguments(args) {
   const [command = 'help', ...rest] = args;
@@ -45,8 +45,9 @@ export function parseSetupArguments(args) {
     }
     options[key] = value;
   }
+  options.profile ??= 'role-based-data';
   if (command === 'approval' || command === 'approve') {
-    if (!options.profile || options.container) throw new Error(`setup ${command} needs --profile and covers the workspace-owned SQL container only.`);
+    if (options.container) throw new Error(`setup ${command} covers the workspace-owned SQL container only.`);
     if (command === 'approve' && !options.approval) throw new Error('setup approve needs --approval <id> from setup approval.');
   }
   return { command, options };
@@ -100,7 +101,7 @@ async function liveWorkspace(runtime, profile, fetcher, sourceFingerprint, authe
     const body = await ready.json();
     const valid = body !== null && typeof body === 'object' && !Array.isArray(body);
     const confirmed = ready.status === 200 && valid && body.status === 'ready';
-    const dependency = valid && body.status === 'not-ready' && ['data', 'blob', 'queue', 'functions'].includes(body.dependency) ?
+    const dependency = valid && body.status === 'not-ready' && body.dependency === 'data' ?
       body.dependency : undefined;
     return { reachable: true, ready: confirmed, code: confirmed ? 'WORKSPACE_READY' : 'WORKSPACE_NOT_READY',
       ...(dependency ? { dependency } : {}) };
@@ -108,6 +109,7 @@ async function liveWorkspace(runtime, profile, fetcher, sourceFingerprint, authe
 }
 
 export async function planSetup(value, options = {}, injected = {}) {
+  options = { ...options, profile: options.profile ?? 'role-based-data' };
   const flags = { profile: '--profile', container: '--container', workspace: '--workspace', json: '--json' };
   const args = ['plan'];
   for (const [key, option] of Object.entries(options)) {
@@ -132,8 +134,7 @@ export async function planSetup(value, options = {}, injected = {}) {
   const finish = () => ({ ...result, next: stages.find(stage => stage.status !== 'done') });
   add('checkout', source.ready ? 'done' : 'blocked', source.ready ? 'Intended checkout verified.' : source.nextAction);
   if (!source.ready) return finish();
-  add('profile', options.profile ? 'done' : 'blocked', 'Select foundation or role-based-data from the agreed app scope. Examples require their separate explicit application workflow.');
-  if (!options.profile) return finish();
+  add('profile', 'done', 'role-based-data: SQL, Data API builder and the browser gateway. Examples require their separate explicit application workflow.');
   let authentication;
   try { authentication = readLocalAuthentication(injected.environment ?? process.env); }
   catch (error) {
@@ -179,7 +180,7 @@ export async function planSetup(value, options = {}, injected = {}) {
         'No free isolated port block was found; review occupied ports, then choose --workspace <base-port>'}, or --workspace legacy to keep an existing legacy stack.`,
       { proposal, ...(permission ? { consent: permission } : {}) });
     add('launch', 'blocked', profileConfig ? `${profileConfig.message} ${profileConfig.nextAction}` :
-      `After workspace initialization, ${options.profile === 'role-based-data' ? 'role-based-app' : 'app'} starts under the same setup approval (startup scopes and SQL terms).`,
+      `After workspace initialization, app starts under the same setup approval (startup scopes and SQL terms).`,
     profileConfig ? { code: profileConfig.code } : {});
   } else {
     if (options.workspace && (options.workspace !== 'legacy' ? runtime.mode !== 'isolated' || Number(options.workspace) !== runtime.ports.gateway : runtime.mode !== 'legacy')) {
@@ -198,7 +199,7 @@ export async function planSetup(value, options = {}, injected = {}) {
     } else if (profileConfig) {
       add('launch', 'blocked', `${profileConfig.message} ${profileConfig.nextAction}`, { code: profileConfig.code });
     } else {
-      const operation = options.profile === 'role-based-data' ? 'role-based-app' : 'app';
+      const operation = 'app';
       const permission = await (injected.consent ?? planConsent)(home, { operation,
         ...(options.container ? { selection: options.container } : {}) });
       const review = options.container ? `consent-plan ${operation} ${options.container}` : `setup approval --profile ${options.profile}`;
@@ -278,7 +279,7 @@ export async function runSetup(home, options, injected = {}) {
     try {
       if (stage.id === 'launch') {
         const runtime = runtimeFor(options.container, home);
-        const operation = options.profile === 'role-based-data' ? 'role-based-app' : 'app';
+        const operation = 'app';
         started = await (injected.launch ?? launchSetup)(home, operation, options.container, runtime, options.profile, injected.fetch ?? fetch,
           injected.environment === undefined ? {} : { environment: injected.environment });
         const after = await planSetup(home, options, injected);
@@ -333,7 +334,7 @@ export async function main(args = process.argv.slice(2), home) {
   }
   const { command, options, selection } = parseSetupArguments(args);
   if (command === 'help') {
-    console.log('SQL Apps setup: plan|status|run|resume [--profile foundation|role-based-data] [--workspace <base-port|legacy>] [--container <name>] [--json]');
+    console.log('SQL Apps setup: plan|status|run|resume [--profile role-based-data] [--workspace <base-port|legacy>] [--container <name>] [--json]');
     console.log('One local approval: approval --profile <profile> [--workspace <base-port|legacy>] lists restore, build, workspace, startup and SQL terms; approve ... --approval <id> records it after explicit human approval.');
     console.log('External SQL selection uses the individual consent-plan/grant workflow for that container; the setup approval bundle covers only workspace-owned SQL.');
     console.log('Installation: install-plan <node|npm|dotnet|docker> | install <absolute-reviewed-plan.json>. Execute only after explicit human approval. No cloud operations.');

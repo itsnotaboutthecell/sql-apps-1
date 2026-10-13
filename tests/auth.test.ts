@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPair, SignJWT } from 'jose';
 import { bearerToken, entraVerifier } from '../src/auth.js';
-import { serviceVerifier } from '../functions/src/authorization.js';
 
 const tenant = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const audience = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -32,11 +31,4 @@ test('Bearer parsing rejects whitespace and missing token', () => {
   assert.equal(bearerToken('Bearer abc'), 'abc');
   assert.equal(bearerToken('Bearer abc def'), undefined);
   assert.equal(bearerToken(undefined), undefined);
-});
-test('function requires gateway application identity and invocation role', async () => {
-  const verifyService = serviceVerifier(tenant, audience, oid, async () => keys.publicKey);
-  await verifyService(await token({ scp: undefined, roles: ['Function.Invoke'] }));
-  await assert.rejects(verifyService(await token({ roles: ['Function.Invoke'] })));
-  await assert.rejects(verifyService(await token({ scp: undefined, roles: [] })));
-  await assert.rejects(verifyService(await token({ scp: undefined, roles: ['Function.Invoke'], oid: audience })));
 });

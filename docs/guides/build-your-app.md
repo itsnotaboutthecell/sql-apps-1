@@ -33,11 +33,11 @@ If you know SQL, bring your tables and relationships into the discussion. If not
 
 Complete [Get started](getting-started.md) before downloading dependencies or launching the app.
 
-Choose the capability profile before writing code. After you save the agreed scope, `npm run guide` reports a `suggestedProfile`: `role-based-data` for data-only apps and `foundation` when files or background jobs were agreed. The [role-based-data profile](../reference/role-based-data.md) provides SQL/DAB/browser startup with trusted application-role forwarding and a free-limit, scale-to-zero Azure POC path. Domain screens, procedures and actual workflow acceptance still need implementation. The paid foundation profile retains files/jobs; do not add excluded services or switch to anonymous access just to fit a template.
+SQL Apps builds data apps with one profile, `role-based-data`; `npm run guide` reports it as the `suggestedProfile`. The [role-based-data profile](../reference/role-based-data.md) provides SQL/DAB/browser startup with trusted application-role forwarding and a free-limit, scale-to-zero Azure POC path. The starter is a minimal status page that calls a read-only readiness procedure; domain tables, procedures, screens and actual workflow acceptance still need implementation. If the app later needs file storage or background jobs, add them with the maintained Azure skills outside SQL Apps; do not switch to anonymous access just to fit a template.
 
 Then ask:
 
-> Implement the agreed screens and SQL behavior using the suggested SQL Apps profile. Explain the files you change and help me run the app locally.
+> Implement the agreed screens and SQL behavior in this SQL Apps role-based-data project. Explain the files you change and help me run the app locally.
 
 Your AI assistant can help write your frontend, API and schema; SQL Apps does not generate a complete domain app automatically. Review its changes and use the startup path for your application in [Run locally](run-locally.md). Trying the Todo reference is optional, not a prerequisite.
 

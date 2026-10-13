@@ -16,9 +16,10 @@ contain no credentials. Re-probe tools after installation/restart.
 
 1. Confirm the canonical application checkout and inspect setup read-only.
 2. Install missing tools only, each with its own reviewed plan.
-3. Run `setup approval --profile <profile>`. It lists restore, build, workspace
-   selection, image downloads, SQL startup, schema, services and the SQL terms
-   line together, plus what is excluded. Present it once.
+3. Run `setup approval --profile role-based-data --workspace <base-port>`. It
+   lists restore, build, workspace selection, image downloads, SQL startup,
+   schema, services, the read-only SQL acceptance check and the SQL terms line
+   together, plus what is excluded. Present it once.
 4. After explicit approval, run the printed `setup approve ... --approval <id>`.
    It records every listed grant and the inline terms acknowledgement under one
    lock and refuses a stale id. Then `setup run`.
@@ -86,10 +87,9 @@ For an existing fixed-port stack, explicitly choose `legacy` instead. This only
 records a descriptor; it does not authorize startup, migrate data or delete it.
 Creating the descriptor preserves checkout-level restore/build grants.
 
-Once selected, plan the chosen startup, such as `role-based-app` or `app`.
+Once selected, plan the startup operation `app` (`role-based-app` is an alias).
 The plan lists all of its scopes before any startup side effect. Record that
 reviewed plan once rather than repeating prompts after each completed stage.
-Do not use the full foundation startup for data-only scope.
 
 ### Terms acknowledgement
 
@@ -136,12 +136,10 @@ On Windows, concurrent removal can report `EPERM` after the old directory has
 already disappeared; recovery proceeds only after confirming that absence.
 Permission errors for a still-existing lock remain explicit failures.
 
-`recover-sql` and manual `maintain` need `grant-once <absolute-plan.json>`, not a
-persistent grant. After explicit approval, the direct runtime CLI consumes the
-grant **before** dispatch; even a failed operation needs renewed approval.
-Recovery still refuses running/external/legacy SQL and preserves image,
-credentials and volume. Maintenance can delete expired jobs, snapshots and
-traces; review the configured policy and its exact target first.
+`recover-sql` needs `grant-once <absolute-plan.json>`, not a persistent grant.
+After explicit approval, the direct runtime CLI consumes the grant **before**
+dispatch; even a failed operation needs renewed approval. Recovery still refuses
+running/external/legacy SQL and preserves image, credentials and volume.
 
 ## Scope and invalidation
 
@@ -152,10 +150,9 @@ traces; review the configured policy and its exact target first.
 | `workspace` | Descriptor creation for the explicit checkout and selected port block or legacy mode. |
 | `sql-start` | Start/create owned SQL resources and download its image, with matching reviewed terms. |
 | `schema` | Non-destructive schema/grant publication to the declared local database; changes to the schema launcher or role-based profile code require review, application SQL edits do not. |
-| `services` | Start/reuse the declared loopback profile and its image/configuration effects. Foundation scope includes background processing and timed recovery/retention cleanup. Changed launcher, worker or processing settings require review; DAB configuration and data profile edits do not. |
-| `synthetic` | The exact acceptance suite, fixtures and cleanup. Foundation `app`, bare `init` and `data` also run built-in SQL acceptance writes. |
-| `stop` | Stop/remove verified owned services, preserving SQL/storage volumes and credentials. |
-| `maintenance` | One-operation manual retention cleanup and stale-job recovery, not blanket deletion approval. |
+| `services` | Start/reuse the role-based-data loopback DAB container and browser gateway with their image/configuration effects. Changed launcher code requires review; DAB configuration and `role-based-data.json` edits do not. |
+| `synthetic` | The exact acceptance suite, fixtures and cleanup. `app` and bare `init` also run the built-in read-only SQL acceptance check on the least-privilege app user. |
+| `stop` | Stop/remove verified owned services, preserving SQL volumes and credentials. |
 
 Records live in ignored `.sql-apps/consent.json` and `.sql-apps/terms.json`.
 They contain no credentials or actual application records. Requirements bind

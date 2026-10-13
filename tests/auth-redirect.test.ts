@@ -9,16 +9,13 @@ test('Microsoft sign-in callback is public and isolated from the application', a
   const app = await createGateway({
     tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     apiClientId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    requiredRole: 'AppUser',
+    readinessPath: '/api/AppReady',
     dabUrl: 'https://data.internal',
-    blobAccountUrl: 'https://unconfigured.invalid',
-    blobContainer: 'files',
-    functionsUrl: 'https://unconfigured.invalid',
     publicDirectory: 'public',
   }, {
     verifyUser: unexpected,
-    files: { put: unexpected, get: unexpected, delete: unexpected, list: unexpected },
     fetch: unexpected,
-    functionToken: unexpected,
   });
   t.after(() => app.close());
   const callback = await app.inject(authRedirectPath);

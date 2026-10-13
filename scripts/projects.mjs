@@ -9,10 +9,10 @@ import { withFileLock } from '../src/file-lock.mjs';
 import { readProjectManifest } from '../src/project-contract.mjs';
 
 const execute = promisify(execFile);
-const projectDirectories = ['.config', 'content', 'dab', 'docs', 'functions', 'infra', 'public', 'scripts', 'sql', 'src'];
+const projectDirectories = ['.config', 'content', 'dab', 'docs', 'infra', 'public', 'scripts', 'sql', 'src'];
 const projectFiles = [
   '.dockerignore', '.env.example', '.gitignore', 'Dockerfile', 'LICENSE',
-  'application.json', 'local-settings.example.json', 'package-lock.json', 'package.json',
+  'application.json', 'package-lock.json', 'package.json',
   'role-based-data.example.json', 'runtime-contract.json', 'tsconfig.json', 'tsconfig.runtime.json',
 ];
 

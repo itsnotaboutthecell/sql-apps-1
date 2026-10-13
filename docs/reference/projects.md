@@ -30,10 +30,12 @@ has this shape:
 }
 ```
 
-`starter` and `profile` must agree:
-
-- `data` uses `role-based-data`.
-- `files-jobs` uses `foundation`.
+`starter` must be `data` and `profile` must be `role-based-data`. The
+`files-jobs` starter and its `foundation` profile were removed in 0.2.0;
+manifests that still name them are rejected, so keep such a project on 0.1.x
+tooling. New projects copy `.config`, `content`, `dab`, `docs`, `infra`,
+`public`, `scripts`, `sql` and `src` and write `role-based-data.json`; they no
+longer receive a `functions/` folder.
 
 The tooling version is an exact semantic version, not a range. Commands reject
 missing, malformed, oversized or linked manifests and stop searching at the

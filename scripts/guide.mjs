@@ -35,10 +35,8 @@ export function validateBrief(value) {
       !list(value.records) || !list(value.actions)) {
     throw new Error('Invalid project brief: provide purpose, audience, 1-12 records/actions and a nextChange, each up to 500 characters.');
   }
-  if (!list(value.capabilities) || !value.capabilities.includes('data') ||
-      !value.capabilities.every(item => ['data', 'files', 'background-jobs'].includes(item)) ||
-      (value.capabilities.includes('background-jobs') && !value.capabilities.includes('files'))) {
-    throw new Error('Invalid capabilities: include data; add files only if needed, and files with background-jobs for the existing file processor.');
+  if (!list(value.capabilities) || value.capabilities.length !== 1 || value.capabilities[0] !== 'data') {
+    throw new Error('Invalid capabilities: SQL Apps builds data apps (["data"]). Add file storage or background jobs with the maintained Azure skills, outside SQL Apps.');
   }
   if (value.costPreference !== undefined && !['zero-azure-spend', 'review-paid-costs'].includes(value.costPreference)) {
     throw new Error('Invalid project brief costPreference: choose zero-azure-spend or review-paid-costs. This is a preference, not spending consent.');
@@ -130,10 +128,8 @@ export async function readGuide(home) {
   const changed = state !== null && state.sourceFingerprint !== source.fingerprint;
   const checkpoint = state?.brief.checkpoint;
   const profile = await lstat(join(source.home, 'role-based-data.json')).then(() => 'role-based-data', () => null);
-  const agreed = state?.brief.capabilities;
-  const suggestedProfile = profile ?? (!agreed ? null :
-    agreed.includes('files') || agreed.includes('background-jobs') ? 'foundation' : 'role-based-data');
-  const setupPlan = `setup plan --profile ${suggestedProfile ?? '<foundation|role-based-data>'} (node scripts/setup.mjs plan)`;
+  const suggestedProfile = 'role-based-data';
+  const setupPlan = 'setup plan (node scripts/setup.mjs plan)';
   const nextStage = !state ? 'describe' : changed ? 'run-locally' :
     checkpoint?.stage === 'make-it-yours' ? 'share-optionally' :
       checkpoint?.stage === 'run-locally' ? 'make-it-yours' : 'run-locally';
@@ -145,7 +141,6 @@ export async function readGuide(home) {
     'make-it-yours': 'Recheck the intended running app, then make the saved nextChange. Verify browser validation, SQL save/reload and existing behavior before recording evidence.',
     'share-optionally': 'You can stop here with a useful local app. Sharing requires separate data/access review and explicit cloud approval; a saved checkpoint never authorizes deployment.',
   };
-  const capabilities = state?.brief.capabilities ?? ['data'];
   return {
     home: source.home, application: source.application, profile, suggestedProfile, brief: state?.brief ?? null,
     stages, nextStage, nextAction: nextActions[nextStage],
@@ -154,9 +149,7 @@ export async function readGuide(home) {
     build: source.build,
     workspace: { selected: runtime.mode !== 'legacy-unselected', mode: runtime.mode,
       origin: runtime.mode === 'legacy-unselected' ? null : runtime.origins.app },
-    localServices: ['SQL', 'Data API', 'Browser/API',
-      ...(capabilities.includes('files') ? ['File storage'] : []),
-      ...(capabilities.includes('background-jobs') ? ['Background processing'] : [])],
+    localServices: ['SQL', 'Data API', 'Browser/API'],
     cloud: { authorized: false, optional: true,
       note: 'Public anonymous demos require synthetic data only. Use the maintained Azure Skills (prepare, validate, deploy) for new cloud deployments, then run SQL Apps live acceptance.' },
     cost: {
@@ -165,7 +158,7 @@ export async function readGuide(home) {
         nextStage === 'make-it-yours' ? 'capability-cost-awareness' : 'local-cost-awareness',
       message: nextStage === 'share-optionally' ?
         'Before sharing, review expected Azure costs with the Azure Cost tooling (forecast, estimate and actual usage). Free SQL/compute allowances do not remove registry or managed-network charges. A zero-spend intent is blocked by the current template; never fall back to paid resources.' :
-        'Local operation has no Azure usage bill; tool/access/licensing conditions still apply. Review future costs when adding files/background work, not cloud architecture during initial design.',
+        'Local operation has no Azure usage bill; tool/access/licensing conditions still apply. Review cloud costs only when sharing, not during initial design.',
       reviewCommand: 'Use the azure-cost plugin (Azure Cost skills) to estimate the planned resources before approving any deployment.',
       usageStatus: 'not-queried',
       spendingAuthorized: false,

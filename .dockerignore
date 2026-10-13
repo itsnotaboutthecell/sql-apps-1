@@ -7,4 +7,3 @@ dist
 .sql-apps
 .env*
 sql-apps.json
-functions/local.settings.json

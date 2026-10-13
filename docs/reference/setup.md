@@ -15,30 +15,28 @@ bootstrap its own missing runtime. Preserve existing version managers.
 From the intended application checkout:
 
 ```powershell
-node scripts\setup.mjs plan --profile role-based-data --json
+node scripts\setup.mjs plan --json
 ```
 
-Equivalent: `npm run setup -- plan --profile role-based-data --json`.
-The installed launcher's equivalent is `setup plan --profile role-based-data --json`,
-using its absolute script path and explicitly selected runtime checkout.
+Equivalent: `npm run setup -- plan --json`.
+The installed launcher's equivalent is `setup plan --json`, using its absolute
+script path and explicitly selected runtime checkout. `--profile role-based-data`
+is optional: it is the default and the only local profile.
 
-Choose a profile from agreed scope:
+The `role-based-data` profile runs the configured domain SQL/DAB/browser
+application. Implement its role-based procedures, readiness configuration and
+screens first. `setup plan` reports `ROLE_BASED_CONFIG_MISSING`,
+`ROLE_BASED_CONFIG_INVALID`, `ROLE_BASED_DAB_INVALID` (for example an older
+`FileJob` entity is still in `dab/dab-config.json`) or
+`ROLE_BASED_PROCEDURE_MISSING` (a DAB procedure has no `CREATE PROCEDURE` under
+`sql/`) and blocks only the launch stage until `role-based-data.json` (copied
+from `role-based-data.example.json`), the DAB procedure entities and their SQL
+declarations are valid; restore and build can proceed meanwhile.
 
-- `role-based-data`: the configured domain SQL/DAB/browser profile. Implement
-  its role-based procedures, readiness configuration and screens first.
-  `setup plan` reports `ROLE_BASED_CONFIG_MISSING`, `ROLE_BASED_CONFIG_INVALID`,
-  `ROLE_BASED_DAB_INVALID` (for example the foundation `FileJob` entity is
-  still in `dab/dab-config.json`) or `ROLE_BASED_PROCEDURE_MISSING` (a DAB
-  procedure has no `CREATE PROCEDURE` under `sql/`) and blocks only the launch
-  stage until `role-based-data.json` (copied from `role-based-data.example.json`),
-  the DAB procedure entities and their SQL declarations are valid; restore and
-  build can proceed meanwhile.
-- `foundation`: the existing file/job foundation, including storage and
-  Functions. Do not choose it for data-only scope.
-
-Neither generates an app. Explicitly selected examples and advanced SQL-only
-work retain their documented separate workflows. A saved brief is not an
-automatic service selector. Omitting the profile reports a selection blocker.
+It does not generate an app. Explicitly selected examples retain their
+documented separate workflow. A saved brief is not an automatic service
+selector. File storage or background jobs are outside SQL Apps; add them with
+the maintained Azure skills.
 
 `plan` and `status` are read-only and re-probe current state. Their version-1
 journey report is separate from the existing prerequisite diagnostic contract.
@@ -75,7 +73,7 @@ The additive `gatewayReachable` field means the complete intended identity was
 verified, not that dependencies are healthy. A matching but unready gateway has
 `gatewayReachable: true`, `running: false`, a `WORKSPACE_NOT_READY` launch blocker
 and no `launchUrl`. Human output prints neither `Running:` nor `Done: launch`.
-Only known dependency names (`data`, `blob`, `queue`, `functions`) are reported;
+Only the known dependency name `data` is reported;
 HTTP success with malformed or contradictory health JSON is not readiness.
 Setup does not restore, build or automatically relaunch this responding gateway.
 Inspect the named dependency and review its recovery permission separately.
@@ -137,21 +135,22 @@ Local startup needs one reviewed approval per checkout and workspace. Show it,
 then record it only after explicit human approval:
 
 ```powershell
-node scripts\setup.mjs approval --profile role-based-data
+node scripts\setup.mjs approval --profile role-based-data --workspace 30000
 node scripts\setup.mjs approve --profile role-based-data --workspace 30000 --approval <id>
 node scripts\setup.mjs run --profile role-based-data --workspace 30000 --json
 ```
 
 `approval` proposes a free port block when none is selected and lists every
-scope it covers: restore, build, the workspace, image downloads and SQL startup,
-schema, services, synthetic checks for the foundation, and a SQL terms line
-(startup passes `ACCEPT_EULA=Y` for the
+scope it covers for the startup operation `app`: restore, build, the workspace,
+image downloads and SQL startup (`sql-start`), schema, services, `synthetic`
+(the read-only SQL acceptance check on the least-privilege app user during
+`init`), and a SQL terms line (startup passes `ACCEPT_EULA=Y` for the
 [container terms](https://aka.ms/azuresqldb-container), no other license). It
-also lists what stays separate: tool installs, stop/recovery, maintenance and
-Azure. `approve` re-plans and refuses a stale id, so a changed plan must be shown
+also lists what stays separate: tool installs, stop/recovery and Azure.
+`approve` re-plans and refuses a stale id, so a changed plan must be shown
 again. `run` and `resume` themselves never record approvals. Existing matching
 grants are reused; see [Remember local permissions](local-consent.md).
-For `role-based-data`, this approval can be reviewed and recorded before
+This approval can be reviewed and recorded before
 `role-based-data.json`, DAB entities and procedures are complete. The coordinator
 may then restore dependencies, build and initialize the workspace, but it keeps
 the launch stage blocked with the specific configuration diagnostic until those
@@ -160,12 +159,12 @@ domain inputs are valid.
 After a stop or a new session, resume without another approval:
 
 ```powershell
-node scripts\setup.mjs resume --profile role-based-data --json
+node scripts\setup.mjs resume --json
 ```
 
 For agreed external SQL reuse, pass the same `--container <name>` to
 `plan`, `run` and `resume`. Review and grant the individual
-`consent-plan role-based-app <name>` (or foundation `app`) target through
+`consent-plan app <name>` target through
 [local consent](local-consent.md); the setup approval bundle covers only
 workspace-owned SQL. Gateway identity checks match the selected container,
 not the workspace's default container.
@@ -193,14 +192,14 @@ the gateway. An unready match remains a nonzero launch blocker; recovery is
 recognized by the next probe without restarting the gateway.
 `workflowVerified` still remains false.
 
-New startup requires all selected-profile dependencies before listening and
-publishes a launch URL only after actual HTTP identity/readiness confirmation.
+New startup runs the stages start-sql -> init -> data -> serve and requires the
+configured readiness procedure before listening; it publishes a launch URL only
+after actual HTTP identity/readiness confirmation.
 Gateway-only resume makes three read-only attempts with one-second pauses and a
 four-second shared probe budget per attempt; it does not start or repair missing
 services. A failed initial attempt sequence closes only the new gateway. A later
 dependency outage keeps the established gateway live with HTTP 503 readiness and
-HTTP 200 liveness. Worker failure alone does not prevent durable submissions when
-the data and storage dependencies still work.
+HTTP 200 liveness.
 
 Regression tests exercise real temporary child processes and loopback HTTP
 readiness, early exits, identity conflicts and timeout cleanup. These fixtures
