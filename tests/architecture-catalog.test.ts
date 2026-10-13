@@ -4,33 +4,122 @@ import {
   architectureCatalog,
   mandatoryArchitectureModules,
 } from '../src/architecture-catalog.js';
-import { validateModuleCatalog } from '../src/architecture-module.js';
+import {
+  validateModuleCatalog,
+  type ReadonlyArchitectureModuleCatalog,
+} from '../src/architecture-module.js';
 
-const optionalModuleIds = [
-  'container-apps-dab-runtime',
-  'managed-identity',
-  'container-images',
-  'static-web',
-  'node-api',
-  'container-apps-node-runtime',
-  'visitor-session-api',
-  'entra-identity',
-  'files',
-  'background-jobs',
-  'log-analytics',
+const expectedContracts = [
+  {
+    id: 'azure-sql-free',
+    provides: ['sql'],
+    requiresModules: [],
+    requiresCapabilities: [],
+  },
+  {
+    id: 'background-jobs',
+    provides: ['background-jobs'],
+    requiresModules: ['node-api', 'managed-identity'],
+    requiresCapabilities: [],
+  },
+  {
+    id: 'container-apps-dab-runtime',
+    provides: ['dab-runtime'],
+    requiresModules: ['managed-identity', 'container-images'],
+    requiresCapabilities: [],
+  },
+  {
+    id: 'container-apps-node-runtime',
+    provides: ['node-runtime'],
+    requiresModules: ['managed-identity', 'container-images'],
+    requiresCapabilities: [],
+  },
+  {
+    id: 'container-images',
+    provides: ['container-images'],
+    requiresModules: [],
+    requiresCapabilities: [],
+  },
+  {
+    id: 'dab',
+    provides: ['data-api'],
+    requiresModules: ['azure-sql-free'],
+    requiresCapabilities: ['dab-runtime'],
+  },
+  {
+    id: 'entra-identity',
+    provides: ['entra-auth'],
+    requiresModules: ['node-api'],
+    requiresCapabilities: [],
+  },
+  {
+    id: 'files',
+    provides: ['files'],
+    requiresModules: ['node-api', 'managed-identity'],
+    requiresCapabilities: [],
+  },
+  {
+    id: 'log-analytics',
+    provides: ['operational-observability'],
+    requiresModules: [],
+    requiresCapabilities: [],
+  },
+  {
+    id: 'managed-identity',
+    provides: ['managed-identity'],
+    requiresModules: [],
+    requiresCapabilities: [],
+  },
+  {
+    id: 'node-api',
+    provides: ['application-api'],
+    requiresModules: [],
+    requiresCapabilities: ['node-runtime'],
+  },
+  {
+    id: 'static-web',
+    provides: ['static-web'],
+    requiresModules: [],
+    requiresCapabilities: [],
+  },
+  {
+    id: 'visitor-session-api',
+    provides: ['visitor-sessions'],
+    requiresModules: ['node-api'],
+    requiresCapabilities: [],
+  },
 ] as const;
 
 test('mandatory architecture modules are exactly the reviewed SQL and DAB core', () => {
   assert.deepEqual(mandatoryArchitectureModules, ['azure-sql-free', 'dab']);
 });
 
-test('free SQL forbids a paid fallback and verifies free enrollment', () => {
+test('catalog has the exact reviewed module IDs and dependency contracts', () => {
+  const actualContracts = [...architectureCatalog.values()].map(module => ({
+    id: module.id,
+    provides: module.provides,
+    requiresModules: module.requiresModules,
+    requiresCapabilities: module.requiresCapabilities,
+  }));
+
+  assert.deepEqual(actualContracts, expectedContracts);
+});
+
+test('free SQL uses the exact reviewed SKU and policy metadata', () => {
   const sql = architectureCatalog.get('azure-sql-free');
 
   assert.ok(sql);
-  assert.deepEqual(sql.provides, ['sql']);
-  assert.deepEqual(sql.requiresModules, []);
-  assert.deepEqual(sql.requiresCapabilities, []);
+  assert.deepEqual(sql.resources, [
+    {
+      type: 'Microsoft.Sql/servers',
+      purpose: 'Provides the logical server for the free Azure SQL Database',
+    },
+    {
+      type: 'Microsoft.Sql/servers/databases',
+      sku: 'GP_S_Gen5_2',
+      purpose: 'Stores relational data with free enrollment and no paid fallback',
+    },
+  ]);
   assert.ok(sql.guarantees.includes('no-paid-sql-fallback'));
   assert.ok(sql.acceptanceChecks.includes('verify-sql-free-enrollment'));
 });
@@ -41,77 +130,31 @@ test('catalog contains no paid SQL or bill-overage module', () => {
   }
 });
 
-test('DAB requires free SQL and the DAB runtime capability', () => {
-  const dab = architectureCatalog.get('dab');
+test('resource metadata includes required parents and identical shared resources', () => {
+  const dabRuntime = architectureCatalog.get('container-apps-dab-runtime');
+  const nodeRuntime = architectureCatalog.get('container-apps-node-runtime');
+  const files = architectureCatalog.get('files');
+  const jobs = architectureCatalog.get('background-jobs');
 
-  assert.ok(dab);
-  assert.deepEqual(dab.provides, ['data-api']);
-  assert.deepEqual(dab.requiresModules, ['azure-sql-free']);
-  assert.deepEqual(dab.requiresCapabilities, ['dab-runtime']);
+  assert.ok(dabRuntime);
+  assert.ok(nodeRuntime);
+  assert.ok(files);
+  assert.ok(jobs);
+  assert.deepEqual(dabRuntime.resources[0], nodeRuntime.resources[0]);
+  assert.equal(dabRuntime.resources[0]?.type, 'Microsoft.App/managedEnvironments');
+  assert.deepEqual(files.resources[0], jobs.resources[0]);
+  assert.equal(files.resources[0]?.type, 'Microsoft.Storage/storageAccounts');
 });
 
-test('all reviewed optional modules exist with their exact dependency contracts', () => {
-  for (const id of optionalModuleIds) assert.ok(architectureCatalog.has(id), `missing ${id}`);
-
-  assert.deepEqual(architectureCatalog.get('container-apps-dab-runtime')?.provides, ['dab-runtime']);
-  assert.deepEqual(
-    architectureCatalog.get('container-apps-dab-runtime')?.requiresModules,
-    ['managed-identity', 'container-images'],
-  );
-  assert.deepEqual(architectureCatalog.get('managed-identity')?.provides, ['managed-identity']);
-  assert.deepEqual(architectureCatalog.get('container-images')?.provides, ['container-images']);
-  assert.deepEqual(architectureCatalog.get('static-web')?.provides, ['static-web']);
-  assert.deepEqual(architectureCatalog.get('node-api')?.provides, ['application-api']);
-  assert.deepEqual(architectureCatalog.get('node-api')?.requiresCapabilities, ['node-runtime']);
-  assert.deepEqual(architectureCatalog.get('container-apps-node-runtime')?.provides, ['node-runtime']);
-  assert.deepEqual(
-    architectureCatalog.get('container-apps-node-runtime')?.requiresModules,
-    ['managed-identity', 'container-images'],
-  );
-  assert.deepEqual(architectureCatalog.get('visitor-session-api')?.provides, ['visitor-sessions']);
-  assert.deepEqual(architectureCatalog.get('visitor-session-api')?.requiresModules, ['node-api']);
-  assert.deepEqual(architectureCatalog.get('entra-identity')?.provides, ['entra-auth']);
-  assert.deepEqual(architectureCatalog.get('entra-identity')?.requiresModules, ['node-api']);
-  assert.deepEqual(architectureCatalog.get('files')?.provides, ['files']);
-  assert.deepEqual(architectureCatalog.get('files')?.requiresModules, ['node-api', 'managed-identity']);
-  assert.deepEqual(architectureCatalog.get('background-jobs')?.provides, ['background-jobs']);
-  assert.deepEqual(
-    architectureCatalog.get('background-jobs')?.requiresModules,
-    ['node-api', 'managed-identity'],
-  );
-  assert.deepEqual(
-    architectureCatalog.get('log-analytics')?.provides,
-    ['operational-observability'],
-  );
-  assert.deepEqual(architectureCatalog.get('log-analytics')?.requiresModules, []);
-});
-
-test('core modules do not accidentally depend on optional module IDs', () => {
-  const optionalIds = new Set<string>(optionalModuleIds);
-
-  for (const id of mandatoryArchitectureModules) {
-    const module = architectureCatalog.get(id);
-    assert.ok(module);
-    assert.equal(
-      module.requiresModules.some(required => optionalIds.has(required)),
-      false,
-      `${id} must not require an optional module`,
-    );
+test('surface equals the complete resource footprint for every module', () => {
+  for (const module of architectureCatalog.values()) {
+    assert.equal(module.surface, module.resources.length, `${module.id} surface`);
   }
-});
-
-test('DAB does not require optional observability', () => {
-  const dab = architectureCatalog.get('dab');
-  assert.ok(dab);
-  assert.equal(dab.requiresModules.includes('log-analytics'), false);
-  assert.equal(dab.requiresCapabilities.includes('operational-observability'), false);
 });
 
 test('every descriptor has reviewed metadata without claiming deployment', () => {
   for (const module of architectureCatalog.values()) {
-    assert.equal(Number.isInteger(module.surface), true, `${module.id} surface`);
     assert.ok(module.acceptanceChecks.length > 0, `${module.id} acceptance check`);
-    assert.ok(Array.isArray(module.resources), `${module.id} resources`);
     for (const resource of module.resources) {
       assert.match(resource.type, /^[A-Za-z][A-Za-z0-9.]+\/[A-Za-z][A-Za-z0-9/]*$/);
       assert.ok(resource.purpose.length > 0);
@@ -126,4 +169,53 @@ test('exported catalog validates and has deterministic ID ordering', () => {
 
   assert.deepEqual(ids, [...ids].sort());
   assert.deepEqual([...validated.entries()], [...architectureCatalog.entries()]);
+});
+
+test('exported catalog is read-only at its type-facing API', () => {
+  const readonlyCatalog: ReadonlyArchitectureModuleCatalog = architectureCatalog;
+  type CatalogHasSet = 'set' extends keyof typeof architectureCatalog ? true : false;
+  type CatalogHasDelete = 'delete' extends keyof typeof architectureCatalog ? true : false;
+  type CatalogHasClear = 'clear' extends keyof typeof architectureCatalog ? true : false;
+  const mutatorsExposed: [CatalogHasSet, CatalogHasDelete, CatalogHasClear] =
+    [false, false, false];
+
+  assert.equal(readonlyCatalog.size, expectedContracts.length);
+  assert.deepEqual(mutatorsExposed, [false, false, false]);
+});
+
+test('exported catalog and descriptor metadata reject runtime mutation', () => {
+  type CatalogMutators = {
+    set: (key: string, value: unknown) => unknown;
+    delete: (key: string) => boolean;
+    clear: () => void;
+  };
+  const runtimeCatalog = architectureCatalog as unknown as Partial<CatalogMutators>;
+  const sql = architectureCatalog.get('azure-sql-free');
+  assert.ok(sql);
+
+  assert.equal(runtimeCatalog.set, undefined);
+  assert.equal(runtimeCatalog.delete, undefined);
+  assert.equal(runtimeCatalog.clear, undefined);
+  assert.throws(() => {
+    (sql as { id: string }).id = 'changed';
+  }, TypeError);
+  assert.throws(() => (sql.requiresModules as string[]).push('managed-identity'), TypeError);
+  assert.throws(
+    () => (sql.resources as Array<{ type: string; purpose: string }>).push({
+      type: 'Microsoft.Sql/servers/firewallRules',
+      purpose: 'Changed',
+    }),
+    TypeError,
+  );
+  assert.throws(
+    () => {
+      (sql.resources[0] as { purpose: string }).purpose = 'Changed';
+    },
+    TypeError,
+  );
+  assert.deepEqual(sql.requiresModules, []);
+  assert.equal(
+    sql.resources[0]?.purpose,
+    'Provides the logical server for the free Azure SQL Database',
+  );
 });

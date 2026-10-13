@@ -26,6 +26,14 @@ export const architectureModuleSchema = z.strictObject({
 
 export type ArchitectureModule = z.infer<typeof architectureModuleSchema>;
 export type ArchitectureModuleCatalog = Map<string, ArchitectureModule>;
+export type DeepReadonly<T> =
+  T extends (...args: never[]) => unknown ? T
+    : T extends readonly (infer Item)[] ? readonly DeepReadonly<Item>[]
+      : T extends object ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+        : T;
+export type ReadonlyArchitectureModule = DeepReadonly<ArchitectureModule>;
+export type ReadonlyArchitectureModuleCatalog =
+  ReadonlyMap<string, ReadonlyArchitectureModule>;
 
 export function validateModuleCatalog(input: readonly unknown[]): ArchitectureModuleCatalog {
   const modules = z.array(architectureModuleSchema).parse(input);
@@ -53,6 +61,70 @@ export function validateModuleCatalog(input: readonly unknown[]): ArchitectureMo
 
   detectRequiredModuleCycles(catalog);
   return catalog;
+}
+
+export function createReadonlyModuleCatalog(
+  input: readonly unknown[],
+): ReadonlyArchitectureModuleCatalog {
+  const catalog = validateModuleCatalog(input);
+  for (const module of catalog.values()) deepFreeze(module);
+  return new LockedModuleCatalog(catalog);
+}
+
+class LockedModuleCatalog implements ReadonlyArchitectureModuleCatalog {
+  readonly #catalog: ArchitectureModuleCatalog;
+
+  constructor(catalog: ArchitectureModuleCatalog) {
+    this.#catalog = catalog;
+    Object.freeze(this);
+  }
+
+  get size(): number {
+    return this.#catalog.size;
+  }
+
+  entries(): MapIterator<[string, ReadonlyArchitectureModule]> {
+    return this.#catalog.entries();
+  }
+
+  forEach(
+    callbackfn: (
+      value: ReadonlyArchitectureModule,
+      key: string,
+      map: ReadonlyArchitectureModuleCatalog,
+    ) => void,
+    thisArg?: unknown,
+  ): void {
+    for (const [key, value] of this.#catalog) callbackfn.call(thisArg, value, key, this);
+  }
+
+  get(key: string): ReadonlyArchitectureModule | undefined {
+    return this.#catalog.get(key);
+  }
+
+  has(key: string): boolean {
+    return this.#catalog.has(key);
+  }
+
+  keys(): MapIterator<string> {
+    return this.#catalog.keys();
+  }
+
+  values(): MapIterator<ReadonlyArchitectureModule> {
+    return this.#catalog.values();
+  }
+
+  [Symbol.iterator](): MapIterator<[string, ReadonlyArchitectureModule]> {
+    return this.entries();
+  }
+}
+
+function deepFreeze<T>(value: T): DeepReadonly<T> {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value as DeepReadonly<T>;
 }
 
 function validateReferences(

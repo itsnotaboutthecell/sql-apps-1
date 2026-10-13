@@ -1,4 +1,4 @@
-import { validateModuleCatalog } from './architecture-module.js';
+import { createReadonlyModuleCatalog } from './architecture-module.js';
 
 export const mandatoryArchitectureModules = ['azure-sql-free', 'dab'] as const;
 
@@ -6,17 +6,23 @@ const descriptors = [
   {
     id: 'azure-sql-free',
     version: 1,
-    surface: 1,
+    surface: 2,
     provides: ['sql'],
     requiresCapabilities: [],
     requiresModules: [],
     incompatibleModules: [],
     guarantees: ['no-paid-sql-fallback'],
-    resources: [{
-      type: 'Microsoft.Sql/servers/databases',
-      sku: 'GeneralPurpose-serverless-free',
-      purpose: 'Stores relational application data under the Azure SQL Database free offer',
-    }],
+    resources: [
+      {
+        type: 'Microsoft.Sql/servers',
+        purpose: 'Provides the logical server for the free Azure SQL Database',
+      },
+      {
+        type: 'Microsoft.Sql/servers/databases',
+        sku: 'GP_S_Gen5_2',
+        purpose: 'Stores relational data with free enrollment and no paid fallback',
+      },
+    ],
     acceptanceChecks: ['verify-sql-free-enrollment'],
     growthTransitions: [],
   },
@@ -36,16 +42,22 @@ const descriptors = [
   {
     id: 'container-apps-dab-runtime',
     version: 1,
-    surface: 1,
+    surface: 2,
     provides: ['dab-runtime'],
     requiresCapabilities: [],
     requiresModules: ['managed-identity', 'container-images'],
     incompatibleModules: [],
     guarantees: ['managed-identity-runtime'],
-    resources: [{
-      type: 'Microsoft.App/containerApps',
-      purpose: 'Hosts Data API builder runtime metadata',
-    }],
+    resources: [
+      {
+        type: 'Microsoft.App/managedEnvironments',
+        purpose: 'Provides the shared Container Apps runtime environment',
+      },
+      {
+        type: 'Microsoft.App/containerApps',
+        purpose: 'Hosts Data API builder runtime metadata',
+      },
+    ],
     acceptanceChecks: ['verify-dab-runtime-metadata'],
     growthTransitions: [],
   },
@@ -115,16 +127,22 @@ const descriptors = [
   {
     id: 'container-apps-node-runtime',
     version: 1,
-    surface: 1,
+    surface: 2,
     provides: ['node-runtime'],
     requiresCapabilities: [],
     requiresModules: ['managed-identity', 'container-images'],
     incompatibleModules: [],
     guarantees: ['managed-identity-runtime'],
-    resources: [{
-      type: 'Microsoft.App/containerApps',
-      purpose: 'Hosts Node.js application API runtime metadata',
-    }],
+    resources: [
+      {
+        type: 'Microsoft.App/managedEnvironments',
+        purpose: 'Provides the shared Container Apps runtime environment',
+      },
+      {
+        type: 'Microsoft.App/containerApps',
+        purpose: 'Hosts Node.js application API runtime metadata',
+      },
+    ],
     acceptanceChecks: ['verify-node-runtime-metadata'],
     growthTransitions: [],
   },
@@ -160,32 +178,44 @@ const descriptors = [
   {
     id: 'files',
     version: 1,
-    surface: 1,
+    surface: 2,
     provides: ['files'],
     requiresCapabilities: [],
     requiresModules: ['node-api', 'managed-identity'],
     incompatibleModules: [],
     guarantees: ['managed-identity-storage-access'],
-    resources: [{
-      type: 'Microsoft.Storage/storageAccounts/blobServices',
-      purpose: 'Stores application files in blob storage',
-    }],
+    resources: [
+      {
+        type: 'Microsoft.Storage/storageAccounts',
+        purpose: 'Provides the shared storage account for application data',
+      },
+      {
+        type: 'Microsoft.Storage/storageAccounts/blobServices',
+        purpose: 'Stores application files in blob storage',
+      },
+    ],
     acceptanceChecks: ['verify-file-storage-contract'],
     growthTransitions: [],
   },
   {
     id: 'background-jobs',
     version: 1,
-    surface: 1,
+    surface: 2,
     provides: ['background-jobs'],
     requiresCapabilities: [],
     requiresModules: ['node-api', 'managed-identity'],
     incompatibleModules: [],
     guarantees: ['managed-identity-queue-access'],
-    resources: [{
-      type: 'Microsoft.Storage/storageAccounts/queueServices',
-      purpose: 'Queues asynchronous application work',
-    }],
+    resources: [
+      {
+        type: 'Microsoft.Storage/storageAccounts',
+        purpose: 'Provides the shared storage account for application data',
+      },
+      {
+        type: 'Microsoft.Storage/storageAccounts/queueServices',
+        purpose: 'Queues asynchronous application work',
+      },
+    ],
     acceptanceChecks: ['verify-background-job-contract'],
     growthTransitions: [],
   },
@@ -207,4 +237,4 @@ const descriptors = [
   },
 ] as const;
 
-export const architectureCatalog = validateModuleCatalog(descriptors);
+export const architectureCatalog = createReadonlyModuleCatalog(descriptors);
