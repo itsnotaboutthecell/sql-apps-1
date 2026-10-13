@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import {
-  architectureIntentSchema,
-  type ArchitectureIntent,
-} from '../src/architecture-contract.js';
+import { type ArchitectureIntent } from '../src/architecture-contract.js';
 import { compileArchitecture } from '../src/architecture-compiler.js';
 
 const authenticatedIntent: ArchitectureIntent = {
@@ -21,12 +18,27 @@ test('legacy role-based deployment configuration is not architecture intent', as
     await readFile('azure-role-based.example.json', 'utf8'),
   );
 
-  const result = architectureIntentSchema.safeParse(legacyConfiguration);
-
-  assert.equal(result.success, false);
-  if (!result.success) {
-    assert.ok(result.error.issues.some(issue => issue.code === 'unrecognized_keys'));
-  }
+  assert.throws(
+    () => compileArchitecture(legacyConfiguration),
+    (error: unknown) => {
+      assert.ok(
+        typeof error === 'object' &&
+          error !== null &&
+          'issues' in error &&
+          Array.isArray(error.issues),
+      );
+      assert.ok(
+        error.issues.some(
+          issue =>
+            typeof issue === 'object' &&
+            issue !== null &&
+            'code' in issue &&
+            issue.code === 'unrecognized_keys',
+        ),
+      );
+      return true;
+    },
+  );
 });
 
 test('authenticated architecture intent always keeps free SQL and excludes paid SQL modules', () => {
