@@ -7,6 +7,8 @@ public/auth/redirect.js
 .env.*
 !.env.example
 sql-apps.json
+.azure/
+.vscode/
 azure-demo-cost.json
 functions/local.settings.json
 sql/bin/
