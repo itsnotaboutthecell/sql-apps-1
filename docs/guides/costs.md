@@ -34,10 +34,14 @@ public Azure Retail Prices API listed Premium Functions compute at
 USD 0.173/vCPU-hour plus USD 0.0123/GiB-hour, S0 SQL at USD 0.48/day, and
 ACR Basic at USD 0.1666/day before storage and build usage. Microsoft
 documents that every Functions Premium plan keeps at least one billed
-instance. Those three choices alone create a substantial monthly floor before
-Container Apps allocation, private endpoints, logs, storage, backup, or data
-transfer. Treat foundation as a production-validation profile, not a starter
-cost profile.
+instance; EP1 allocates 1 vCPU and 3.5 GB. At those dated public retail rates,
+one always-billed EP1 instance is about USD 158 for a 730-hour month, S0 SQL
+is about USD 14.60 for a 30.4-day month, and ACR Basic is about USD 5.06 for
+the same month. That is roughly **USD 177/month before** Container Apps
+allocation, private endpoints, logs, storage, backup, builds, or data
+transfer. This is an illustrative public-retail floor, not an account quote
+or actual-cost result. Treat foundation as a production-validation profile,
+not a starter cost profile.
 
 The offline `demo-cost` command prices the public-demo contract, and
 `role-based-cost` describes the reduced role-based-data contract. There is
