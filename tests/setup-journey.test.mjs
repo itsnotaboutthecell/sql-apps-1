@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runtimeFor, initializeWorkspace } from '../src/workspace.mjs';
@@ -15,7 +15,7 @@ try { setup = await import('../scripts/setup.mjs'); }
 catch (error) { if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; }
 
 async function fixture(t, selected = true) {
-  const home = await mkdtemp(join(tmpdir(), 'sql-apps-journey-'));
+  const home = await realpath(await mkdtemp(join(tmpdir(), 'sql-apps-journey-')));
   t.after(() => rm(home, { recursive: true, force: true }));
   if (selected) await initializeWorkspace(home, 30000, async () => 'free');
   return {

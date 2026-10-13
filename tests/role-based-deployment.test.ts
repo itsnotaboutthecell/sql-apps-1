@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm, unlink, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, unlink, readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { deploymentSchema, environmentKey } from '../src/config.js';
@@ -17,7 +17,7 @@ import type { Run } from '../src/process.js';
 const toolingRoot = resolve('.');
 const original = process.cwd();
 const example = JSON.parse(await readFile('azure-role-based.example.json', 'utf8'));
-const directory = await mkdtemp(join(tmpdir(), 'sql-apps-role-based-deploy-'));
+const directory = await realpath(await mkdtemp(join(tmpdir(), 'sql-apps-role-based-deploy-')));
 process.chdir(directory);
 after(async () => { process.chdir(original); await rm(directory, { recursive: true, force: true }); });
 await mkdir('dab');

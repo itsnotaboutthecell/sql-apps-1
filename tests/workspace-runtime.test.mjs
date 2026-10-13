@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm, mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
 const load = () => import('../src/workspace.mjs');
 async function home(t) {
@@ -10,6 +12,17 @@ async function home(t) {
   t.after(() => rm(root, { recursive: true, force: true }));
   return realpath(root);
 }
+
+test('Windows short paths use the same canonical workspace identity', { skip: process.platform !== 'win32' }, async t => {
+  const { stdout } = await promisify(execFile)(process.env.ComSpec,
+    ['/d', '/c', `for %I in ("${process.env.ProgramFiles}") do @echo %~sI`], { windowsVerbatimArguments: true });
+  const alias = stdout.trim();
+  const canonical = await realpath(alias);
+  if (alias === canonical) return t.skip('8.3 paths are unavailable on this filesystem');
+  const { describeWorkspace, runtimeFor } = await load();
+  assert.deepEqual(describeWorkspace(alias, 30000), describeWorkspace(canonical, 30000));
+  assert.deepEqual(runtimeFor(undefined, alias), runtimeFor(undefined, canonical));
+});
 
 test('workspace candidates derive distinct ports, names and state from canonical home', async t => {
   const first = await home(t);

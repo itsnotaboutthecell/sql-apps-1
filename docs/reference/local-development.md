@@ -45,6 +45,8 @@ npm run local -- workspace-plan
 
 For an existing legacy stack, approve `npm run local -- workspace-init legacy` instead. This preserves its names, ports (gateway 18080, DAB 15000), credential paths and volumes. Do not select isolation expecting old data to move automatically. The legacy stack remains separately available; no automatic transfer or schema cleanup is performed. `workspace-check` reports the selected mode, ports and origins.
 
+Workspace identity uses the native resolved checkout path, including expansion of Windows 8.3 short names. Short and long aliases of the same checkout therefore select the same workspace. Existing descriptors with a different recorded home or ID still fail closed; they are not rewritten automatically because that would change resource ownership.
+
 Isolated mode also derives a database and least-privilege SQL login from the workspace ID. Explicitly reusing the same external SQL container from two workspaces therefore does not implicitly share their application database/login. Existing legacy databases are not renamed or copied.
 
 Local mutating commands require this explicit selection. For existing fixed-port workflows, select `workspace-init legacy` and record the applicable consent grants; agents must still confirm ownership. An external SQL container can be explicitly selected for `verify`/`init`; an isolated workspace will not stop or take ownership of it.

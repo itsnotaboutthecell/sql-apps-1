@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, readFile, rm, writeFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -9,7 +9,7 @@ const plugin = await import('../plugins/sql-apps/scripts/sql-apps.mjs');
 const workspace = await import('../scripts/workspace-check.mjs');
 
 async function sourceFixture(t) {
-  const source = await mkdtemp(join(tmpdir(), 'sql-apps-project-source-'));
+  const source = await realpath(await mkdtemp(join(tmpdir(), 'sql-apps-project-source-')));
   t.after(() => rm(source, { recursive: true, force: true }));
   for (const directory of ['.config', 'dab', 'docs/guides', 'functions/src', 'infra', 'public', 'scripts', 'sql', 'src']) {
     await mkdir(join(source, directory), { recursive: true });
@@ -139,7 +139,7 @@ test('concurrent project creation preserves every registry entry', async t => {
 
 test('open registers an existing SQL Apps project and list reports all projects', async t => {
   const source = await sourceFixture(t);
-  const userHome = await mkdtemp(join(tmpdir(), 'sql-apps-project-open-'));
+  const userHome = await realpath(await mkdtemp(join(tmpdir(), 'sql-apps-project-open-')));
   t.after(() => rm(userHome, { recursive: true, force: true }));
   const first = await projects.createProject(source, 'First App', { userHome, initializeGit: false });
   const external = join(userHome, 'elsewhere', 'second-app');

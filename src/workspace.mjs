@@ -14,7 +14,7 @@ const validBlock = value => Number.isInteger(value) && value >= 20000 && value <
 export const workspaceFile = (root = process.cwd()) => join(root, '.sql-apps', 'workspace.json');
 
 export function readWorkspace(root = process.cwd()) {
-  const home = realpathSync(root);
+  const home = realpathSync.native(root);
   let text;
   try { text = readFileSync(workspaceFile(home), 'utf8'); }
   catch (error) { if (error.code === 'ENOENT') return null; throw error; }
@@ -35,12 +35,12 @@ export function readWorkspace(root = process.cwd()) {
 
 // A proposed descriptor lets consent plans compute the same contracts before workspace-init writes it.
 export function describeWorkspace(root, selection) {
-  const home = realpathSync(root);
+  const home = realpathSync.native(root);
   return selection === 'legacy' ? { version: 1, mode: 'legacy', home, id: hash(home), basePort: null } : candidate(home, selection);
 }
 
 export function runtimeFor(container, root = process.cwd(), proposed) {
-  const home = realpathSync(root);
+  const home = realpathSync.native(root);
   const descriptor = proposed ?? readWorkspace(home);
   const isolated = descriptor?.mode === 'isolated';
   const id = hash(home);
@@ -92,7 +92,7 @@ async function inspectPorts(descriptor, probe) {
 }
 
 export async function proposeWorkspace(root = process.cwd(), probe = portState) {
-  const home = realpathSync(root);
+  const home = realpathSync.native(root);
   const existing = readWorkspace(home);
   if (existing) return { selected: existing, scope: 'Existing selection; resource ownership still needs verification before startup.' };
   const basePort = 20000 + (parseInt(hash(home).slice(0, 8), 16) % 4000) * 10;
@@ -112,7 +112,7 @@ export async function proposeWorkspace(root = process.cwd(), probe = portState) 
 }
 
 export async function initializeWorkspace(root = process.cwd(), selection, probe = portState) {
-  const home = realpathSync(root);
+  const home = realpathSync.native(root);
   if (readWorkspace(home)) throw new Error('Workspace already selected; review existing state instead of overwriting its descriptor.');
   const descriptor = describeWorkspace(home, selection);
   if (descriptor.mode === 'isolated') {

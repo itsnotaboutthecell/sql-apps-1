@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -220,7 +220,7 @@ test('plugin status is bounded, read-only and distinguishes healthy, HTTP failur
 });
 
 test('plugin dispatch uses checkout cwd, passes literal arguments and preserves CLI failure', async t => {
-  const home = await mkdtemp(join(tmpdir(), 'sql apps dispatch-'));
+  const home = await realpath(await mkdtemp(join(tmpdir(), 'sql apps dispatch-')));
   t.after(() => rm(home, { recursive: true, force: true }));
   for (const folder of ['src', 'sql', 'plugins/sql-apps', 'dist/src', 'scripts']) await mkdir(join(home, folder), { recursive: true });
   await writeFile(join(home, 'package.json'), JSON.stringify({ name: 'sql-apps', scripts: { local: 'node dist/src/local-cli.js' } }));
