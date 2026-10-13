@@ -62,7 +62,7 @@ Review costs offline:
 npm run azure -- role-based-cost azure-role-based-cost.example.json
 ```
 
-The zero-spend example exits **2** because this path uses paid provisioned S0 SQL and private infrastructure. To review paid costs, explicitly choose `review-paid-costs` and acknowledge fixed charges in a separate cost configuration. The report is not a quote, eligibility check, spending cap or deployment approval. It describes the actual profile: two Consumption apps with minimum one replica each, S0 SQL, the configured registry, SQL private endpoint/DNS, managed networking and Log Analytics. Registry tier and regional prices require review. `demo-cost` is not this profile's cost model.
+The zero-spend example still exits **2** because ACR Basic, one SQL private endpoint and custom Container Apps network infrastructure can carry fixed charges. The profile now uses eligible free-limit serverless SQL with `AutoPause`, two scale-to-zero Consumption apps, Local backup redundancy and a 0.1 GB/day Log Analytics cap. Free SQL eligibility and shared Container Apps allowances must be verified for the target subscription. To review the remaining paid supporting resources, explicitly choose `review-paid-costs` and acknowledge fixed charges in a separate cost configuration. The report is not a quote, eligibility check, spending cap or deployment approval. `demo-cost` is not this profile's cost model.
 
 With separate target/read-only authorization, validate the app/configuration and review what-if. No command silently selects discovered older resources; treat them as collisions unless reuse is explicitly requested.
 
@@ -74,7 +74,7 @@ After explicit approval for each relevant cloud-write scope:
 npm run azure -- identity azure-role-based.json
 ```
 
-This creates a new single-tenant registration/service principal with delegated `access_as_user` and the configured human application role (allowed member type `User`), not `Function.Invoke`. A configuration from `npm run azure -- init ... --profile role-based-data` receives the printed identifier automatically, and `deploy-all` runs identity, artifacts, provision, deploy and status as one reviewed approval ([deployment reference](deployment.md#shortest-path)); otherwise set `apiClientId` to its printed identifier. Existing registrations need an enabled equivalent application role; creation does not patch unrelated registrations.
+This creates a new single-tenant registration/service principal with delegated `access_as_user` and the configured human application role (allowed member type `User`), not `Function.Invoke`. A configuration from `npm run azure -- init ... --profile role-based-data` receives the printed identifier automatically. `deploy-all` runs the reviewed ordinary-operator stages, stops after provisioning for the separate administrator RBAC handoff, and resumes afterward ([deployment reference](deployment.md#shortest-path)); otherwise set `apiClientId` to its printed identifier. Existing registrations need an enabled equivalent application role; creation does not patch unrelated registrations.
 
 Assign only approved authorized users/groups by object ID:
 
@@ -91,13 +91,19 @@ npm run azure -- validate azure-role-based.json
 npm run azure -- artifacts azure-role-based.json
 npm run azure -- plan azure-role-based.json
 npm run azure -- provision azure-role-based.json
+npm run azure -- rbac-plan azure-role-based.json
+npm run azure -- rbac-deploy azure-role-based.json
 npm run azure -- deploy azure-role-based.json
 npm run azure -- status azure-role-based.json
 ```
 
-`validate` is offline. For this profile it also requires `requiredRole` and `readinessPath` to match `role-based-data.json` when present, and every DAB procedure to be declared under `sql/`, so a mismatch fails before images are published. `artifacts` builds/publishes exactly gateway and DAB images from this checkout and saves digests only after both succeed. `plan` uses Azure/Graph reads and ARM what-if; obtain separate authorization. `provision`/`deploy` create paid resources. ACR must already exist at the explicitly selected target; creating it is a separate approved operation.
+`validate` is offline. For this profile it also requires `requiredRole` and `readinessPath` to match `role-based-data.json` when present, and every DAB procedure to be declared under `sql/`, so a mismatch fails before images are published. `artifacts` builds/publishes exactly gateway and DAB images from this checkout and saves digests only after both succeed. `plan` uses Azure/Graph reads and ARM what-if; obtain separate authorization. `provision`/`deploy` create paid resources. The administrator-only `rbac-plan`/`rbac-deploy` commands grant and verify only the two exact ACR pull assignments; the ordinary `deploy` command verifies those assignments again before publishing SQL. ACR must already exist at the explicitly selected target; creating it is a separate approved operation.
 
-SQL remains Entra-only with its public endpoint disabled. The deployment operator needs private runner connectivity and database publishing authorization. The template retains SQL private endpoint/DNS but excludes Functions, storage, Key Vault, their identities/grants/endpoints and the Functions subnet. Schema publishing is non-destructive and grants the DAB managed identity only approved procedure permissions.
+SQL remains Entra-only with its public endpoint disabled. The profile retains
+one SQL private endpoint/DNS path for schema publication and runtime access,
+but excludes Functions, storage, Key Vault, their identities/grants/endpoints
+and the Functions subnet. Schema publishing is non-destructive and grants the
+DAB managed identity only approved procedure permissions.
 
 Role-based deployment persists infrastructure/schema/runtime/readiness stages and resumes an unchanged configuration from the saved stage. State is bound to the canonical application checkout and SQL/DAB source fingerprint. Changed configuration/source, copied or malformed state fails rather than resetting state or transferring deployment to an older app. Runtime HTTP readiness is not authorization acceptance or a production-release claim.
 

@@ -15,6 +15,9 @@ test('file job responses enforce the SQL filename limit in UTF-16 units', () => 
 test('starter deployment names use sqlapps for generated URL prefixes', async () => {
   const config = JSON.parse(await readFile('sql-apps.example.json', 'utf8'));
   assert.equal(config.name, 'sqlapps');
+  assert.equal(config.profile, 'role-based-data');
+  assert.notEqual(config.location, 'eastus');
+  assert.equal(config.functionsImage, '');
   const template = await readFile('infra/main.bicep', 'utf8');
   assert.match(template, /param name string = 'sqlapps'/);
   assert.ok(template.includes("var prefix = '${name}-${environment}'"));

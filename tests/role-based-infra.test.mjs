@@ -10,9 +10,12 @@ test('compiled authorized profile gates excluded resources and retains private S
   const directory = await mkdtemp(join(tmpdir(), 'sql-apps-role-based-infra-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const output = join(directory, 'main.json');
+  const rbacOutput = join(directory, 'rbac.json');
   await run('az', ['bicep', 'build', '--file', resolve('infra', 'main.bicep'), '--outfile', output]);
+  await run('az', ['bicep', 'build', '--file', resolve('infra', 'rbac.bicep'), '--outfile', rbacOutput]);
   const template = JSON.parse(await readFile(output, 'utf8'));
-  assert.equal(template.parameters.profile.defaultValue, 'foundation');
+  const rbac = JSON.parse(await readFile(rbacOutput, 'utf8'));
+  assert.equal(template.parameters.profile.defaultValue, 'role-based-data');
   assert.deepEqual(template.parameters.profile.allowedValues, ['foundation', 'role-based-data']);
   assert.equal(template.variables.fullFoundation, "[equals(parameters('profile'), 'foundation')]");
   for (const resource of template.resources.filter(resource =>
@@ -45,9 +48,13 @@ test('compiled authorized profile gates excluded resources and retains private S
   assert.equal(sqlEndpoint.condition, undefined);
   const cost = reviewRoleBasedCost(JSON.parse(await readFile('azure-role-based-cost.example.json', 'utf8')));
   const database = template.resources.find(resource => resource.type === 'Microsoft.Sql/servers/databases');
-  assert.equal(database.sku.name, cost.resources[0].sku);
+  assert.match(database.sku, /if\(variables\('fullFoundation'\).*S0.*roleBasedSqlSku/);
+  assert.equal(template.variables.roleBasedSqlSku.name, 'GP_S_Gen5_2');
+  assert.match(database.properties, /useFreeLimit.*freeLimitExhaustionBehavior.*AutoPause.*autoPauseDelay.*60.*minCapacity.*0\.5/);
+  assert.equal(cost.resources[0].sku, 'GP_S_Gen5_2 free limit');
   for (const resource of template.resources.filter(resource => resource.type === 'Microsoft.App/containerApps')) {
-    assert.equal(resource.properties.template.scale.minReplicas, cost.resources[2].minReplicas);
+    assert.match(resource.properties.template.scale.minReplicas, /if\(variables\('fullFoundation'\), 1, 0\)/);
+    assert.equal(cost.resources[2].minReplicas, 0);
     assert.equal(resource.properties.template.scale.maxReplicas, cost.resources[2].maxReplicas);
     assert.equal(resource.properties.template.containers[0].resources.cpu, "[json('0.5')]");
     assert.equal(resource.properties.template.containers[0].resources.memory, '1Gi');
@@ -62,10 +69,22 @@ test('compiled authorized profile gates excluded resources and retains private S
   const env = gateway.properties.template.containers[0].env;
   assert.match(env, /if\(variables\('fullFoundation'\)/);
   assert.match(env, /SQL_APPS_PROFILE.*SQL_APPS_REQUIRED_ROLE.*SQL_APPS_READINESS_PATH/);
-  const pulls = template.resources.find(resource => resource.copy?.name === 'pullRoles');
+  assert.equal(template.resources.some(resource => resource.type === 'Microsoft.Authorization/roleAssignments'), false,
+    'ordinary infrastructure deployment must not require roleAssignments/write');
+  const pulls = rbac.resources.find(resource => resource.copy?.name === 'pullRoles');
   assert.match(pulls.copy.count, /if\(variables\('fullFoundation'\), 3, 2\)/);
-  const storageRoles = template.resources.find(resource => resource.copy?.name === 'hostStorageRoles');
+  const storageRoles = rbac.resources.find(resource => resource.copy?.name === 'hostStorageRoles');
   assert.match(storageRoles.copy.count, /if\(variables\('fullFoundation'\).*createArray\(\)/);
+  assert.equal(rbac.resources.find(resource => resource.properties?.roleDefinitionId === "[variables('blobContributor')]").condition,
+    "[variables('fullFoundation')]");
+  assert.equal(rbac.resources.find(resource => resource.properties?.roleDefinitionId === "[variables('secretsUser')]").condition,
+    "[variables('fullFoundation')]");
+  for (const name of ['gatewayPrincipalId', 'dabPrincipalId', 'functionPrincipalId']) {
+    assert.ok(rbac.parameters[name], `RBAC handoff requires ${name}`);
+  }
   const storageEndpoints = template.resources.find(resource => resource.copy?.name === 'storageEndpoints');
   assert.match(storageEndpoints.copy.count, /if\(variables\('fullFoundation'\).*createArray\(\)/);
+  const workspace = template.resources.find(resource => resource.type === 'Microsoft.OperationalInsights/workspaces');
+  assert.equal(workspace.properties.workspaceCapping.dailyQuotaGb, "[variables('logDailyQuotaGb')]");
+  assert.match(template.variables.logDailyQuotaGb, /if\(variables\('fullFoundation'\), -1, json\('0.1'\)\)/);
 });

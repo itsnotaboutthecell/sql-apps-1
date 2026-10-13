@@ -48,7 +48,8 @@ test('deployment names stay bounded without collisions after normalization', () 
 test('azure init derives tenant, subscription, operator and role settings and asks only for placement', async t => {
   const root = await home(t);
   const { run, calls } = signedIn();
-  const config = await initDeploymentConfig({ profile: 'role-based-data', location: 'eastus', resourceGroup: 'rg-expense', registryServer: 'expense.azurecr.io' }, run, root);
+  const config = await initDeploymentConfig({ location: 'westus2', resourceGroup: 'rg-expense', registryServer: 'expense.azurecr.io' }, run, root);
+  assert.equal(config.profile, 'role-based-data', 'POC initialization defaults to the lowest-cost cloud profile');
   assert.deepEqual(deploymentSchema.parse(config), config);
   assert.equal(config.tenantId, tenant);
   assert.equal(config.subscriptionId, subscription);
@@ -90,7 +91,7 @@ test('deploy-all review is read-only and a stale approval id runs nothing; init 
 
 test('deploy-all lists only pending paid steps and binds approval to the config and remaining work', async t => {
   const root = await home(t);
-  const config = await initDeploymentConfig({ profile: 'role-based-data', location: 'eastus', resourceGroup: 'rg-expense', registryServer: 'expense.azurecr.io' }, signedIn().run, root);
+  const config = await initDeploymentConfig({ location: 'westus2', resourceGroup: 'rg-expense', registryServer: 'expense.azurecr.io' }, signedIn().run, root);
   const fresh = planDeployAll(config, undefined);
   assert.deepEqual(fresh.pending, ['identity', 'artifacts', 'provision', 'deploy', 'status']);
   assert.match(fresh.approval, /^[a-f0-9]{12}$/);
@@ -101,6 +102,7 @@ test('deploy-all lists only pending paid steps and binds approval to the config 
   assert.deepEqual(resumed.pending, ['deploy', 'status']);
   assert.notEqual(resumed.approval, fresh.approval);
   assert.deepEqual(planDeployAll(pinned, 'ready').pending, ['status']);
+  assert.ok(fresh.excluded.some(item => /rbac-deploy/.test(item)), 'privileged Azure RBAC stays a separate administrator decision');
   assert.ok(fresh.excluded.some(item => /role-based-assign/.test(item)), 'role assignment names a person and stays a separate decision');
 });
 
@@ -117,6 +119,7 @@ async function saveDeployment(root: string, config: DeploymentConfig, stage: Dep
       outputs: { sqlServer: 'fixture.database.windows.net', databaseName: 'app',
         dabPrincipalId: '55555555-5555-4555-8555-555555555555',
         gatewayPrincipalId: '66666666-6666-4666-8666-666666666666',
+        functionPrincipalId: '',
         gatewayName: 'fixture-gateway', gatewayUrl: 'https://fixture.invalid', functionsName: 'fixture-functions',
         networkId: 'fixture-network', storageAccount: 'fixturestorage', vaultName: 'fixture-vault',
         sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo', sqlAuditWorkspaceName: 'fixture-logs' } });

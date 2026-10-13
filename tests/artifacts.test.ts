@@ -6,7 +6,7 @@ import { deploymentSchema } from '../src/config.js';
 import { buildArtifacts, imageDigest, imageFields } from '../src/artifacts.js';
 import type { Run } from '../src/process.js';
 
-const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps.example.json', 'utf8')));
+const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps-foundation.example.json', 'utf8')));
 const digest = `sha256:${'a'.repeat(64)}`;
 
 test('artifact builds use ACR for all services and return immutable validated configuration', async () => {
@@ -27,6 +27,13 @@ test('artifact builds use ACR for all services and return immutable validated co
   }
   assert.equal(config.gatewayImage.endsWith(':0.1.2'), true);
   assert.equal(calls.every(call => call.includes(config.subscriptionId)), true);
+});
+
+test('Docker build context excludes workspace-only state', async () => {
+  const ignored = new Set((await readFile('.dockerignore', 'utf8')).split(/\r?\n/).filter(Boolean));
+  for (const path of ['.git', '.worktrees', '.vscode', '.azure', '.sql-apps', 'sql-apps.json']) {
+    assert.equal(ignored.has(path), true, `${path} must not enter remote ACR build contexts`);
+  }
 });
 
 test('artifact builds fail explicitly and stop before later builds', async () => {

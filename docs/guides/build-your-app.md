@@ -33,7 +33,7 @@ If you know SQL, bring your tables and relationships into the discussion. If not
 
 Complete [Get started](getting-started.md) before downloading dependencies or launching the app.
 
-Choose the capability profile before writing code. After you save the agreed scope, `npm run guide` reports a `suggestedProfile`: `role-based-data` for data-only apps and `foundation` when files or background jobs were agreed. The [role-based-data profile](../reference/role-based-data.md) provides SQL/DAB/browser startup with trusted application-role forwarding and a matching paid private-SQL Azure path. Domain screens, procedures and actual workflow acceptance still need implementation. The full foundation retains files/jobs; do not add excluded services or switch to anonymous access just to fit a template.
+Choose the capability profile before writing code. After you save the agreed scope, `npm run guide` reports a `suggestedProfile`: `role-based-data` for data-only apps and `foundation` when files or background jobs were agreed. The [role-based-data profile](../reference/role-based-data.md) provides SQL/DAB/browser startup with trusted application-role forwarding and a free-limit, scale-to-zero Azure POC path. Domain screens, procedures and actual workflow acceptance still need implementation. The paid foundation profile retains files/jobs; do not add excluded services or switch to anonymous access just to fit a template.
 
 Then ask:
 

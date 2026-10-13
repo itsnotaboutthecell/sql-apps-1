@@ -1,7 +1,7 @@
 {
   "version": 1,
   "profile": "public-demo",
-  "region": "eastus",
+  "region": "westus2",
   "currency": "USD",
   "checkedOn": "2026-10-11",
   "workload": {

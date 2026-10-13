@@ -5,12 +5,13 @@ import { deploymentSchema, environmentKey } from '../src/config.js';
 import type { DeploymentState } from '../src/deployment.js';
 import { deployStatic, setSecret, updateImage } from '../src/maintenance.js';
 
-const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps.example.json', 'utf8')));
+const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps-foundation.example.json', 'utf8')));
 const state: DeploymentState = {
   environmentKey: environmentKey(config), configHash: 'hash', stage: 'ready',
   outputs: {
     sqlServer: 'example.database.windows.net', databaseName: 'app',
     dabPrincipalId: config.apiClientId, gatewayPrincipalId: config.apiClientId,
+    functionPrincipalId: config.apiClientId,
     gatewayName: 'gateway', gatewayUrl: 'https://gateway.example', functionsName: 'functions',
     storageAccount: 'storage', networkId: '/network', vaultName: 'vault',
     sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo' as const, sqlAuditWorkspaceName: 'logs',

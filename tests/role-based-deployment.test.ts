@@ -4,7 +4,10 @@ import { mkdtemp, mkdir, writeFile, rm, unlink, readFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { deploymentSchema, environmentKey } from '../src/config.js';
-import { deploy, preflight, provision, saveState, statePath, armParameters, deploymentConfigHash, type DeploymentState } from '../src/deployment.js';
+import {
+  deploy, preflight, provision, saveState, readState, statePath, armParameters, deploymentConfigHash,
+  expectedRbacAssignments, type DeploymentState,
+} from '../src/deployment.js';
 import { buildArtifacts } from '../src/artifacts.js';
 import { reviewRoleBasedCost } from '../src/role-based-cost.js';
 import { assignApplicationRole } from '../src/role-based-identity.js';
@@ -33,6 +36,7 @@ const outputs = {
   sqlServer: 'data-app.database.windows.net', databaseName: 'app',
   dabPrincipalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   gatewayPrincipalId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  functionPrincipalId: '',
   gatewayName: 'app-gateway', gatewayUrl: 'https://data-app.azurecontainerapps.io',
   functionsName: '', networkId: '/network', storageAccount: '', vaultName: '',
   sqlBackupRetentionDays: 7, sqlBackupRedundancy: 'Geo' as const, sqlAuditWorkspaceName: 'logs',
@@ -52,6 +56,12 @@ function runner(failRuntime = false) {
     });
     if (args[0] === 'provider') return 'Registered';
     if (args[0] === 'acr' && args[1] === 'repository') return digest;
+    if (args[0] === 'role' && args[1] === 'assignment' && args[2] === 'list') {
+      const scope = args[args.indexOf('--scope') + 1]!;
+      return JSON.stringify(expectedRbacAssignments(config, outputs)
+        .filter(item => item.scope === scope)
+        .map(item => ({ principalId: item.principalId, roleDefinitionId: item.roleDefinitionId, scope })));
+    }
     if (args[0] === 'deployment') {
       if (failRuntime && args.includes(`${config.name}-${config.environment}-runtime`)) throw new Error('Runtime failed');
       return JSON.stringify(Object.fromEntries(Object.entries(outputs).map(([key, value]) => [key, { value }])));
@@ -65,7 +75,9 @@ test('authorized cost review matches paid template and never infers spending app
   assert.equal(report.review.canProceedToWhatIf, false);
   assert.equal(report.estimatedMonthlyCost, null);
   assert.equal(report.deployment.authorized, false);
-  assert.equal(report.resources[0]!.sku, 'S0');
+  assert.equal(report.resources[0]!.sku, 'GP_S_Gen5_2 free limit');
+  assert.equal(report.resources[2]!.minReplicas, 0);
+  assert.match(report.resources[3]!.billing, /private endpoint/i);
   assert.throws(() => reviewRoleBasedCost({ version: 1, profile: 'public-demo', intent: 'review-paid-costs', acknowledgeFixedCharges: true }));
 });
 test('authorized artifacts publish only gateway and DAB images', async () => {
@@ -102,6 +114,18 @@ test('authorized deploy resumes retained schema stage without provisioning or pu
   await deploy(config, run, async () => new Response('{}'), async () => {});
   assert.equal(calls.some(call => call.includes('/Action:Publish') || call.includes(`${config.name}-${config.environment}-infrastructure`)), false);
 });
+test('legacy role-based state defaults the absent function principal to empty', async t => {
+  const { functionPrincipalId: _functionPrincipalId, ...legacyOutputs } = outputs;
+  const prior: DeploymentState = {
+    environmentKey: environmentKey(config),
+    configHash: await deploymentConfigHash(config),
+    stage: 'schema', outputs: legacyOutputs as DeploymentState['outputs'], applicationHome: directory,
+  };
+  await saveState(statePath(config), prior);
+  t.after(() => unlink(statePath(config)));
+  assert.equal((await readState(config)).outputs.functionPrincipalId, '');
+});
+
 test('failed authorized runtime retains schema stage and never claims readiness', async t => {
   const { run } = runner(true);
   const stages: string[] = [];
