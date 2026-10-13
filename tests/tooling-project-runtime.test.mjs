@@ -27,7 +27,7 @@ async function run(command, args, cwd) {
 
 async function projectFixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'sql-apps-generated-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }));
   const project = join(directory, 'customer-data');
   const tooling = join(project, 'node_modules', '@microsoft', 'sql-apps');
   await Promise.all([
