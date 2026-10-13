@@ -166,6 +166,34 @@ for (const removed of [true, false]) {
   });
 }
 
+for (const removed of [true, false]) {
+  test(`stale-lock listing EPERM ${removed ? 'after concurrent removal permits acquisition' : 'with an existing directory remains an error'}`, async t => {
+    const home = await fixture(t);
+    const lock = join(home, '.sql-apps', 'consent.lock');
+    await mkdir(lock, { recursive: true });
+    const original = fs.readdir;
+    const denied = Object.assign(new Error('Synthetic Windows directory listing failure'), { code: 'EPERM' });
+    let injected = false;
+    t.mock.method(fs, 'readdir', async (...args) => {
+      if (args[0] === lock && !injected) {
+        injected = true;
+        if (removed) await fs.rmdir(lock);
+        throw denied;
+      }
+      return original(...args);
+    });
+    syncBuiltinESMExports();
+    try {
+      const operation = withFileLock(lock, async () => 'acquired');
+      if (removed) assert.equal(await operation, 'acquired');
+      else await assert.rejects(operation, error => error === denied);
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    }
+  });
+}
+
 test('a live consent lock is protected and a killed owner is recovered immediately', { timeout: 5_000 }, async t => {
   const home = await fixture(t);
   await grantConsent(home, await planConsent(home, { operation: 'restore' }));

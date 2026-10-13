@@ -59,7 +59,11 @@ async function clearStale(lock) {
   if (!info.isDirectory()) throw new Error('Lock must be a regular file or directory');
   let entries;
   try { entries = await readdir(lock); }
-  catch (error) { if (hasCode(error, 'ENOENT')) return true; throw error; }
+  catch (error) {
+    if (hasCode(error, 'ENOENT')) return true;
+    if (hasCode(error, 'EPERM') && !await inspect(lock)) return true;
+    throw error;
+  }
   if (entries.length > 1 || entries.length === 1 && !ownerName.test(entries[0])) {
     throw new Error('Lock directory has unexpected contents; inspect it without resetting state');
   }
