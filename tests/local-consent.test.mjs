@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink, copyFile, utimes } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink, copyFile, utimes, realpath } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -524,7 +524,7 @@ test('selected commands bind artifact content and reject another workspace befor
   const workspace = JSON.parse(await readFile(join(home, '.sql-apps', 'workspace.json')));
   const directory = join(home, '.sql-apps', 'workspaces', workspace.id, 'applications', 'todo', 'local-simulation', 'artifact');
   await mkdir(directory, { recursive: true });
-  const manifest = { home, workspaceId: workspace.id, profile: 'local-simulation', name: 'todo' };
+  const manifest = { home: await realpath(home), workspaceId: workspace.id, profile: 'local-simulation', name: 'todo' };
   await writeFile(join(directory, 'application-build.json'), JSON.stringify(manifest));
   for (const folder of ['sql', 'setup', 'server', 'dab', 'public']) await mkdir(join(directory, folder));
   await writeFile(join(directory, 'sql', 'schema.sql'), '-- fixture schema');
