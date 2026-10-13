@@ -16,6 +16,19 @@ Azure SQL and Container Apps have free allowances, but the current demo template
 
 The Static Web Apps candidate does not remove that stack. Static Web Apps Standard serves the static website, while one linked Container App still runs the Node API and internal DAB. ACR, networking, SQL and Container Apps can still charge, and Standard adds its own plan. It is therefore likely not cheaper and must not be presented as a cost-saving default without current, same-basis evidence.
 
+## Lowest-cost POC path
+
+The lowest-cost path is not "pick any free tier and deploy". For this repo, a zero-dollars or near-zero-dollars proof-of-concept should stay local unless a reviewed design is explicit about which services are in scope, what is still paid, and which grants are being consumed.
+
+A simplified App Service or Static Web Apps candidate may be cheaper than the current Container Apps default for specific workloads, but it does not remove the need to review:
+
+- free-tier eligibility and monthly activation limits for Azure SQL,
+- App Service plan choice and whether the chosen plan supports the application boundary,
+- storage, networking, container registry and observability costs that still exist even when the app is idle,
+- and whether a DB-free or local-first approach is the correct boundary for a true zero-cost proof-of-concept.
+
+This repo keeps the production-safe default because the app's real deployment boundary is a managed identity, private networking, SQL access, API validation and DAB hosting. Those concerns are more important than a one-line claim that "App Service free tier exists". The default remains production-oriented until a reviewed cost comparison proves a lower-cost path is equivalent.
+
 If zero Azure spending is a requirement, stay local until you have reviewed a hosting design that meets it. SQL Apps does not currently provide a guaranteed zero-cost deployment.
 
 Before creating resources, select the approved capability/access profile, then review the target region, subscription eligibility, fixed charges, expected usage and cleanup plan. The [offline demo cost command](../reference/demo-cost.md) identifies known demo charges without contacting Azure; it is demo-only, not an authenticated app cost model, price quote or spending cap. Role-authorized data-only apps use the matching [role-based-cost review](../reference/role-based-data.md#profile-specific-azure-preparation); do not price an older stack or substitute the full foundation as though it were the agreed app.

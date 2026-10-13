@@ -10,7 +10,10 @@ full-foundation deployments remain unchanged.
 The current Container Apps public-demo path remains the default until both the
 measured hosting comparison and live acceptance gates pass. Static Web Apps is
 not assumed to be cheaper: Standard adds a resource while SQL, Azure Container
-Registry, networking, Container Apps, the Node API and DAB remain.
+Registry, networking, Container Apps, the Node API and DAB remain. Likewise, a
+free App Service or free Azure SQL allowance does not make the full deployment
+zero-cost. The default stays production-safe and cost-aware until a reviewed,
+measured comparison proves a lower-cost path is equivalent.
 
 ## Why DAB is still self-hosted
 

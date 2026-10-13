@@ -4,6 +4,8 @@ For an overview before deciding whether to share your app, read [Costs and growt
 
 **Free tier** means recurring monthly allowances, not trial credits or a guaranteed free deployment. The Azure SQL documentation uses "free offer" for its enrollment mechanism. Eligibility, usage limits and separate paid resources still apply.
 
+For a true zero-dollars or absolute-lowest-cost proof-of-concept, the repo does not accept the claim that "App Service free tier exists" or "Azure SQL has a free offer" as proof that the whole app is free. The real question is whether the chosen hosting plan, SQL mode, registry, networking and observability still leave fixed charges or a paused database at the end of the month. A minimal local or single-tenant proof-of-concept remains the safest default when the goal is zero spend.
+
 ## Offline demo cost review
 
 After building, run:
