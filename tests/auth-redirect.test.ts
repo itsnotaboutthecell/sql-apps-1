@@ -28,7 +28,7 @@ test('Microsoft sign-in callback is public and isolated from the application', a
 });
 
 test('Microsoft sign-in callback uses the MSAL redirect bridge without product startup', async () => {
-  const source = await readFile('src\\web\\auth-redirect.ts', 'utf8');
+  const source = await readFile('src/web/auth-redirect.ts', 'utf8');
   assert.match(source, /@azure\/msal-browser\/redirect-bridge/);
   assert.doesNotMatch(source, /fetch\(|configureSession|PublicClientApplication/);
 });

@@ -636,7 +636,7 @@ test('browser restores signed-out recovery after Microsoft login cancellation', 
 });
 
 test('product markup exposes semantic account lifecycle controls without a development persona selector', async () => {
-  const html = await readFile('public\\index.html', 'utf8');
+  const html = await readFile('public/index.html', 'utf8');
   assert.match(html, /<section aria-label="Account and application access">/);
   assert.match(html, /id="auth-notice" hidden/);
   assert.match(html, /id="login" hidden>Sign in with Microsoft</);

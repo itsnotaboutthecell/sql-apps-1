@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink, copyFile, utimes } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFile, spawn } from 'node:child_process';
@@ -390,9 +391,11 @@ test('guarded execution denies before the runner and passes only approved operat
   await assert.rejects(main(['run', 'azure'], home, runner), /Unsupported/);
 });
 
-test('direct local CLI denies before workspace mutation', async t => {
+// The cross-OS setup-diagnostics CI job runs without a build; npm test builds first and covers this.
+const localCli = resolve('dist/src/local-cli.js');
+test('direct local CLI denies before workspace mutation', { skip: !existsSync(localCli) && 'requires npm run build' }, async t => {
   const home = await fixture(t);
-  const local = resolve('dist/src/local-cli.js');
+  const local = localCli;
   await assert.rejects(execute(process.execPath, [local, 'workspace-init', '30000'], { cwd: home }), /Missing local permission/);
   await assert.rejects(readFile(join(home, '.sql-apps', 'workspace.json')), { code: 'ENOENT' });
   const plan = await planConsent(home, { operation: 'workspace-init', selection: '30000' });
