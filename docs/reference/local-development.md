@@ -302,4 +302,9 @@ This is a usable **frontend/gateway/SQL/DAB/Blob/Queue/Functions learning workfl
 
 Browser Entra sign-in can be tested through the explicit local opt-in, but cloud sign-in, managed identity, private endpoints, cloud Blob/Functions, Key Vault and cloud recovery still require Azure acceptance. Local SQL login/EasyAuth/storage secrets are intentionally separate from cloud Entra/managed-identity configuration. Azurite is not Azure Files or ADLS Gen2; its Table service is not part of this workflow. The SQL preview is not a production database or backup service; see the [current known limitations](https://microsoft.github.io/azure-sql-database-container/known-limitations.html).
 
-No Azure free allowance is needed to start locally. The existing cloud template includes billed EP1/S0/private-endpoint resources and is **not** a free-tier template. A separate optional learning cloud deployment profile remains future work; do not deploy the current template expecting a zero bill.
+No Azure free allowance is needed to start locally. The default
+role-based-data cloud profile now uses free-limit serverless SQL,
+scale-to-zero Container Apps and capped logs, but ACR, one SQL private
+endpoint and managed network infrastructure can still charge. The explicit foundation
+profile includes billed EP1/S0/private-endpoint resources and is not a POC
+default. Do not deploy either profile expecting a guaranteed zero bill.

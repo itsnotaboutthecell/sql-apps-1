@@ -38,7 +38,7 @@ After explicit approval, the approved form performs only the reviewed stages. A 
 
 ## Choose the profile first
 
-- **Local simulation:** subscription-free, loopback-only anonymous synthetic sessions for this selected reference. This is separate from the default foundation's local preview account journey, which keeps identity testing on a separate developer-only page.
+- **Local simulation:** subscription-free, loopback-only anonymous synthetic sessions for this selected reference. This is separate from the foundation local preview account journey, which keeps identity testing on a separate developer-only page.
 - **Public synthetic-data demo:** intended anonymous HTTPS browser/API, internal DAB and Azure SQL. It must require synthetic-data acknowledgement and omit visitor sign-in, app-registration creation and Graph prerequisites. Cloud resources are separately authorized and can incur charges.
 - **Authenticated application:** use the existing [full-foundation deployment](deployment.md), with its explicit Entra and service requirements. It is not the minimal public-demo path.
 
@@ -86,7 +86,7 @@ The existing full-foundation commands remain separate. Before future demo provis
 
 ## Minimal template preparation
 
-The foundation's default deployment prefix is `sqlapps`. The runtime requires an explicit `applicationName`, which determines the browser hostname prefix; use a reviewed `sqlapps`-prefixed name for the starter. Existing resource names and URLs are not changed automatically.
+The foundation deployment prefix is `sqlapps`. The runtime requires an explicit `applicationName`, which determines the browser hostname prefix; use a reviewed `sqlapps`-prefixed name for the starter. Existing resource names and URLs are not changed automatically.
 
 The separate [foundation template](../../infra/demo.bicep) prepares a Container Apps Consumption environment, one runtime managed identity, Basic Azure Container Registry, a selected VNet/subnet with a SQL service endpoint, Azure SQL server/database and narrow subnet rule. The [runtime template](../../infra/demo-runtime.bicep) subsequently deploys only the selected gateway and internal DAB sidecar. This split allows infrastructure, source publication and SQL preparation to remain separately approved stages.
 

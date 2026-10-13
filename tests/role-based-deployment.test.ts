@@ -75,7 +75,9 @@ test('authorized cost review matches paid template and never infers spending app
   assert.equal(report.review.canProceedToWhatIf, false);
   assert.equal(report.estimatedMonthlyCost, null);
   assert.equal(report.deployment.authorized, false);
-  assert.equal(report.resources[0]!.sku, 'S0');
+  assert.equal(report.resources[0]!.sku, 'GP_S_Gen5_2 free limit');
+  assert.equal(report.resources[2]!.minReplicas, 0);
+  assert.match(report.resources[3]!.billing, /private endpoint/i);
   assert.throws(() => reviewRoleBasedCost({ version: 1, profile: 'public-demo', intent: 'review-paid-costs', acknowledgeFixedCharges: true }));
 });
 test('authorized artifacts publish only gateway and DAB images', async () => {

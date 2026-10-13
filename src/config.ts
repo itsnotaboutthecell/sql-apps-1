@@ -20,7 +20,7 @@ const image = z.string().regex(
 ).refine(value => !value.endsWith(':latest'), 'Use an explicit version, not latest');
 
 export const deploymentSchema = z.strictObject({
-  profile: z.enum(['foundation', 'role-based-data']).optional(),
+  profile: z.enum(['foundation', 'role-based-data']),
   requiredRole: requiredRoleSchema.optional(),
   readinessPath: readinessPathSchema.optional(),
   subscriptionId: uuid,

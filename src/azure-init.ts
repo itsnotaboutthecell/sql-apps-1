@@ -10,7 +10,7 @@ import { readRoleBasedProfile } from './role-based-profile.js';
 export const unsetClientId = '00000000-0000-0000-0000-000000000000';
 
 export interface InitOptions {
-  profile: 'foundation' | 'role-based-data';
+  profile?: 'foundation' | 'role-based-data';
   location: string;
   resourceGroup: string;
   registryServer: string;
@@ -28,24 +28,25 @@ export function deploymentName(value: string): string {
 
 /** Reads Azure CLI's signed-in context and the application's own files; writes nothing to Azure. */
 export async function initDeploymentConfig(options: InitOptions, run: Run, root = '.'): Promise<DeploymentConfig> {
+  const profile = options.profile ?? 'role-based-data';
   const account = z.object({ id: z.string(), tenantId: z.string(), user: z.object({ name: z.string(), type: z.string() }) })
     .parse(JSON.parse(await run('az', ['account', 'show', '-o', 'json'])));
   if (account.user.type !== 'user') throw new Error('azure init needs a signed-in user (az login) to become the SQL administrator; service principals are not supported here.');
   const operator = (await run('az', ['ad', 'signed-in-user', 'show', '--query', 'id', '-o', 'tsv'])).trim();
   let role: { requiredRole?: string; readinessPath?: string } = {};
-  if (options.profile === 'role-based-data') {
+  if (profile === 'role-based-data') {
     try { const profile = await readRoleBasedProfile(join(root, 'role-based-data.json')); role = { requiredRole: profile.requiredRole, readinessPath: profile.readinessPath }; }
     catch (error) { throw new Error(`Role-based deployment reads requiredRole and readinessPath from role-based-data.json: ${error instanceof Error ? error.message : error}`); }
   }
   const name = deploymentName(options.name ?? z.object({ name: z.string() }).parse(JSON.parse(await readFile(join(root, 'application.json'), 'utf8'))).name);
   const image = (part: string) => `${options.registryServer}/${name}-${part}:0.1.2`;
   return deploymentSchema.parse({
-    profile: options.profile, ...role,
+    profile, ...role,
     subscriptionId: account.id, tenantId: account.tenantId, apiClientId: unsetClientId,
     sqlAdminObjectId: operator, sqlAdminName: account.user.name,
     resourceGroup: options.resourceGroup, location: options.location, environment: options.environment ?? 'dev', name,
     gatewayImage: image('gateway'), dabImage: image('data'),
-    functionsImage: options.profile === 'foundation' ? image('functions') : '',
+    functionsImage: profile === 'foundation' ? image('functions') : '',
     registryServer: options.registryServer,
   });
 }

@@ -8,7 +8,7 @@
   "sqlAdminObjectId": "00000000-0000-0000-0000-000000000000",
   "sqlAdminName": "deployment-operator",
   "resourceGroup": "data-app-dev",
-  "location": "eastus",
+  "location": "westus2",
   "environment": "dev",
   "name": "data-app",
   "gatewayImage": "yourregistry.azurecr.io/app-gateway:0.1.2",

@@ -6,7 +6,7 @@ param name string = 'sqlapps'
 @allowed(['dev', 'test', 'prod'])
 param environment string
 @allowed(['foundation', 'role-based-data'])
-param profile string = 'foundation'
+param profile string = 'role-based-data'
 param registryServer string
 param gatewayPrincipalId string
 param dabPrincipalId string

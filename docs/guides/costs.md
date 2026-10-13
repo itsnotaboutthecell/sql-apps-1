@@ -25,8 +25,8 @@ The profiles have very different idle cost floors. None is a general-purpose
 | --- | --- | --- |
 | Local | Build and single-machine evaluation | No Azure resources |
 | Public demo | Small disposable browser demo | ACR Basic and custom-network Container Apps infrastructure remain paid even when app replicas scale to zero; SQL can use the eligible free-paused offer |
-| Role-based data | Private SQL/DAB app without files or Functions | Paid S0 SQL, ACR Basic, SQL private endpoint, two Container Apps with one minimum replica each, and Log Analytics |
-| Foundation | Full production-oriented validation | Everything in role-based data plus an always-billed Functions EP1 plan, Storage, Key Vault, five additional private endpoints, Application Insights, and their data/telemetry usage |
+| Role-based data (default cloud profile) | Small private SQL/DAB POC without files or Functions | Eligible free-limit serverless SQL, two scale-to-zero Container Apps, capped Log Analytics, ACR Basic, and one SQL private endpoint |
+| Foundation (explicit opt-in) | Full production-like validation | Paid S0 SQL, always-on Container Apps, an always-billed Functions EP1 plan, Storage, Key Vault, six private endpoints, Application Insights, and their data/telemetry usage |
 
 The full foundation profile is deliberately secure and capability-complete,
 but it is an expensive way to run a demo. In East US on 2026-10-13, the
@@ -63,7 +63,15 @@ A simplified App Service or Static Web Apps candidate may be cheaper than the cu
 - storage, networking, container registry and observability costs that still exist even when the app is idle,
 - and whether a DB-free or local-first approach is the correct boundary for a true zero-cost proof-of-concept.
 
-This repo keeps the production-safe default because the app's real deployment boundary is a managed identity, private networking, SQL access, API validation and DAB hosting. Those concerns are more important than a one-line claim that "App Service free tier exists". The default remains production-oriented until a reviewed cost comparison proves a lower-cost path is equivalent.
+This repo defaults cloud initialization and the main Bicep template to the
+role-based-data POC profile. It uses the Azure SQL free limit with
+`AutoPause`, scales both Container Apps to zero, and caps Log Analytics
+ingestion at 0.1 GB/day. It retains one SQL private endpoint because schema
+publication and runtime SQL access must remain private. The paid foundation
+stack is never inferred: it
+requires an explicit `--profile foundation` choice and a separate cost review.
+Security boundaries remain intact; the cheaper default removes capabilities
+instead of weakening identity, SQL authorization, TLS, or network access.
 
 If zero Azure spending is a requirement, stay local until you have reviewed a hosting design that meets it. SQL Apps does not currently provide a guaranteed zero-cost deployment.
 

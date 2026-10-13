@@ -48,7 +48,8 @@ test('deployment names stay bounded without collisions after normalization', () 
 test('azure init derives tenant, subscription, operator and role settings and asks only for placement', async t => {
   const root = await home(t);
   const { run, calls } = signedIn();
-  const config = await initDeploymentConfig({ profile: 'role-based-data', location: 'eastus', resourceGroup: 'rg-expense', registryServer: 'expense.azurecr.io' }, run, root);
+  const config = await initDeploymentConfig({ location: 'westus2', resourceGroup: 'rg-expense', registryServer: 'expense.azurecr.io' }, run, root);
+  assert.equal(config.profile, 'role-based-data', 'POC initialization defaults to the lowest-cost cloud profile');
   assert.deepEqual(deploymentSchema.parse(config), config);
   assert.equal(config.tenantId, tenant);
   assert.equal(config.subscriptionId, subscription);
@@ -90,7 +91,7 @@ test('deploy-all review is read-only and a stale approval id runs nothing; init 
 
 test('deploy-all lists only pending paid steps and binds approval to the config and remaining work', async t => {
   const root = await home(t);
-  const config = await initDeploymentConfig({ profile: 'role-based-data', location: 'eastus', resourceGroup: 'rg-expense', registryServer: 'expense.azurecr.io' }, signedIn().run, root);
+  const config = await initDeploymentConfig({ location: 'westus2', resourceGroup: 'rg-expense', registryServer: 'expense.azurecr.io' }, signedIn().run, root);
   const fresh = planDeployAll(config, undefined);
   assert.deepEqual(fresh.pending, ['identity', 'artifacts', 'provision', 'deploy', 'status']);
   assert.match(fresh.approval, /^[a-f0-9]{12}$/);

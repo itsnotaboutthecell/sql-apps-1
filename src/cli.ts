@@ -46,7 +46,7 @@ async function main() {
     console.log('Public-demo starter: demo-init <new-publication.json> --subscription <id> --resource-group <name> --location <region> --static-web-app-location <region> --application <name> --artifact <path> --owner <owner>. Discovery only; creates no Azure resources.');
     console.log('Public-demo costs: demo-cost <explicit cost configuration>. Offline free-allowance/fixed-charge review; no Azure login, network requests or resource writes. Exit 2 means cost intent is blocked or acknowledgement is missing; exit 1 means invalid input.');
     console.log('Role-based-data: role-based-cost <cost configuration> is offline and profile-specific. Use validate/artifacts/identity/plan/provision/deploy/status/schema with a role-based-data deployment configuration. role-based-assign <config> <user-or-group-object-id> explicitly assigns its application role; role-based-smoke <config> needs delegated tokens with and without the required role in SQL_APPS_USER_TOKEN / SQL_APPS_SECOND_USER_TOKEN. All cloud writes need operator approval; local simulations never deploy.');
-    console.log('Shortest path: az login, then init <new-config.json> --profile <p> --location <region> --resource-group <rg> --registry <name>.azurecr.io (read-only), then deploy-all <config> to review pending paid steps and deploy-all <config> --approve <id> after explicit approval.');
+    console.log('Shortest path: stay local for POCs. For minimal cloud validation: az login, then init <new-config.json> --location <region> --resource-group <rg> --registry <name>.azurecr.io (read-only). This defaults to the scale-to-zero role-based-data profile; --profile foundation is an explicit paid full-stack opt-in.');
     return;
   }
   if (command === 'architecture-plan') {
@@ -132,11 +132,12 @@ async function main() {
   }
   if (command === 'init') {
     const flags = parseFlags(process.argv.slice(4), ['profile', 'location', 'resource-group', 'registry', 'environment', 'name']);
-    if (process.argv.length < 4 || !configPath.endsWith('.json')) throw new Error('Usage: init <new-config.json> --profile <foundation|role-based-data> --location <region> --resource-group <name> --registry <name>.azurecr.io [--environment dev|test|prod] [--name <name>]');
+    if (process.argv.length < 4 || !configPath.endsWith('.json')) throw new Error('Usage: init <new-config.json> [--profile role-based-data|foundation] --location <region> --resource-group <name> --registry <name>.azurecr.io [--environment dev|test|prod] [--name <name>]. Defaults to role-based-data; foundation is the paid full-stack opt-in.');
     if (existsSync(resolve(configPath))) throw new Error(`${configPath} already exists; init never overwrites a configuration.`);
-    for (const key of ['profile', 'location', 'resource-group', 'registry']) if (!flags[key]) throw new Error(`init needs --${key}; tenant, subscription and SQL administrator come from az login.`);
+    for (const key of ['location', 'resource-group', 'registry']) if (!flags[key]) throw new Error(`init needs --${key}; tenant, subscription and SQL administrator come from az login.`);
     const config = await initDeploymentConfig({
-      profile: flags.profile as InitOptions['profile'], location: flags.location!, resourceGroup: flags['resource-group']!,
+      ...(flags.profile ? { profile: flags.profile as NonNullable<InitOptions['profile']> } : {}),
+      location: flags.location!, resourceGroup: flags['resource-group']!,
       registryServer: flags.registry!, environment: flags.environment as InitOptions['environment'], name: flags.name,
     }, run);
     if (config.profile === 'role-based-data') await validateRoleBasedCloudSource({ profile: 'role-based-data', requiredRole: config.requiredRole!, readinessPath: config.readinessPath! });
@@ -181,7 +182,7 @@ async function main() {
     return;
   }
   if (command === 'demo-cost' || command === 'role-based-cost') {
-    if (process.argv.length !== 4) throw new Error('Provide an explicit matching-profile cost configuration; no billing choice or spending consent is inferred. Copy and review azure-demo-cost.example.json (foundation) or azure-role-based-cost.example.json (role-based-data).');
+    if (process.argv.length !== 4) throw new Error('Provide an explicit matching-profile cost configuration; no billing choice or spending consent is inferred. Copy and review azure-demo-cost.example.json (public-demo) or azure-role-based-cost.example.json (role-based-data). Foundation requires its own explicit target pricing review.');
     const input: unknown = JSON.parse(await readFile(resolve(configPath), 'utf8'));
     const report = command === 'role-based-cost' ? reviewRoleBasedCost(input) : reviewDemoCost(input);
     console.log(JSON.stringify(report, null, 2));

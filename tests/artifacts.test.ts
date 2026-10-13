@@ -6,7 +6,7 @@ import { deploymentSchema } from '../src/config.js';
 import { buildArtifacts, imageDigest, imageFields } from '../src/artifacts.js';
 import type { Run } from '../src/process.js';
 
-const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps.example.json', 'utf8')));
+const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps-foundation.example.json', 'utf8')));
 const digest = `sha256:${'a'.repeat(64)}`;
 
 test('artifact builds use ACR for all services and return immutable validated configuration', async () => {

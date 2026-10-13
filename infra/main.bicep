@@ -10,7 +10,7 @@ param location string = resourceGroup().location
 param tenantId string
 param apiClientId string
 @allowed(['foundation', 'role-based-data'])
-param profile string = 'foundation'
+param profile string = 'role-based-data'
 param requiredRole string = ''
 param readinessPath string = ''
 param sqlAdminObjectId string
@@ -30,6 +30,9 @@ param sqlBackupRedundancy string = 'Geo'
 
 var prefix = '${name}-${environment}'
 var fullFoundation = profile == 'foundation'
+var effectiveSqlBackupRedundancy = fullFoundation ? sqlBackupRedundancy : 'Local'
+var roleBasedSqlSku = { name: 'GP_S_Gen5_2', tier: 'GeneralPurpose', family: 'Gen5', capacity: 2 }
+var logDailyQuotaGb = fullFoundation ? -1 : json('0.1')
 var suffix = uniqueString(resourceGroup().id, prefix)
 var sqlName = '${prefix}-${suffix}'
 var storageName = 'sqlapps${suffix}'
@@ -80,7 +83,7 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: '${prefix}-logs'
   location: location
   tags: tags
-  properties: { sku: { name: 'PerGB2018' }, retentionInDays: 30 }
+  properties: { sku: { name: 'PerGB2018' }, retentionInDays: 30, workspaceCapping: { dailyQuotaGb: logDailyQuotaGb } }
 }
 resource insights 'Microsoft.Insights/components@2020-02-02' = if (fullFoundation) {
   name: '${prefix}-insights'
@@ -124,12 +127,18 @@ resource database 'Microsoft.Sql/servers/databases@2023-08-01' = {
   name: 'app'
   location: location
   tags: tags
-  sku: { name: 'S0', tier: 'Standard', capacity: 10 }
-  properties: {
+  sku: fullFoundation ? { name: 'S0', tier: 'Standard', capacity: 10 } : roleBasedSqlSku
+  properties: union({
     collation: 'SQL_Latin1_General_CP1_CI_AS'
     zoneRedundant: false
-    requestedBackupStorageRedundancy: sqlBackupRedundancy
-  }
+    requestedBackupStorageRedundancy: effectiveSqlBackupRedundancy
+    maxSizeBytes: fullFoundation ? 268435456000 : 34359738368
+    useFreeLimit: !fullFoundation
+  }, fullFoundation ? {} : {
+    freeLimitExhaustionBehavior: 'AutoPause'
+    autoPauseDelay: 60
+    minCapacity: json('0.5')
+  })
 }
 resource backupRetention 'Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies@2023-08-01' = {
   parent: database
@@ -277,7 +286,7 @@ resource dataApp 'Microsoft.App/containerApps@2024-03-01' = if (deployGateway) {
       registries: [{ server: registryServer, identity: dabIdentity.id }]
     }
     template: {
-      scale: { minReplicas: 1, maxReplicas: 2 }
+      scale: { minReplicas: fullFoundation ? 1 : 0, maxReplicas: 2 }
       containers: [{
         name: 'data'
         image: dabImage
@@ -311,7 +320,7 @@ resource gateway 'Microsoft.App/containerApps@2024-03-01' = if (deployGateway) {
       registries: [{ server: registryServer, identity: gatewayIdentity.id }]
     }
     template: {
-      scale: { minReplicas: 1, maxReplicas: 2 }
+      scale: { minReplicas: fullFoundation ? 1 : 0, maxReplicas: 2 }
       containers: [{
         name: 'gateway'
         image: gatewayImage
@@ -353,5 +362,5 @@ output networkId string = network.id
 output storageAccount string = fullFoundation ? files!.name : ''
 output vaultName string = fullFoundation ? vault!.name : ''
 output sqlBackupRetentionDays int = sqlBackupRetentionDays
-output sqlBackupRedundancy string = sqlBackupRedundancy
+output sqlBackupRedundancy string = effectiveSqlBackupRedundancy
 output sqlAuditWorkspaceName string = logs.name

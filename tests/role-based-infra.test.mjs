@@ -15,7 +15,7 @@ test('compiled authorized profile gates excluded resources and retains private S
   await run('az', ['bicep', 'build', '--file', resolve('infra', 'rbac.bicep'), '--outfile', rbacOutput]);
   const template = JSON.parse(await readFile(output, 'utf8'));
   const rbac = JSON.parse(await readFile(rbacOutput, 'utf8'));
-  assert.equal(template.parameters.profile.defaultValue, 'foundation');
+  assert.equal(template.parameters.profile.defaultValue, 'role-based-data');
   assert.deepEqual(template.parameters.profile.allowedValues, ['foundation', 'role-based-data']);
   assert.equal(template.variables.fullFoundation, "[equals(parameters('profile'), 'foundation')]");
   for (const resource of template.resources.filter(resource =>
@@ -48,9 +48,13 @@ test('compiled authorized profile gates excluded resources and retains private S
   assert.equal(sqlEndpoint.condition, undefined);
   const cost = reviewRoleBasedCost(JSON.parse(await readFile('azure-role-based-cost.example.json', 'utf8')));
   const database = template.resources.find(resource => resource.type === 'Microsoft.Sql/servers/databases');
-  assert.equal(database.sku.name, cost.resources[0].sku);
+  assert.match(database.sku, /if\(variables\('fullFoundation'\).*S0.*roleBasedSqlSku/);
+  assert.equal(template.variables.roleBasedSqlSku.name, 'GP_S_Gen5_2');
+  assert.match(database.properties, /useFreeLimit.*freeLimitExhaustionBehavior.*AutoPause.*autoPauseDelay.*60.*minCapacity.*0\.5/);
+  assert.equal(cost.resources[0].sku, 'GP_S_Gen5_2 free limit');
   for (const resource of template.resources.filter(resource => resource.type === 'Microsoft.App/containerApps')) {
-    assert.equal(resource.properties.template.scale.minReplicas, cost.resources[2].minReplicas);
+    assert.match(resource.properties.template.scale.minReplicas, /if\(variables\('fullFoundation'\), 1, 0\)/);
+    assert.equal(cost.resources[2].minReplicas, 0);
     assert.equal(resource.properties.template.scale.maxReplicas, cost.resources[2].maxReplicas);
     assert.equal(resource.properties.template.containers[0].resources.cpu, "[json('0.5')]");
     assert.equal(resource.properties.template.containers[0].resources.memory, '1Gi');
@@ -80,4 +84,7 @@ test('compiled authorized profile gates excluded resources and retains private S
   }
   const storageEndpoints = template.resources.find(resource => resource.copy?.name === 'storageEndpoints');
   assert.match(storageEndpoints.copy.count, /if\(variables\('fullFoundation'\).*createArray\(\)/);
+  const workspace = template.resources.find(resource => resource.type === 'Microsoft.OperationalInsights/workspaces');
+  assert.equal(workspace.properties.workspaceCapping.dailyQuotaGb, "[variables('logDailyQuotaGb')]");
+  assert.match(template.variables.logDailyQuotaGb, /if\(variables\('fullFoundation'\), -1, json\('0.1'\)\)/);
 });

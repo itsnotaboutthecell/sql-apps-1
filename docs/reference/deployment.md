@@ -4,7 +4,7 @@ Use this reference when deploying an authenticated application with the full Azu
 
 ## Profile and deployment subject
 
-The default authenticated foundation path includes Functions, storage, Key Vault and private networking. The explicit [role-based-data profile](role-based-data.md) uses the same orchestration with two images, human application roles and private SQL, excluding file/job services. Do not add excluded services or use an anonymous demo without an agreed scope change. `demo-cost` remains demo-only; use `role-based-cost` for role-based-data and review actual regional/account prices separately.
+The default authenticated cloud path is the [role-based-data profile](role-based-data.md): two scale-to-zero images, human application roles, free-limit SQL and no file/job services. The foundation profile is an explicit paid full-stack opt-in that adds Functions, storage, Key Vault, S0 SQL and private endpoints. Do not add excluded services or use an anonymous demo without an agreed scope change. `demo-cost` remains demo-only; use `role-based-cost` for role-based-data and review actual regional/account prices separately.
 
 Keep the confirmed new application checkout/configuration/artifacts as the deployment subject. With read-only Azure authorization, discovered older resources are potential collisions, not permission to reuse or modify them. Reuse requires an explicit request and a separate compatibility/migration/cost review; existing data remains untouched.
 
@@ -64,9 +64,16 @@ read-only; tenant, subscription, SQL administrator and (for `role-based-data`)
 role settings are derived, so only placement is asked for:
 
 ```powershell
-npm run azure -- init sql-apps.json --profile foundation --location eastus --resource-group rg-sql-apps-dev --registry <name>.azurecr.io
+npm run azure -- init sql-apps.json --location westus2 --resource-group rg-sql-apps-poc --registry <name>.azurecr.io
 npm run azure -- deploy-all sql-apps.json
 ```
+
+`init` defaults to the role-based-data POC profile: free-limit serverless SQL,
+scale-to-zero gateway and DAB containers, capped logs, and no Functions,
+Storage or Key Vault. It reads `requiredRole` and `readinessPath` from
+`role-based-data.json`. The full foundation stack requires the explicit
+`--profile foundation` flag and a separate review of its EP1, S0, always-on
+replicas and private-endpoint cost floor.
 
 `deploy-all` without `--approve` only lists the pending paid steps (`identity`,
 `artifacts`, `provision`, `deploy`, `status`), the exclusions and an id. Review
@@ -117,13 +124,20 @@ Alternatively configure an existing dedicated registration with the same scope a
 
 The deployment operator needs directory rights to update redirects and grant that application role to the gateway managed identity. Graph permissions and Azure resource RBAC are separate.
 
-## Private-network SQL deployment
+## SQL network deployment
 
-The Bicep template disables SQL's public endpoint and provisions a private endpoint. Run full deployment on a machine/runner that can reach the new VNet through peering/VPN or another approved network path. The `networkId` deployment output identifies it. The default network range is `10.42.0.0/16`; review conflicts before deployment.
+Both profiles disable SQL's public endpoint and retain a private endpoint.
+Run schema deployment on a machine/runner that can reach the VNet through
+peering/VPN or another approved network path. The `networkId` deployment
+output identifies it. The default network range is `10.42.0.0/16`; review
+conflicts before deployment.
 
 The configured `sqlAdminObjectId` must identify your migration principal or an Entra group containing it. The CLI obtains a SQL access token using Azure CLI for the configured subscription and passes it to SqlPackage without saving it. Check the selected SQL identity explicitly; Azure resource permissions do not automatically authorize database schema publishing. Error output is redacted for this token. As with SqlPackage's standard access-token interface, the deployment host must be trusted because privileged local processes can inspect process arguments.
 
-No public SQL firewall exception is added to make migrations pass. Use `provision` to create the infrastructure and obtain its network ID before connecting a runner. If full deployment's SQL publishing fails, infrastructure stage state is retained, and deployment stops before gateway/data rollout. Restore private connectivity and retry.
+No public SQL firewall exception is added to make migrations pass. Use
+`provision` to create infrastructure and obtain its network ID before
+connecting a private runner. If schema publishing fails, infrastructure stage
+state is retained and deployment stops before gateway/data rollout.
 
 ## Privileged Azure RBAC handoff
 

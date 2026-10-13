@@ -88,7 +88,7 @@ export function rbacParameters(config: DeploymentConfig, outputs: DeploymentOutp
   return { parameters: {
     name: { value: config.name },
     environment: { value: config.environment },
-    profile: { value: config.profile ?? 'foundation' },
+    profile: { value: config.profile },
     registryServer: { value: config.registryServer },
     gatewayPrincipalId: { value: outputs.gatewayPrincipalId },
     dabPrincipalId: { value: outputs.dabPrincipalId },

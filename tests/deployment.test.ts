@@ -13,7 +13,7 @@ import {
 } from '../src/deployment.js';
 import type { Run } from '../src/process.js';
 
-const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps.example.json', 'utf8')));
+const config = deploymentSchema.parse(JSON.parse(await readFile('sql-apps-foundation.example.json', 'utf8')));
 const outputs: DeploymentOutputs = {
   sqlServer: 'example.database.windows.net', databaseName: 'app',
   dabPrincipalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
