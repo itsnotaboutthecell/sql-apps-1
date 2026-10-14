@@ -59,7 +59,7 @@ Pass:
 - states a short intent for audience, primary task, hierarchy, type, palette, layout and responsive behavior;
 - treats a basic shell as small but visually complete;
 - reviews rendered primary and reachable states at desktop and narrow widths when supported, fixes defects and re-reviews;
-- does not modify the reference Motivational Quotes app or infer database/access changes from visual choices.
+- keeps this disposable scenario separate from the Todo reference example: it neither copies nor modifies that example, and does not infer database/access changes from visual choices.
 
 ## 6. Continue without a host design skill
 

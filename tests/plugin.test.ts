@@ -177,18 +177,18 @@ test('SQL Apps requires rendered browser review with bounded evidence claims', a
   const local = await read('plugins/sql-apps/skills/sql-apps-local/SKILL.md');
   const validation = await read('plugins/sql-apps/skills/sql-apps-validation/SKILL.md');
   const boundary = await read('docs/maintainers/application-boundary.md');
-  const combined = [application, local, validation].join('\n');
 
-  for (const content of [application, local, validation]) assert.match(content, /rendered (?:browser|visual) review/i);
-  assert.match(combined, /intended origin/i);
-  assert.match(combined, /semantic browser inspection/i);
-  assert.match(combined, /real interactions/i);
-  assert.match(combined, /desktop[\s\S]*narrow/i);
-  assert.match(combined, /never invent.*(?:page )?handles|do not invent.*(?:page )?handles/i);
-  assert.match(combined, /opening a tab.*not.*visual review|source review.*not.*visual review/is);
-  assert.match(combined, /discover.*supported alternatives/i);
+  assert.match(application, /rendered (?:browser|visual) review[\s\S]*sql-apps-validation/i);
+  assert.match(local, /rendered (?:browser|visual) review[\s\S]*sql-apps-validation/i);
 
   assert.match(validation, /API\/SQL[\s\S]*browser workflow[\s\S]*rendered visual review/i);
+  assert.match(validation, /verify the intended origin/i);
+  assert.match(validation, /semantic browser inspection[\s\S]*real interactions/i);
+  assert.match(validation, /desktop[\s\S]*narrow/i);
+  assert.match(validation, /never invent.*(?:page )?handles|do not invent.*(?:page )?handles/i);
+  assert.match(validation, /opening a tab.*not.*visual review|source review.*not.*visual review/is);
+  assert.match(validation, /discover.*supported.*alternatives/i);
+  assert.match(validation, /if blocked[\s\S]*exact evidence not observed/i);
   assert.match(validation, /origin[\s\S]*source\/build[\s\S]*viewport[\s\S]*state[\s\S]*artifact[\s\S]*findings[\s\S]*re-review/i);
   assert.match(validation, /screenshots.*do not prove.*(?:persistence|access)/i);
   assert.match(validation, /compile.*do not prove.*visual/i);
