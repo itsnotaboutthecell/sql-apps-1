@@ -157,9 +157,15 @@ test('SQL Apps routes new apps and meaningful UI changes through intentional des
   assert.match(design, /two distinct compositions/i);
   assert.match(design, /empty, single-record, and populated states/i);
   assert.match(design, /mobile and desktop/i);
+  assert.match(design, /docs\/design-intent\.md/);
+  assert.match(design, /frontend-design|web-artifacts-builder/);
+  assert.match(design, /manual fallback/i);
   assert.match(design, /Functional acceptance and design acceptance are separate/i);
   assert.doesNotMatch(design, /references\/|craft floor|style recipes/i);
   assert.match(application, /basic shell is an implementation milestone, not final design acceptance/i);
+  assert.match(application, /docs\/design-review\.md/);
+  assert.match(application, /design acceptance.*accepted.*partial.*blocked/is);
+  assert.match(application, /implemented\/built[\s\S]*running[\s\S]*functional acceptance[\s\S]*design acceptance/i);
   const guide = await readFile(resolve('docs', 'guides', 'build-your-app.md'), 'utf8');
   assert.match(guide, /`sql-apps-design` skill[\s\S]*(?:every|all|normal)/i);
 
@@ -171,6 +177,8 @@ test('SQL Apps routes new apps and meaningful UI changes through intentional des
     assert.match(pluginReference.toLowerCase(), new RegExp(`\\b${state}\\b`), `plugin reference must cover ${state}`);
   }
   assert.doesNotMatch(pluginReference, /small routing adapter|routing adapter/i);
+  assert.match(await readFile(resolve('plugins/sql-apps/skills/sql-apps-validation/SKILL.md'), 'utf8'),
+    /implemented\/built[\s\S]*running[\s\S]*functional acceptance[\s\S]*design acceptance/i);
 
   assert.match(runGuide, /route every new user-facing application and meaningful UI change through `sql-apps-design`/i);
   assert.doesNotMatch(runGuide, /all user-facing work/i);
@@ -261,10 +269,13 @@ test('agent guidance stays concise, stack-neutral and script-led', async () => {
   assert.match(design, /Product screens show real account and access states/);
   assert.doesNotMatch(design, /references\/|craft floor|style recipes/i);
 
+  const reportContract = /implemented\/built[\s\S]*running[\s\S]*functional acceptance[\s\S]*design acceptance/i;
+  assert.match(application, reportContract);
+  assert.match(validation, reportContract);
+  for (const [name, content] of [
+    ['getting started', gettingStarted], ['local', local], ['cloud', cloud], ['design', design],
+  ] as const) assert.doesNotMatch(content, reportContract, `${name} must not duplicate the final report contract`);
   const statusPhrase = /implemented.*built.*running.*workflow[- ]verified/gi;
-  const skillMentions = [gettingStarted, application, local, cloud, validation, design]
-    .reduce((count, content) => count + (content.match(statusPhrase)?.length ?? 0), 0);
-  assert.equal(skillMentions, 1, 'the validation skill owns structured status vocabulary');
   for (const [path, content] of [
     ['README.md', readme],
     ['docs/guides/run-locally.md', runGuide],

@@ -36,7 +36,14 @@ If browser input, a service or a host tool is unavailable, report the missing ch
 
 Use the existing compiler and Node test runner when editor discovery fails. Do not install another runner or invent test paths.
 
-Record exact commands and results. Separate implemented, built, running and workflow-verified states. Historical checkpoints and local simulation do not prove current cloud identity, private networking or production authorization.
+Record exact commands and results. The final report has four separate lines:
+
+- **Implemented/built:** source and build evidence.
+- **Running:** intended origin and readiness evidence.
+- **Functional acceptance:** accepted, partial or blocked, with browser/API/SQL checks.
+- **Design acceptance:** accepted, `partial: N cells` or blocked, citing `docs/design-review.md`.
+
+Historical checkpoints and local simulation do not prove current cloud identity, private networking or production authorization.
 
 ## Rendered browser review
 
@@ -46,11 +53,11 @@ For every new user-facing app and meaningful UI change:
 
 1. Verify the intended origin before review.
 2. Use semantic browser inspection and real interactions. Never invent page handles or confuse instance handles with browser page handles.
-3. Inspect screenshots or rendered output at desktop and narrow viewport widths when supported.
+3. Inspect screenshots or rendered output at desktop and narrow viewport widths. If the preferred tool cannot resize, use another available browser/computer-use capability; otherwise record the narrow cells as blocked with the exact reason.
 4. Review the primary state and reachable signed-out, authorized, no-access, loading, empty, error, saving, success and disabled states.
 5. Check hierarchy, spacing, wrapping, overflow, focus visibility, and useful empty/error guidance.
 6. Fix observed defects, then re-review the affected viewport and state.
 
 If a preferred browser or screenshot path fails, discover supported host alternatives rather than fabricating success. Opening a tab or source review is not visual review. If blocked, state the exact evidence not observed. Label feedback supplied by the user as user-reported; do not merge it with direct observations.
 
-Visual evidence provenance records the intended origin, source/build reviewed, viewport, state, artifact when available, findings and re-review result. Keep blocked and user-reported evidence separate from observed evidence. This is a concise acceptance record, not a saved-brief schema or report subsystem.
+Visual evidence provenance records the intended origin, source/build reviewed, viewport, state, artifact when available, findings and re-review result in `docs/design-review.md`. Use the matrix contract in `docs/reference/design-acceptance.md`; run `sql-apps check` and report its unreviewed-cell count. Keep blocked and user-reported evidence separate from observed evidence.

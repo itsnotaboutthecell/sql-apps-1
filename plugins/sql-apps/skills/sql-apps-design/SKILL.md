@@ -7,9 +7,9 @@ description: "Use when creating a new SQL Apps interface, substantially changing
 
 Design acceptance is separate from functional acceptance. A working shell is not a finished interface.
 
-Discover the host's available skills and capabilities, then invoke a suitable maintained frontend or design skill for visual direction, implementation and rendered review. Reuse known user preferences and established application styles. Write a short design intent covering audience, primary task, hierarchy, typography, palette, layout and responsive behavior. Choose sensible defaults, asking only about unresolved consequential branding or preferences. SQL Apps does not maintain a separate general-purpose design system.
+Discover the host's available skills and capabilities, then invoke a suitable maintained frontend or design skill for visual direction, implementation and rendered review. Look explicitly for `frontend-design` and, for self-contained web artifacts, `web-artifacts-builder`; use another maintained host capability when it is a better match. Reuse known user preferences and established application styles. Choose sensible defaults, asking only about unresolved consequential branding or preferences. SQL Apps does not maintain a separate general-purpose design system.
 
-If no suitable design skill or capability is available, perform an intentional design pass with the existing technology. Follow existing components, tokens and accessibility conventions when they exist, but evaluate and improve them where needed. Starter CSS is not design direction and is not sufficient merely because it renders. Do not impose a universal theme or require a framework, font, package or asset.
+If no suitable design skill or capability is available, state that you are performing a manual design pass and record the reason. Do not fall back silently. Follow existing components, tokens and accessibility conventions when they exist, but evaluate and improve them where needed. Starter CSS is not design direction and is not sufficient merely because it renders. Do not impose a universal theme or require a framework, font, package or asset.
 
 ## Quality rubric
 
@@ -32,8 +32,9 @@ Before substantial UI implementation:
 
 1. Identify the dominant user action and the information that must be understood first.
 2. Develop two distinct compositions, not color or typography variants. Compare their hierarchy, density, interaction prominence, and product character.
-3. Select and document one direction. If the user is unavailable, make the selection from the saved brief rather than defaulting to a generic dashboard.
-4. Treat a basic shell as an implementation milestone, not final design acceptance.
+3. Write `docs/design-intent.md` using the exact contract in `docs/reference/design-acceptance.md`, including the capability used or the manual fallback reason.
+4. Select and document one direction. If the user is unavailable, make the selection from the saved brief rather than defaulting to a generic dashboard.
+5. Treat a basic shell as an implementation milestone, not final design acceptance.
 
 Example: an elapsed-time tracker should lead with the tracked items, elapsed values, and completion action. Task creation, account administration, and routine status messages are secondary. The composition must not imply that a long interval is bad.
 
@@ -50,6 +51,8 @@ Review empty, single-record, and populated states at mobile and desktop sizes. C
 | States | Do loading, empty, error, disabled, save, and reload states reflect actual SQL/DAB outcomes? |
 
 Iterate on material problems before delivery. A screenshot or visual approval is evidence for design review, not functional correctness.
+
+Record the state-by-viewport evidence in `docs/design-review.md` using `docs/reference/design-acceptance.md`. Empty cells are unreviewed; blocked and `n/a` cells require reasons. Run `sql-apps check` and report its design acceptance count.
 
 `sql-apps-application` remains authoritative for domain behavior, identity, capabilities, and functional acceptance. Preserve these SQL Apps-specific UI requirements:
 

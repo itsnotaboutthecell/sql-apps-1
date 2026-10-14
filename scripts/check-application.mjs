@@ -1,6 +1,6 @@
 import { readFile, readdir, lstat } from 'node:fs/promises';
-import { join, resolve, extname } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { join, resolve, extname, relative, dirname, basename } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
 const sampleMarkers = [
@@ -12,6 +12,165 @@ const sampleMarkers = [
   /\/api\/Todo\b/,
   /examples[\\/]+todo/,
 ];
+
+const requiredDesignStates = [
+  'signed-out', 'no-access', 'first-run', 'empty', 'single-record',
+  'populated', 'saving', 'error', 'success', 'disabled',
+];
+
+async function optionalFile(path) {
+  try { return await readFile(path, 'utf8'); }
+  catch (error) { if (error.code === 'ENOENT') return undefined; throw error; }
+}
+
+function markdownSections(content) {
+  const sections = new Map();
+  let current;
+  for (const line of content.split(/\r?\n/)) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line);
+    if (heading) {
+      current = heading[1];
+      sections.set(current, []);
+    } else if (current) sections.get(current).push(line);
+  }
+  return new Map([...sections].map(([name, lines]) => [name, lines.join('\n').trim()]));
+}
+
+function validateDesignIntent(content) {
+  const sections = markdownSections(content);
+  const required = [
+    'Audience', 'Primary recurring task', 'First-read information', 'Composition A', 'Composition B',
+    'Selected composition', 'Typography', 'Palette', 'Layout', 'Responsive behavior', 'Design capability',
+  ];
+  for (const name of required) {
+    if (!sections.get(name)) throw new Error(`Invalid docs/design-intent.md: missing ${name}.`);
+  }
+  for (const name of ['Composition A', 'Composition B']) {
+    const value = sections.get(name);
+    for (const field of ['Hierarchy', 'Density', 'Primary action']) {
+      if (!new RegExp(`^- ${field}:\\s+\\S`, 'mi').test(value)) {
+        throw new Error(`Invalid docs/design-intent.md: ${name} needs ${field}.`);
+      }
+    }
+  }
+  if (sections.get('Composition A').replace(/\s+/g, ' ') === sections.get('Composition B').replace(/\s+/g, ' ')) {
+    throw new Error('Invalid docs/design-intent.md: Composition A and Composition B must be distinct.');
+  }
+  for (const field of ['Choice', 'Why']) {
+    if (!new RegExp(`^- ${field}:\\s+\\S`, 'mi').test(sections.get('Selected composition'))) {
+      throw new Error(`Invalid docs/design-intent.md: Selected composition needs ${field}.`);
+    }
+  }
+  if (!/^- (?:Skill|Manual fallback reason):\s+\S/mi.test(sections.get('Design capability'))) {
+    throw new Error('Invalid docs/design-intent.md: record the design skill or a manual fallback reason.');
+  }
+}
+
+function reviewRows(content) {
+  const rows = new Map();
+  for (const line of content.split(/\r?\n/)) {
+    if (!line.trim().startsWith('|')) continue;
+    const cells = line.trim().slice(1, -1).split('|').map(value => value.trim());
+    if (cells.length !== 3 || /^(?:State|-+)$/.test(cells[0])) continue;
+    const state = cells[0].toLowerCase();
+    if (rows.has(state)) throw new Error(`Invalid docs/design-review.md: duplicate ${cells[0]} row.`);
+    rows.set(state, cells.slice(1));
+  }
+  return rows;
+}
+
+function validateReviewMetadata(content) {
+  const sections = markdownSections(content);
+  const target = sections.get('Review target');
+  if (!target || !/^- Origin:\s+\S/mi.test(target) || !/^- Source\/build:\s+\S/mi.test(target)) {
+    throw new Error('Invalid docs/design-review.md: Review target needs Origin and Source/build.');
+  }
+  if (!sections.get('Findings')) {
+    throw new Error('Invalid docs/design-review.md: missing Findings.');
+  }
+}
+
+function validateReviewCell(value, state, viewport) {
+  if (!value) return 'unreviewed';
+  if (value === 'observed' || value === 'fixed+re-reviewed' || /^n\/a:\s+\S/i.test(value)) return 'reviewed';
+  if (/^blocked:\s+\S/i.test(value)) return 'blocked';
+  throw new Error(`Invalid docs/design-review.md: ${state} ${viewport} has unsupported status "${value}".`);
+}
+
+async function designReviewStatus(root, content) {
+  let required = [...requiredDesignStates];
+  const roleConfig = await optionalFile(join(root, 'role-based-data.json'));
+  if (roleConfig) {
+    const parsed = JSON.parse(roleConfig);
+    if (typeof parsed.requiredRole === 'string' && parsed.requiredRole.trim()) {
+      required.push(`role: ${parsed.requiredRole.trim()}`);
+    }
+  }
+  if (content === undefined) return { reviewed: 0, blocked: 0, unreviewed: required.length * 2 };
+  validateReviewMetadata(content);
+  const rows = reviewRows(content);
+  let reviewed = 0;
+  let blocked = 0;
+  let unreviewed = 0;
+  for (const state of required) {
+    const cells = rows.get(state.toLowerCase()) ?? ['', ''];
+    for (const [index, viewport] of ['desktop', 'narrow'].entries()) {
+      const status = validateReviewCell(cells[index], state, viewport);
+      if (status === 'reviewed') reviewed++;
+      else if (status === 'blocked') blocked++;
+      else unreviewed++;
+    }
+  }
+  return { reviewed, blocked, unreviewed };
+}
+
+async function filesBelow(root, optional = false) {
+  let info;
+  try { info = await lstat(root); }
+  catch (error) { if (optional && error.code === 'ENOENT') return []; throw error; }
+  if (!info.isDirectory()) throw new Error(`Expected design template directory: ${root}`);
+  const files = [];
+  async function visit(path) {
+    for (const child of await readdir(path)) {
+      const full = join(path, child);
+      const childInfo = await lstat(full);
+      if (childInfo.isSymbolicLink()) throw new Error(`Design template paths must not be symlinks: ${full}`);
+      if (childInfo.isDirectory()) await visit(full);
+      else if (childInfo.isFile()) files.push(relative(root, full).replaceAll('\\', '/'));
+    }
+  }
+  await visit(root);
+  return files.sort();
+}
+
+async function differentTrees(actual, template, excluded = new Set()) {
+  const actualFiles = (await filesBelow(actual, true)).filter(path => !excluded.has(path));
+  const templateFiles = (await filesBelow(template, true)).filter(path => !excluded.has(path));
+  const paths = new Set([...actualFiles, ...templateFiles]);
+  for (const path of paths) {
+    const [left, right] = await Promise.all([
+      readFile(join(actual, path)).catch(error => error.code === 'ENOENT' ? undefined : Promise.reject(error)),
+      readFile(join(template, path)).catch(error => error.code === 'ENOENT' ? undefined : Promise.reject(error)),
+    ]);
+    if (!left || !right || !left.equals(right)) return true;
+  }
+  return false;
+}
+
+async function customizedUi(root) {
+  const scriptDirectory = dirname(fileURLToPath(import.meta.url));
+  const packageRoot = basename(dirname(scriptDirectory)) === 'dist' ?
+    resolve(scriptDirectory, '..', '..') : resolve(scriptDirectory, '..');
+  if (resolve(root) === packageRoot) return false;
+  const assets = await lstat(join(packageRoot, 'assets')).then(info => info.isDirectory(), error => {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  });
+  const templateRoot = assets ? join(packageRoot, 'assets') : packageRoot;
+  return await differentTrees(join(root, 'src', 'web'), join(templateRoot, 'src', 'web')) ||
+    await differentTrees(join(root, 'public'), join(templateRoot, 'public'),
+      new Set(['app.js', 'auth/redirect.js']));
+}
 
 function exampleDependencies(path, content) {
   const source = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true);
@@ -119,6 +278,25 @@ export async function checkApplication(root = process.cwd(), model) {
     }
   }
   if (violations.length) throw new Error(`Unselected Todo example remains in application delivery:\n${violations.join('\n')}`);
+  const [intent, review, customized] = await Promise.all([
+    optionalFile(join(root, 'docs', 'design-intent.md')),
+    optionalFile(join(root, 'docs', 'design-review.md')),
+    customizedUi(root),
+  ]);
+  if (intent !== undefined) validateDesignIntent(intent);
+  if (customized && intent === undefined) {
+    console.log('Design warning: customized UI has no docs/design-intent.md.');
+  }
+  if (customized || intent !== undefined || review !== undefined) {
+    const status = await designReviewStatus(root, review);
+    console.log(status.blocked ?
+      `Design acceptance: blocked: ${status.blocked} cell${status.blocked === 1 ? '' : 's'}` +
+        `${status.unreviewed ? `; ${status.unreviewed} unreviewed` : ''}.` :
+      status.unreviewed ?
+      `Design acceptance: partial: ${status.unreviewed} unreviewed cell${status.unreviewed === 1 ? '' : 's'}.` :
+      intent === undefined ? 'Design acceptance: blocked: design intent missing.' :
+        `Design acceptance: accepted (${status.reviewed} reviewed cells).`);
+  }
   console.log(`Clean application passed (${config.name}): ${inspected} source/build/schema/test files; no selected examples.`);
 }
 

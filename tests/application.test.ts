@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,6 +9,118 @@ import { testLocalApp } from '../src/local-app-smoke.js';
 import { runtimeFor } from '../src/workspace.mjs';
 
 const checker = resolve('scripts/check-application.mjs');
+
+async function designFixture(t: TestContext) {
+  const root = await mkdtemp(join(tmpdir(), 'sql-apps-design-check-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const dir of ['src/web', 'public', 'dab', 'sql', 'tests', 'dist/tests', 'dist/src', 'docs']) {
+    await mkdir(join(root, dir), { recursive: true });
+  }
+  await writeFile(join(root, 'application.json'), JSON.stringify({ name: 'payroll', selectedExamples: [] }));
+  await writeFile(join(root, 'role-based-data.json'), JSON.stringify({
+    requiredRole: 'PayrollUser', readinessPath: '/api/AppReady',
+  }));
+  await writeFile(join(root, 'src/web/app.ts'), 'document.body.dataset.app = "payroll";');
+  await writeFile(join(root, 'public/index.html'), '<h1>Payroll</h1>');
+  await writeFile(join(root, 'public/style.css'), 'body { color: navy; }');
+  await writeFile(join(root, 'public/app.js'), 'document.body.dataset.app = "payroll";');
+  for (const file of ['dist/src/client.js', 'dist/src/server.js']) await writeFile(join(root, file), '');
+  for (const file of ['Dockerfile', 'dab/Dockerfile']) {
+    await writeFile(join(root, file), 'COPY --from=build /app/dist/src ./dist/src');
+  }
+  return root;
+}
+
+const designIntent = `# Design Intent
+
+## Audience
+Payroll administrators and mechanics.
+
+## Primary recurring task
+Review and approve the current pay run.
+
+## First-read information
+Pay-period status, exceptions and total payroll.
+
+## Composition A
+- Hierarchy: Pay-run status and exceptions precede employee detail.
+- Density: A compact summary expands into detailed rows.
+- Primary action: Review current pay run.
+
+## Composition B
+- Hierarchy: People and their current pay state lead the page.
+- Density: Spacious employee summaries reveal detail on demand.
+- Primary action: Open an employee pay record.
+
+## Selected composition
+- Choice: Composition A.
+- Why: Administrators act on the pay run more often than individual records.
+
+## Typography
+System sans-serif with tabular numerals for money.
+
+## Palette
+Neutral surfaces with blue action emphasis and non-color status labels.
+
+## Layout
+A bounded summary region followed by a responsive detail list.
+
+## Responsive behavior
+Desktop shows summary and detail together; narrow widths stack them without horizontal scrolling.
+
+## Design capability
+- Manual fallback reason: No maintained frontend design skill was available in the host.
+`;
+
+const designReview = `# Design Review
+
+## Review target
+- Origin: http://127.0.0.1:18080
+- Source/build: test build abc123
+
+## Matrix
+| State | Desktop | Narrow |
+| --- | --- | --- |
+| signed-out | observed | observed |
+| no-access | observed | observed |
+| first-run | observed | observed |
+| empty | observed | observed |
+| single-record | observed | observed |
+| populated | fixed+re-reviewed | observed |
+| saving | observed | observed |
+| error | observed | observed |
+| success | observed | observed |
+| disabled | observed | observed |
+| role: PayrollUser | observed | observed |
+
+## Findings
+- populated desktop: tightened summary spacing, then re-reviewed.
+`;
+
+test('design gate warns for customized UI and validates intent and review artifacts', async t => {
+  const root = await designFixture(t);
+  const missing = await run(process.execPath, [checker, root]);
+  assert.match(missing, /Design warning: customized UI has no docs[\\/]design-intent\.md/);
+  assert.match(missing, /Design acceptance: partial: 22 unreviewed cells/);
+
+  await writeFile(join(root, 'docs', 'design-intent.md'), designIntent.replace(/## Composition B[\s\S]*?## Selected composition/, '## Selected composition'));
+  await assert.rejects(run(process.execPath, [checker, root]), /Composition B/);
+
+  await writeFile(join(root, 'docs', 'design-intent.md'), designIntent);
+  await writeFile(join(root, 'docs', 'design-review.md'), designReview.replace('| empty | observed | observed |', '| empty | observed | |'));
+  const partial = await run(process.execPath, [checker, root]);
+  assert.match(partial, /Design acceptance: partial: 1 unreviewed cell\b/);
+
+  await writeFile(join(root, 'docs', 'design-review.md'),
+    designReview.replace('| error | observed | observed |', '| error | blocked: API unavailable | observed |'));
+  const blocked = await run(process.execPath, [checker, root]);
+  assert.match(blocked, /Design acceptance: blocked: 1 cell\b/);
+
+  await writeFile(join(root, 'docs', 'design-review.md'), designReview);
+  const accepted = await run(process.execPath, [checker, root]);
+  assert.match(accepted, /Design acceptance: accepted \(22 reviewed cells\)/);
+  assert.doesNotMatch(accepted, /Design warning/);
+});
 
 test('clean application validation rejects leftovers in each actual delivery surface', async t => {
   const root = await mkdtemp(join(tmpdir(), 'sql-apps-clean-'));

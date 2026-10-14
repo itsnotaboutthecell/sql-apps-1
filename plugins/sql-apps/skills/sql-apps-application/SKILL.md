@@ -30,7 +30,7 @@ Keep `application.json` named for the app with `selectedExamples: []`. Do not co
 
 SQL Apps has one profile, `role-based-data` (SQL, DAB and the browser gateway); the saved brief's capabilities are exactly `["data"]`. If the app needs file storage or background jobs, say so and route that part to the maintained Azure skills (for example `azure-storage`, `azure-prepare`, `azure-deploy`) instead of adding it to SQL Apps.
 
-Before implementing a new user-facing app or meaningful UI change, use `sql-apps-design`. Record a short design intent covering audience, primary task, hierarchy, typography, palette, layout and responsive behavior. Reuse established styles and known preferences, choose sensible defaults for the rest, and ask only about unresolved preferences or branding that would consequentially change the result. Keep database and access decisions separate from visual choices.
+Before implementing a new user-facing app or meaningful UI change, use `sql-apps-design`. Create `docs/design-intent.md` with the two-composition contract in `docs/reference/design-acceptance.md`; it records audience, primary task, hierarchy, typography, palette, layout and responsive behavior. Reuse established styles and known preferences, choose sensible defaults for the rest, and ask only about unresolved preferences or branding that would consequentially change the result. Keep database and access decisions separate from visual choices.
 
 ## Implement the slice
 
@@ -54,6 +54,13 @@ Use `sql-apps-validation` to select the smallest checks covering the change. Aga
 
 Verify the agreed browser action, SQL save/reload, invalid input and relevant ownership behavior. Repeat the changed and original workflows.
 
-Complete the **Rendered browser review** in `sql-apps-validation` for every new user-facing app and meaningful UI change. This review is distinct from API/SQL and browser workflow acceptance: verify the intended origin, use semantic browser inspection and real interactions, and inspect rendered output at desktop and narrow widths when the host supports them. Opening a tab or reviewing source is not visual review.
+Complete the **Rendered browser review** in `sql-apps-validation` for every new user-facing app and meaningful UI change. This review is distinct from API/SQL and browser workflow acceptance: verify the intended origin, use semantic browser inspection and real interactions, and inspect rendered output at desktop and narrow widths. If a viewport or state cannot be reached, record that matrix cell as blocked with the exact reason; never make the review optional. Opening a tab or reviewing source is not visual review.
 
-Report exact commands and results. Hand startup or resume work to `sql-apps-local`. Offer cloud preparation only when the user asks to share.
+Record the required state-by-viewport evidence in `docs/design-review.md`. Report exact commands and results with four separate lines:
+
+- **Implemented/built**
+- **Running**
+- **Functional acceptance**
+- **Design acceptance** (`accepted`, `partial: N cells` or `blocked`)
+
+Hand startup or resume work to `sql-apps-local`. Offer cloud preparation only when the user asks to share.

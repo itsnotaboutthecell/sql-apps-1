@@ -8,10 +8,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, 'dist', 'tooling-package');
 const assets = [
   '.config/dotnet-tools.json',
+  'src/web',
   'sql',
   'dab',
   'public/index.html',
   'public/style.css',
+  'public/staticwebapp.config.json',
   'public/auth/redirect.html',
   'infra',
   'Dockerfile',

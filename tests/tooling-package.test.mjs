@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { copyFile, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile, realpath } from 'node:fs/promises';
+import { copyFile, cp, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -102,9 +102,39 @@ test('staged tree contains only package files and immutable runtime assets', asy
   assert(paths.includes('LICENSE'));
   assert(paths.includes('bin/sql-apps.mjs'));
   assert(paths.includes('dist/src/project-contract.mjs'));
+  assert(paths.includes('assets/src/web/auth-view.ts'));
+  assert(paths.includes('assets/src/web/app.ts'));
   for (const path of paths) {
     assert.equal((await lstat(join(staged, path))).isSymbolicLink(), false, path);
   }
+});
+
+test('packaged check compares project UI with the shipped template', async t => {
+  const project = await mkdtemp(join(tmpdir(), 'sql-apps-design-template-'));
+  t.after(() => rm(project, { recursive: true, force: true }));
+  await cp(join(staged, 'assets', 'src'), join(project, 'src'), { recursive: true });
+  await cp(join(staged, 'assets', 'public'), join(project, 'public'), { recursive: true });
+  for (const directory of ['dab', 'sql', 'tests', 'dist/tests', 'dist/src', 'docs']) {
+    await mkdir(join(project, directory), { recursive: true });
+  }
+  await writeFile(join(project, 'application.json'), JSON.stringify({ name: 'fixture', selectedExamples: [] }));
+  await writeFile(join(project, 'role-based-data.json'), JSON.stringify({
+    requiredRole: 'AppUser', readinessPath: '/api/AppReady',
+  }));
+  await writeFile(join(project, 'public', 'app.js'), 'document.body.dataset.ready = "true";');
+  for (const file of ['dist/src/client.js', 'dist/src/server.js']) await writeFile(join(project, file), '');
+  for (const file of ['Dockerfile', 'dab/Dockerfile']) {
+    await writeFile(join(project, file), 'COPY --from=build /app/dist/src ./dist/src');
+  }
+  const checker = join(staged, 'dist', 'scripts', 'check-application.mjs');
+  const unchanged = await runNode([checker, project]);
+  assert.doesNotMatch(unchanged.stdout, /Design warning|Design acceptance/);
+
+  await writeFile(join(project, 'src', 'web', 'app.ts'),
+    `${await readFile(join(project, 'src', 'web', 'app.ts'), 'utf8')}\ndocument.body.dataset.custom = "true";\n`);
+  const customized = await runNode([checker, project]);
+  assert.match(customized.stdout, /Design warning: customized UI/);
+  assert.match(customized.stdout, /Design acceptance: partial: 22 unreviewed cells/);
 });
 
 test('bin help is project-independent and its validated command map targets packaged modules', async () => {
