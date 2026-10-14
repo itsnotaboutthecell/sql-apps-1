@@ -25,7 +25,7 @@ has this shape:
   "scaffoldVersion": 1,
   "tooling": {
     "package": "@microsoft/sql-apps",
-    "version": "0.2.0"
+    "version": "0.2.1"
   }
 }
 ```

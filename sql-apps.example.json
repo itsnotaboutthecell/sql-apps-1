@@ -11,7 +11,7 @@
   "location": "westus2",
   "environment": "dev",
   "name": "sqlapps",
-  "gatewayImage": "example.azurecr.io/sql-apps:0.2.0",
-  "dabImage": "example.azurecr.io/sql-apps-dab:0.2.0",
+  "gatewayImage": "example.azurecr.io/sql-apps:0.2.1",
+  "dabImage": "example.azurecr.io/sql-apps-dab:0.2.1",
   "registryServer": "example.azurecr.io"
 }

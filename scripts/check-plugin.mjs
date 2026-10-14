@@ -12,7 +12,7 @@ export async function checkPlugin() {
   const manifest = JSON.parse(await readFile(join(plugin, 'plugin.json'), 'utf8'));
   assert.equal(manifest.$schema, 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json');
   assert.equal(manifest.name, 'sql-apps');
-  assert.equal(manifest.version, '0.2.0');
+  assert.equal(manifest.version, '0.2.1');
   assert.ok(manifest.description?.length);
   const allowed = new Set(['$schema', 'name', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords']);
   assert.ok(Object.keys(manifest).every(key => allowed.has(key)), 'Manifest uses only Agent Plugins 1.0 metadata fields');

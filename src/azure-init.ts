@@ -35,7 +35,7 @@ export async function initDeploymentConfig(options: InitOptions, run: Run, root 
   try { const profile = await readRoleBasedProfile(join(root, 'role-based-data.json')); role = { requiredRole: profile.requiredRole, readinessPath: profile.readinessPath }; }
   catch (error) { throw new Error(`Deployment reads requiredRole and readinessPath from role-based-data.json: ${error instanceof Error ? error.message : error}`); }
   const name = deploymentName(options.name ?? z.object({ name: z.string() }).parse(JSON.parse(await readFile(join(root, 'application.json'), 'utf8'))).name);
-  const image = (part: string) => `${options.registryServer}/${name}-${part}:0.2.0`;
+  const image = (part: string) => `${options.registryServer}/${name}-${part}:0.2.1`;
   return deploymentSchema.parse({
     profile: 'role-based-data', ...role,
     subscriptionId: account.id, tenantId: account.tenantId, apiClientId: unsetClientId,

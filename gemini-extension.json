@@ -1,5 +1,5 @@
 {
   "name": "sql-apps",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Build and validate Azure SQL Database and Data API Builder applications; use maintained Azure skills for the general cloud lifecycle."
 }
