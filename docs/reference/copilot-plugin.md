@@ -58,12 +58,13 @@ Restart the App or create a **fresh session** after installation. In **Customize
 | `sql-apps-validation` | Run SQL Apps unit tests and typecheck; do not restart services. |
 | `sql-apps-cloud-preview` | Explain SQL Apps cloud prerequisites and costs; do not deploy. |
 | `sql-apps-application` | Build a domain-specific application without copying the Todo example; verify source, build, API and database boundaries. |
-| `sql-apps-design` | Agree on a custom app's visual direction and review its rendered desktop/mobile experience. |
+| `sql-apps-design` | Apply intentional visual direction to every new user-facing app and meaningful UI change, then review its rendered desktop and narrow-width experience. |
 
-The `sql-apps-design` skill is a small routing adapter for an available frontend design
-capability. It retains SQL Apps requirements for real account/access states and truthful
-loading, error, save, and reload behavior; SQL, identity, and runtime decisions remain in
-`sql-apps-application`.
+The `sql-apps-design` skill discovers and invokes an available host frontend-design
+capability. If none is available, it performs an intentional, stack-neutral design fallback
+itself. In either path it retains SQL Apps requirements for real account/access states and
+truthful loading, empty, error, saving, success, and disabled states; SQL, identity, and
+runtime decisions remain in `sql-apps-application`.
 
 Invoke a skill explicitly from the App's skill picker/slash completion if natural-language discovery picks another plugin instead. Ask for **SQL Apps** and confirm the **sql-apps-skills** marketplace. The plugin does not embed the browser UI; use the startup-reported origin (`http://127.0.0.1:18080/` in fixed-port mode) for the actual application.
 

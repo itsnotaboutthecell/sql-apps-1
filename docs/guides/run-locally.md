@@ -32,7 +32,7 @@ Use the validation skill for current evidence and reporting. A proposed port/URL
 
 Initial launch requires the configured readiness procedure (default `/api/AppReady`) to succeed through DAB with the required role (default `AppUser`). A matching gateway that responds but is not ready is a setup blocker, not a launch success. Setup does not replace it automatically.
 
-An early synthetic or mock-only shell is useful progress, not proof of SQL connectivity. Approve the visual direction before substantial UI work and review the actual desktop/mobile render when feasible.
+An early synthetic or mock-only shell is useful progress, not proof of SQL connectivity. Route all user-facing work through `sql-apps-design`. When the host supports rendered review, review the actual app at desktop and narrow widths. Otherwise record the exact blocked or unobserved evidence and do not claim visual acceptance.
 
 ## Start the app
 

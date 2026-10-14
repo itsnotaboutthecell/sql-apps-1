@@ -121,6 +121,8 @@ test('application boundary retains the proven SQL storage and mutation rules', a
 test('SQL Apps routes all user-facing work through intentional design', async () => {
   const application = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-application', 'SKILL.md'), 'utf8');
   const design = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-design', 'SKILL.md'), 'utf8');
+  const pluginReference = await readFile(resolve('docs', 'reference', 'copilot-plugin.md'), 'utf8');
+  const runGuide = await readFile(resolve('docs', 'guides', 'run-locally.md'), 'utf8');
   assert.match(application, /every new user-facing app|all new user-facing/i);
   assert.match(application, /meaningful UI change/i);
   assert.doesNotMatch(application, /sql-apps-design` for substantial|substantial visual work/i);
@@ -144,6 +146,20 @@ test('SQL Apps routes all user-facing work through intentional design', async ()
   assert.doesNotMatch(design, /references\/|craft floor|style recipes/i);
   const guide = await readFile(resolve('docs', 'guides', 'build-your-app.md'), 'utf8');
   assert.match(guide, /`sql-apps-design` skill[\s\S]*(?:every|all|normal)/i);
+
+  assert.match(pluginReference, /`sql-apps-design`\s*\|[^\n]*every new user-facing app[^\n]*meaningful UI change/i);
+  assert.match(pluginReference, /discovers and invokes[\s\S]*available host[\s\S]*design[\s\S]*capability/i);
+  assert.match(pluginReference, /if none is available[\s\S]*intentional[\s\S]*stack-neutral[\s\S]*fallback[\s\S]*itself/i);
+  assert.match(pluginReference, /real account\/access states/i);
+  for (const state of ['loading', 'empty', 'error', 'saving', 'success', 'disabled']) {
+    assert.match(pluginReference.toLowerCase(), new RegExp(`\\b${state}\\b`), `plugin reference must cover ${state}`);
+  }
+  assert.doesNotMatch(pluginReference, /small routing adapter|routing adapter/i);
+
+  assert.match(runGuide, /route all user-facing work through `sql-apps-design`/i);
+  assert.match(runGuide, /host supports rendered review[\s\S]*desktop[\s\S]*narrow widths/i);
+  assert.match(runGuide, /otherwise[\s\S]*exact blocked or unobserved evidence[\s\S]*do not claim visual acceptance/i);
+  assert.doesNotMatch(runGuide, /substantial (?:UI|visual) work|when feasible/i);
 });
 
 test('SQL Apps requires rendered browser review with bounded evidence claims', async () => {
