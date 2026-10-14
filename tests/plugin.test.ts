@@ -119,6 +119,7 @@ test('application boundary retains the proven SQL storage and mutation rules', a
 });
 
 test('SQL Apps routes all user-facing work through intentional design', async () => {
+  const gettingStarted = await readFile(resolve('skills', 'sql-apps-getting-started', 'SKILL.md'), 'utf8');
   const application = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-application', 'SKILL.md'), 'utf8');
   const design = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-design', 'SKILL.md'), 'utf8');
   const pluginReference = await readFile(resolve('docs', 'reference', 'copilot-plugin.md'), 'utf8');
@@ -128,6 +129,13 @@ test('SQL Apps routes all user-facing work through intentional design', async ()
   assert.doesNotMatch(application, /sql-apps-design` for substantial|substantial visual work/i);
   assert.match(application, /audience[\s\S]*primary task[\s\S]*hierarchy[\s\S]*typography[\s\S]*palette[\s\S]*layout[\s\S]*responsive/i);
   assert.match(application, /basic shell.*small scope.*(?:not|never).*unfinished visual quality/is);
+
+  assert.match(gettingStarted, /every new user-facing app and meaningful UI change[\s\S]*through `sql-apps-design`/i);
+  assert.match(gettingStarted, /discovers and invokes[\s\S]*available host design capability/i);
+  assert.match(gettingStarted, /intentional stack-neutral fallback when none exists/i);
+  assert.match(gettingStarted, /audience[\s\S]*primary task[\s\S]*hierarchy[\s\S]*typography[\s\S]*palette[\s\S]*layout[\s\S]*responsive/i);
+  assert.match(gettingStarted, /real account\/access[\s\S]*loading[\s\S]*empty[\s\S]*error[\s\S]*saving[\s\S]*success[\s\S]*disabled/i);
+  assert.doesNotMatch(gettingStarted, /optional design|design is optional/i);
 
   assert.match(design, /discover[\s\S]*available[\s\S]*(?:frontend|design).*(?:skill|capability)/i);
   assert.match(design, /if no suitable.*(?:skill|capability).*available/is);
@@ -164,6 +172,7 @@ test('SQL Apps routes all user-facing work through intentional design', async ()
 
 test('SQL Apps requires rendered browser review with bounded evidence claims', async () => {
   const read = (path: string) => readFile(resolve(path), 'utf8');
+  const gettingStarted = await read('skills/sql-apps-getting-started/SKILL.md');
   const application = await read('plugins/sql-apps/skills/sql-apps-application/SKILL.md');
   const local = await read('plugins/sql-apps/skills/sql-apps-local/SKILL.md');
   const validation = await read('plugins/sql-apps/skills/sql-apps-validation/SKILL.md');
@@ -183,6 +192,10 @@ test('SQL Apps requires rendered browser review with bounded evidence claims', a
   assert.match(validation, /origin[\s\S]*source\/build[\s\S]*viewport[\s\S]*state[\s\S]*artifact[\s\S]*findings[\s\S]*re-review/i);
   assert.match(validation, /screenshots.*do not prove.*(?:persistence|access)/i);
   assert.match(validation, /compile.*do not prove.*visual/i);
+  assert.match(gettingStarted, /after authorized startup[\s\S]*real browser action[\s\S]*SQL save\/reload/i);
+  assert.match(gettingStarted, /`sql-apps-validation`[\s\S]*Rendered browser review[\s\S]*in addition[\s\S]*functional browser and SQL evidence/i);
+  assert.match(gettingStarted, /contract[\s\S]*desktop and narrow-width review[\s\S]*blocked or unobserved evidence/i);
+  assert.match(gettingStarted, /do not claim visual acceptance.*not observed/i);
   assert.match(boundary, /blocked[\s\S]*user-reported/i);
 });
 

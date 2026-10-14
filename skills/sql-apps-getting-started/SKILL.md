@@ -1,6 +1,6 @@
 ---
 name: sql-apps-getting-started
-description: Guide a beginner from an app idea to one verified local SQL Apps workflow, then route optional design, validation or sharing work to the matching skill.
+description: Guide a beginner from an app idea to one verified local SQL Apps workflow, routing every new user-facing app and meaningful UI change through sql-apps-design and rendered validation before optional sharing.
 ---
 
 # SQL Apps
@@ -22,10 +22,16 @@ Run `npm run guide` to recover saved decisions. Saved evidence is historical, no
 
 ## Route the work
 
+- Route every new user-facing app and meaningful UI change through `sql-apps-design`.
+  It discovers and invokes a suitable available host design capability, or
+  performs the intentional stack-neutral fallback when none exists. Preserve
+  the design intent for the audience, primary task, hierarchy, typography,
+  palette, layout and responsive behavior, along with real account/access
+  boundaries and truthful loading, empty, error, saving, success and disabled
+  data states.
 - Use `sql-apps-application` for screens, SQL behavior, access rules and the first useful change.
 - Use `sql-apps-local` for prerequisites, approval, startup, resume and stop.
 - Use `sql-apps-validation` for tests and live workflow checks.
-- Use an available frontend design skill for general visual direction; retain SQL Apps account/access and data-state requirements.
 - Use `sql-apps-diagnostics` for an existing failure.
 - Use `sql-apps-cloud-preview` only after the user asks to share; it routes general Azure preparation, cost, deployment, and diagnostics to maintained Azure skills.
 
@@ -33,6 +39,12 @@ Do not preload those skills or their references. Load the next stage only, and s
 
 ## Finish locally
 
-Verify a real browser action and SQL save/reload with synthetic data. Then implement and verify one useful change without breaking the original workflow. Use `sql-apps-validation` for current evidence and reporting.
+After authorized startup, verify a real browser action and SQL save/reload with
+synthetic data. Then implement and verify one useful change without breaking
+the original workflow. Hand off to `sql-apps-validation` for current evidence
+and reporting, including its **Rendered browser review** contract in addition
+to functional browser and SQL evidence. Follow that contract for truthful
+desktop and narrow-width review and for explicit blocked or unobserved evidence;
+do not claim visual acceptance for evidence that was not observed.
 
 Keep secrets and real records out of saved briefs. A useful local app is success; Azure remains optional.
