@@ -50,7 +50,9 @@ Optional examples are a separate explicit choice. Keep root `selectedExamples: [
 
 ## Verify completion
 
-Publish a launch URL only after the intended server and readiness probe respond. Open that origin and verify the agreed browser action plus SQL save/reload; for the starter, a signed-in user with the required role sees the readiness check pass.
+Publish a launch URL only after the intended server and readiness probe respond. Open that intended origin and verify the agreed browser action plus SQL save/reload; for the starter, a signed-in user with the required role sees the readiness check pass.
+
+For user-facing work, hand off to the **Rendered browser review** in `sql-apps-validation`. Use semantic browser inspection and real interactions against the verified origin; never invent page handles or confuse an application instance handle with a browser page handle. If the preferred browser path fails, inspect available host capabilities and discover supported alternatives. Opening a tab or reviewing source is not visual review.
 
 Give the verified URL, user flow, Ctrl+C behavior and the `serve`/`stop` resume and stop commands. Use `sql-apps-validation` for workflow evidence. Local preview identities are simulated; product screens use account/access states and keep test identities on the developer page.
 

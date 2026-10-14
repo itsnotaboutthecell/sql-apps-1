@@ -118,13 +118,64 @@ test('application boundary retains the proven SQL storage and mutation rules', a
   ]) assert.match(boundary, requirement);
 });
 
-test('SQL Apps delegates general visual design and retains app-specific state requirements', async () => {
+test('SQL Apps routes all user-facing work through intentional design', async () => {
+  const application = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-application', 'SKILL.md'), 'utf8');
   const design = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-design', 'SKILL.md'), 'utf8');
-  assert.match(design, /maintained frontend or design skill/);
-  assert.match(design, /loading, empty, error, disabled, save, and reload states/i);
+  assert.match(application, /every new user-facing app|all new user-facing/i);
+  assert.match(application, /meaningful UI change/i);
+  assert.doesNotMatch(application, /sql-apps-design` for substantial|substantial visual work/i);
+  assert.match(application, /audience[\s\S]*primary task[\s\S]*hierarchy[\s\S]*typography[\s\S]*palette[\s\S]*layout[\s\S]*responsive/i);
+  assert.match(application, /basic shell.*small scope.*(?:not|never).*unfinished visual quality/is);
+
+  assert.match(design, /discover[\s\S]*available[\s\S]*(?:frontend|design).*(?:skill|capability)/i);
+  assert.match(design, /if no suitable.*(?:skill|capability).*available/is);
+  assert.match(design, /starter CSS.*not.*design direction/is);
+  assert.match(design, /spacing[\s\S]*type hierarchy[\s\S]*domain[\s\S]*actions[\s\S]*notices[\s\S]*responsive[\s\S]*focus[\s\S]*accessib/i);
+  for (const state of ['signed-out', 'authorized', 'no-access', 'loading', 'empty', 'error', 'saving', 'success', 'disabled']) {
+    assert.match(design.toLowerCase(), new RegExp(state), `design guidance must cover ${state}`);
+  }
   assert.doesNotMatch(design, /references\/|craft floor|style recipes/i);
   const guide = await readFile(resolve('docs', 'guides', 'build-your-app.md'), 'utf8');
-  assert.match(guide, /`sql-apps-design` skill/);
+  assert.match(guide, /`sql-apps-design` skill[\s\S]*(?:every|all|normal)/i);
+});
+
+test('SQL Apps requires rendered browser review with bounded evidence claims', async () => {
+  const read = (path: string) => readFile(resolve(path), 'utf8');
+  const application = await read('plugins/sql-apps/skills/sql-apps-application/SKILL.md');
+  const local = await read('plugins/sql-apps/skills/sql-apps-local/SKILL.md');
+  const validation = await read('plugins/sql-apps/skills/sql-apps-validation/SKILL.md');
+  const boundary = await read('docs/maintainers/application-boundary.md');
+  const combined = [application, local, validation].join('\n');
+
+  for (const content of [application, local, validation]) assert.match(content, /rendered (?:browser|visual) review/i);
+  assert.match(combined, /intended origin/i);
+  assert.match(combined, /semantic browser inspection/i);
+  assert.match(combined, /real interactions/i);
+  assert.match(combined, /desktop[\s\S]*narrow/i);
+  assert.match(combined, /never invent.*(?:page )?handles|do not invent.*(?:page )?handles/i);
+  assert.match(combined, /opening a tab.*not.*visual review|source review.*not.*visual review/is);
+  assert.match(combined, /discover.*supported alternatives/i);
+
+  assert.match(validation, /API\/SQL[\s\S]*browser workflow[\s\S]*rendered visual review/i);
+  assert.match(validation, /origin[\s\S]*source\/build[\s\S]*viewport[\s\S]*state[\s\S]*artifact[\s\S]*findings[\s\S]*re-review/i);
+  assert.match(validation, /screenshots.*do not prove.*(?:persistence|access)/i);
+  assert.match(validation, /compile.*do not prove.*visual/i);
+  assert.match(boundary, /blocked[\s\S]*user-reported/i);
+});
+
+test('design and review guidance preserves access, consent, state and stack boundaries', async () => {
+  const read = (path: string) => readFile(resolve(path), 'utf8');
+  const application = await read('plugins/sql-apps/skills/sql-apps-application/SKILL.md');
+  const design = await read('plugins/sql-apps/skills/sql-apps-design/SKILL.md');
+  const local = await read('plugins/sql-apps/skills/sql-apps-local/SKILL.md');
+  const validation = await read('plugins/sql-apps/skills/sql-apps-validation/SKILL.md');
+  const combined = [application, design, local, validation].join('\n');
+
+  assert.match(design, /visual approval does not authorize schema, identity, data, or startup changes/i);
+  assert.match(local, /never manufacture a grant, bypass a blocker/i);
+  assert.match(application, /keep.*database.*access.*separate|database and access decisions.*separate/i);
+  assert.doesNotMatch(combined, /must (?:use|install) (?:React|Tailwind|Bootstrap|Playwright|Puppeteer)|mandatory (?:framework|font|package|asset)/i);
+  assert.doesNotMatch(combined, /saved design brief|design report schema|visual evidence database/i);
 });
 
 test('agent guidance stays concise, stack-neutral and script-led', async () => {

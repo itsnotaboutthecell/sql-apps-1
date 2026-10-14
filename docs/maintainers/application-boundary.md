@@ -50,6 +50,20 @@ Apply these rules to an application's own fields and procedures, not just the re
 - **Actual errors:** an early empty SQL result was observed as HTTP201 before a later error with the pinned DAB version. Raw SQL rejection can surface as HTTP500 `DatabaseOperationFailed`, not a promised HTTP404/422. Assert actual non-success and unchanged data for missing/foreign mutations; do not hide errors or weaken the contract to accept an empty success.
 - **Live controls:** pair negative HTTP/SQL probes with a valid positive control using the same intended route, origin and authorization boundary. Otherwise a missing Origin or denied role can masquerade as successful input/owner validation. Verify the agreed browser action, independent SQL state and a genuinely new browser document after reload. Follow the validation skill for fixture ownership/cleanup and truthful loading/save/refresh errors.
 
+## User-facing evidence lanes
+
+Keep API/SQL acceptance, real browser workflow acceptance and rendered visual review distinct:
+
+- API/SQL evidence proves the data, mutation and access contracts above.
+- Real browser workflow evidence proves reachable interaction and save/reload behavior.
+- Rendered visual evidence proves presentation at an identified viewport and state.
+
+Screenshots do not prove persistence or access. Compilation, source inspection, health checks and API probes do not prove rendered visuals. Opening a tab is not visual review.
+
+For rendered review, record provenance: intended origin, source/build, viewport, state, artifact when available, findings, fixes and re-review. Review the primary and reachable states at desktop and narrow widths when the host supports them. If tooling or a state is unavailable, record the exact blocked evidence; keep it separate from observed findings. Label user-reported feedback as user-reported rather than direct observation.
+
+These lanes do not change consent, readiness, identity, schema or paid-resource boundaries. Visual approval never authorizes those changes, and no visual check bypasses startup coordination or access controls.
+
 ## Existing data is preserved
 
 Schema publishing retains `DropObjectsNotInSource=False` and data-loss blocking. Removing the example from source does **not** drop its table or legacy security objects in existing databases. The old default `sql-apps-sql` database can therefore fail the database-cleanliness check even after source, API and browser are clean.

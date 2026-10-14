@@ -41,9 +41,9 @@ Then ask:
 
 Your AI assistant can help write your frontend, API and schema; SQL Apps does not generate a complete domain app automatically. Review its changes and use the startup path for your application in [Run locally](run-locally.md). Trying the Todo reference is optional, not a prerequisite.
 
-For substantial new screens or a visual redesign, ask your assistant to use the `sql-apps-design` skill for an app-appropriate visual direction and browser review of the rendered interface.
+The `sql-apps-design` skill is part of every new user-facing app and meaningful UI change, not an extra request reserved for redesigns. Your assistant should establish a short app-appropriate design intent, implement it with the existing stack, and perform rendered browser review at desktop and narrow widths when supported.
 
-In the browser, create a test record and reload the page. Check that it is still there. Try a missing required field and, if the app has different users, check who can see or edit the record. Use synthetic data while developing.
+In the browser, create a test record and reload the page. Check that it is still there. Try a missing required field and, if the app has different users, check who can see or edit the record. Also inspect the rendered interface and reachable states for clear hierarchy, spacing, wrapping, overflow and keyboard focus. Fix visual defects and re-review them. Use synthetic data while developing.
 
 ## 3. Make one useful change
 
