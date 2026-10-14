@@ -399,6 +399,7 @@ test('local preview serves developer identity testing separately from the produc
   const page = await app.inject({ url: '/__dev/identity', headers });
   assert.equal(page.statusCode, 200);
   assert.match(page.body, /Development identity testing/);
+  assert.match(page.body, /do not expose.*remotely/i);
   assert.match(page.body, /id="development-user"/);
   assert.match(page.body, /src="\/__dev\/identity.js"/);
   assert.equal(page.headers['cache-control'], 'no-store');

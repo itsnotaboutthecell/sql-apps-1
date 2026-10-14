@@ -14,7 +14,7 @@ Local real sign-in does not prove cloud DAB identity or Azure service permission
 
 ## Local preview
 
-After the approved profile is ready, open its reported URL and select **Open local preview**. The server chooses the default simulated identity; **End preview** revokes the session. No Azure subscription is needed.
+After the approved profile is ready, open its reported URL and select **Sign in**. The server signs in the default simulated **Test user**; **Sign out** revokes the session. No Azure subscription is needed.
 
 For authorization and ownership testing, open the reported developer page, `/__dev/identity`, in the **same tab**. It contains the existing Development Alice and Development Bob test identities, with role-based labels indicating whether they have the required role. Switching identities invalidates the old session. Return to the application to test access; application screens do not select personas.
 

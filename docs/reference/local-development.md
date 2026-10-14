@@ -59,7 +59,7 @@ npm run local -- app
 
 `app` runs four stages and names the stage that fails: **start-sql** (start/reuse the project-owned SQL container), **init** (publish the schema and grants and run the read-only SQL acceptance check), **data** (recreate only the project-labeled DAB container) and **serve** (start the browser gateway on a single loopback origin). It stays in the foreground. Ctrl+C stops the browser gateway; SQL and DAB keep running. In preview mode, open local preview again after restarting the browser server because its sessions are held only in server memory.
 
-After the intended server responds and `/health/ready` passes, open the URL printed by startup (**http://127.0.0.1:18080** in legacy mode) and select **Open local preview**. The starter page calls the configured `readinessPath` (default `/api/AppReady`) with the required role. For authorization checks, open the reported developer page in the same tab: Development Alice has the required role and Development Bob does not. Switching revokes the previous session. Reloading preserves the session within the browser tab; SQL rows persist independently of browser sessions.
+After the intended server responds and `/health/ready` passes, open the URL printed by startup (**http://127.0.0.1:18080** in legacy mode) and select **Sign in**. The product signs in the simulated **Test user** and the starter page calls the configured `readinessPath` (default `/api/AppReady`) with the required role. For authorization checks, open the reported developer page in the same tab: Development Alice has the required role and Development Bob does not. Switching revokes the previous session. Reloading preserves the session within the browser tab; SQL rows persist independently of browser sessions.
 
 For individual SQL/data steps:
 
@@ -113,7 +113,7 @@ See [the reference guide](../../examples/todo/README.md). Local acceptance is no
 
 ### Development identity boundary
 
-The product uses **Open local preview** and **End preview**, not persona selectors. The server chooses the default fixed simulated identity and issues an unpredictable 43-character opaque bearer token. Authorization testing uses the separate local-only developer page, `/__dev/identity`, in the same tab. Its fixed Development Alice/Bob test identities are labeled as having or lacking the required role; switching invalidates the previous session. Sessions expire after eight hours, are limited to 1,000 active sessions and are revoked on switch or **End preview**.
+The product uses **Sign in** and **Sign out**, not persona selectors, and labels the default fixed simulated identity as **Test user**. The server issues an unpredictable 43-character opaque bearer token. Authorization testing uses the separate local-only developer page, `/__dev/identity`, in the same tab. Its fixed Development Alice/Bob test identities are labeled as having or lacking the required role; switching invalidates the previous session. Sessions expire after eight hours, are limited to 1,000 active sessions and are revoked on switch or **Sign out**.
 
 A signed-in user without the required role receives HTTP 403 from the gateway for `/api/*` and `/graphql`. `/auth/me` still returns the identity with `access: { allowed, requiredRole }`, so the app can show an access-denied state.
 

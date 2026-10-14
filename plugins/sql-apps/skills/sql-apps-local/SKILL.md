@@ -54,6 +54,6 @@ Publish a launch URL only after the intended server and readiness probe respond.
 
 For every new user-facing app and meaningful UI change, hand off to the **Rendered browser review** in `sql-apps-validation`. Use semantic browser inspection and real interactions against the verified origin; never invent page handles or confuse an application instance handle with a browser page handle. If the preferred browser path fails, inspect available host capabilities and discover supported alternatives. Opening a tab or reviewing source is not visual review.
 
-Give the verified URL, user flow, Ctrl+C behavior and the `serve`/`stop` resume and stop commands. Use `sql-apps-validation` for workflow evidence. Local preview identities are simulated; product screens use account/access states and keep test identities on the developer page.
+Give the verified URL, user flow, Ctrl+C behavior and the `serve`/`stop` resume and stop commands. Use `sql-apps-validation` for workflow evidence. Local preview identities are simulated; product screens use normal account/access language, label the simulated session as a test account and keep identity selection on the developer page. Keep non-exposure warnings in startup output and on that local-only developer page, not in the product header. Real Microsoft sign-in backed by local simulated services retains its distinct development notice.
 
 A useful local app is success. No Azure subscription or cloud deployment is required.
