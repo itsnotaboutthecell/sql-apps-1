@@ -16,7 +16,7 @@ export interface AuthElements {
 
 export function authenticationErrorMessage(error: unknown, mode: 'local' | 'entra' = 'entra'): string {
   if (error instanceof SessionExpiredError || (error instanceof ApiError && error.status === 401)) {
-    return mode === 'local' ? 'Local preview expired. Open it again.' : 'Your session expired. Sign in again.';
+    return mode === 'local' ? 'Your test session expired. Sign in again.' : 'Your session expired. Sign in again.';
   }
   if (error instanceof ApiError && error.status === 403) return 'This action is not permitted for the current session.';
   if (error instanceof ApiError && error.status >= 500) return `Backend service is unavailable (${error.status}). Try again.`;
@@ -26,8 +26,8 @@ export function authenticationErrorMessage(error: unknown, mode: 'local' | 'entr
 export function renderAuthentication(elements: AuthElements, mode: 'local' | 'entra', state: AuthState): void {
   const busy = state.kind === 'signing-in' || state.kind === 'signing-out' || state.kind === 'checking';
   const named = 'name' in state && Boolean(state.name);
-  elements.login.textContent = mode === 'local' ? 'Open local preview' : 'Sign in with Microsoft';
-  elements.logout.textContent = mode === 'local' ? 'End preview' : 'Sign out';
+  elements.login.textContent = mode === 'local' ? 'Sign in' : 'Sign in with Microsoft';
+  elements.logout.textContent = 'Sign out';
   elements.login.hidden = state.kind !== 'signed-out' && state.kind !== 'expired' && state.kind !== 'signing-in';
   elements.logout.hidden = state.kind !== 'authorized' && state.kind !== 'forbidden' && state.kind !== 'signing-out' &&
     !(state.kind === 'unavailable' && named);
@@ -36,26 +36,29 @@ export function renderAuthentication(elements: AuthElements, mode: 'local' | 'en
   elements.workspace.hidden = state.kind !== 'authorized';
   switch (state.kind) {
     case 'signed-out':
-      elements.status.textContent = mode === 'local' ? 'Local preview is not real sign-in.' : 'Sign in to use this application.';
+      elements.status.textContent = mode === 'local'
+        ? 'Sign in to use this application. This local session uses a test account.'
+        : 'Sign in to use this application.';
       break;
     case 'signing-in':
-      elements.status.textContent = mode === 'local' ? 'Opening local preview...' : 'Starting Microsoft sign-in...';
+      elements.status.textContent = mode === 'local' ? 'Signing in...' : 'Starting Microsoft sign-in...';
       break;
     case 'signing-out':
-      elements.status.textContent = mode === 'local' ? 'Ending local preview...' : 'Signing out...';
+      elements.status.textContent = 'Signing out...';
       break;
     case 'checking':
       elements.status.textContent = 'Checking application access...';
       break;
     case 'authorized':
-      elements.status.textContent = mode === 'local' ? 'Local preview is open.' : `Signed in as ${state.name}`;
+      elements.status.textContent = `Signed in as ${state.name}`;
       break;
     case 'forbidden':
-      elements.status.textContent = mode === 'local' ? 'This preview identity does not have access to this app.' :
+      elements.status.textContent = mode === 'local' ? `Signed in as ${state.name}. Your account does not have access to this app.` :
         `Signed in as ${state.name}. You do not have access to this app. Ask the app owner for access.`;
       break;
     case 'expired':
-      elements.status.textContent = mode === 'local' ? 'Local preview expired. Open it again.' : 'Your session expired. Sign in again.';
+      elements.status.textContent = mode === 'local' ? 'Your test session expired. Sign in again.' :
+        'Your session expired. Sign in again.';
       break;
     case 'unavailable':
       elements.status.textContent = 'Application access could not be confirmed. Try again.';

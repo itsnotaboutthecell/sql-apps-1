@@ -45,9 +45,9 @@ async function main() {
   if (!response.ok) throw new ApiError(response.status);
   const config = parseBrowserConfig(await response.json());
   authMode = config.mode;
-  const notice = config.mode === 'local'
-    ? 'Local preview only. Accounts and roles are simulated; do not expose this app remotely.'
-    : config.localBackend ? 'Microsoft sign-in is real. Local DAB claims and backend services remain development simulations.' : '';
+  const notice = config.mode === 'entra' && config.localBackend
+    ? 'Microsoft sign-in is real. Local DAB claims and backend services remain development simulations.'
+    : '';
   element('auth-notice').textContent = notice;
   element('auth-notice').hidden = !notice;
   const auth = await prepareAuthentication(config);
@@ -74,7 +74,7 @@ async function main() {
   const current = parseCurrentUser(await (await client.request('/auth/me')).json());
   if (!current.access.allowed) { showAuth({ kind: 'forbidden', name: session.name }); return; }
   showAuth({ kind: 'authorized', name: session.name });
-  const signedIn = config.mode === 'local' ? 'Local preview is open.' : `Signed in as ${session.name}`;
+  const signedIn = `Signed in as ${session.name}`;
   status.textContent = signedIn;
 
   let busy = false;

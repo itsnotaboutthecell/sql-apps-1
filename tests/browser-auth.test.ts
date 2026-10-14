@@ -75,7 +75,7 @@ class TestMsalClient implements MsalClient {
   }
 }
 
-test('local preview has an explicit open and end lifecycle without product personas', async () => {
+test('local test account has an explicit sign-in and sign-out lifecycle without product personas', async () => {
   const requests: { url: string; options: RequestInit }[] = [];
   const fixture = sessionHost(async (url, options = {}) => {
     requests.push({ url: String(url), options });
@@ -96,7 +96,7 @@ test('local preview has an explicit open and end lifecycle without product perso
   assert.ok(requests[0]!.options.signal);
   const active = await prepareAuthentication(previewConfig, fixture.host);
   assert.ok(active.session);
-  assert.equal(active.session.name, 'Local preview');
+  assert.equal(active.session.name, 'Test user');
   assert.equal(await active.session.getAccessToken(), previewToken);
   assert.equal(requests.length, 1);
   await active.signOut();
@@ -125,7 +125,8 @@ test('developer preview session selection rotates the existing bearer only after
 });
 
 for (const scenario of [
-  { name: 'backend failure', response: () => new Response(null, { status: 503 }), message: /could not be opened \(503\)/ },
+  { name: 'backend failure', response: () => new Response(null, { status: 503 }),
+    message: /Test account sign-in failed \(503\)/ },
   { name: 'short token', response: () => Response.json({ token: 'short' }), message: /response is invalid/ },
   { name: 'invalid token alphabet', response: () => Response.json({ token: '!'.repeat(43) }), message: /response is invalid/ },
   { name: 'missing token', response: () => Response.json({}), message: /response is invalid/ },
@@ -143,7 +144,7 @@ for (const scenario of [
 test('failed preview replacement preserves the previous stored session', async () => {
   const fixture = sessionHost(async () => new Response(null, { status: 503 }));
   fixture.values.set(localSessionKey, previewToken);
-  await assert.rejects(createPreviewSession(undefined, fixture.host), /could not be opened \(503\)/);
+  await assert.rejects(createPreviewSession(undefined, fixture.host), /Test account sign-in failed \(503\)/);
   assert.equal(fixture.values.get(localSessionKey), previewToken);
   assert.equal(fixture.reloads(), 0);
 });
@@ -349,32 +350,36 @@ for (const scenario of states) {
   });
 }
 
-test('local account view clearly labels preview instead of real sign-in or product personas', () => {
+test('local account view uses test-account language without preview branding or product personas', () => {
   const elements = authElements();
   const messages = {
-    'signed-out': 'Local preview is not real sign-in.',
-    'signing-in': 'Opening local preview...',
-    'signing-out': 'Ending local preview...',
+    'signed-out': 'Sign in to use this application. This local session uses a test account.',
+    'signing-in': 'Signing in...',
+    'signing-out': 'Signing out...',
     checking: 'Checking application access...',
-    authorized: 'Local preview is open.',
-    forbidden: 'This preview identity does not have access to this app.',
-    expired: 'Local preview expired. Open it again.',
+    authorized: 'Signed in as Test user',
+    forbidden: 'Signed in as Test user. Your account does not have access to this app.',
+    expired: 'Your test session expired. Sign in again.',
     unavailable: 'Application access could not be confirmed. Try again.',
   };
   for (const { state } of states) {
-    renderAuthentication(elements, 'local', state);
-    assert.equal(elements.login.textContent, 'Open local preview');
-    assert.equal(elements.logout.textContent, 'End preview');
+    const localState = 'name' in state ? { ...state, name: 'Test user' } : state;
+    renderAuthentication(elements, 'local', localState);
+    assert.equal(elements.login.textContent, 'Sign in');
+    assert.equal(elements.logout.textContent, 'Sign out');
     assert.equal(elements.status.textContent, messages[state.kind]);
     assert.equal(elements.workspace.hidden, state.kind !== 'authorized');
-    assert.doesNotMatch(elements.status.textContent ?? '', /Alice|Bob|Signed in as/);
+    assert.doesNotMatch([
+      elements.login.textContent, elements.logout.textContent, elements.status.textContent,
+    ].join(' '), /preview/i);
+    assert.doesNotMatch(elements.status.textContent ?? '', /Alice|Bob/);
   }
 });
 
 test('authentication errors distinguish expiry, forbidden actions and backend unavailability', () => {
   for (const error of [new SessionExpiredError('Ended'), new ApiError(401)]) {
     assert.equal(authenticationErrorMessage(error), 'Your session expired. Sign in again.');
-    assert.equal(authenticationErrorMessage(error, 'local'), 'Local preview expired. Open it again.');
+    assert.equal(authenticationErrorMessage(error, 'local'), 'Your test session expired. Sign in again.');
   }
   for (const mode of ['local', 'entra'] as const) {
     assert.equal(authenticationErrorMessage(new ApiError(403), mode), 'This action is not permitted for the current session.');
@@ -468,7 +473,7 @@ async function checkData(app: Awaited<ReturnType<typeof browserApp>>) {
 }
 
 function assertExpiredBrowser(app: Awaited<ReturnType<typeof browserApp>>, mode: 'local' | 'entra') {
-  const message = mode === 'local' ? 'Local preview expired. Open it again.' : 'Your session expired. Sign in again.';
+  const message = mode === 'local' ? 'Your test session expired. Sign in again.' : 'Your session expired. Sign in again.';
   assert.equal(app.element('auth-status').textContent, message);
   assert.equal(app.element('status').textContent, message);
   assert.equal(app.element('login').hidden, false);
@@ -488,8 +493,24 @@ const browserFailures = [
   { name: 'network error', response: () => new TypeError('Browser request failed'), message: 'Browser request failed' },
 ];
 
+test('local test-account mode does not show a developer warning in the product header', async t => {
+  const app = await browserApp(t, 'local');
+  assert.equal(app.element('auth-notice').hidden, true);
+  assert.equal(app.element('auth-notice').textContent, '');
+});
+
+test('local Entra mode keeps the simulated-backend notice in the product header', async t => {
+  const app = await browserApp(t, 'entra', [[
+    '/auth/config',
+    Response.json({ ...entraConfig, localBackend: true }),
+  ]]);
+  assert.equal(app.element('auth-notice').hidden, false);
+  assert.equal(app.element('auth-notice').textContent,
+    'Microsoft sign-in is real. Local DAB claims and backend services remain development simulations.');
+});
+
 for (const mode of ['local', 'entra'] as const) {
-  const signedIn = mode === 'local' ? 'Local preview is open.' : `Signed in as ${account.username}`;
+  const signedIn = mode === 'local' ? 'Signed in as Test user' : `Signed in as ${account.username}`;
 
   test(`${mode} authorized browser checks the readiness procedure once and shows its rows`, async t => {
     const app = await browserApp(t, mode);
@@ -570,7 +591,7 @@ for (const mode of ['local', 'entra'] as const) {
       oid: 'browser-user', tenantId: 'browser-tenant', access: { allowed: false, requiredRole: 'app-user' },
     })]]);
     assert.equal(app.element('auth-status').textContent, mode === 'local'
-      ? 'This preview identity does not have access to this app.'
+      ? 'Signed in as Test user. Your account does not have access to this app.'
       : `Signed in as ${account.username}. You do not have access to this app. Ask the app owner for access.`);
     assert.equal(app.element('workspace').hidden, true);
     assert.equal(app.element('logout').hidden, false);
@@ -592,7 +613,7 @@ for (const mode of ['local', 'entra'] as const) {
     assert.equal(app.element('logout').disabled, false);
     assert.equal(app.element('auth-retry').hidden, true);
     assert.equal(app.element('status').textContent, mode === 'local'
-      ? 'Local preview could not be ended (503)' : 'Microsoft sign-out failed');
+      ? 'Test account sign-out failed (503)' : 'Microsoft sign-out failed');
     if (mode === 'local') assert.equal(app.values.has(localSessionKey), true);
     else assert.equal(app.msal.activeAccount, account);
   });
@@ -608,7 +629,7 @@ for (const mode of ['local', 'entra'] as const) {
     await checkData(app);
     app.element('logout').onclick!();
     await settleBrowser();
-    assert.equal(app.element('auth-status').textContent, mode === 'local' ? 'Ending local preview...' : 'Signing out...');
+    assert.equal(app.element('auth-status').textContent, 'Signing out...');
     data.resolve(new Response(null, { status: 401 }));
     await settleBrowser();
     assertExpiredBrowser(app, mode);

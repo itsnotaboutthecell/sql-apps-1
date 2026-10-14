@@ -52,11 +52,11 @@ export async function createPreviewSession(userId?: string, host: SessionHost = 
     body: JSON.stringify(userId === undefined ? { preview: true } : { user: userId }),
     redirect: 'error', signal: AbortSignal.timeout(10_000),
   });
-  if (!response.ok) throw new Error(`Local preview could not be opened (${response.status})`);
+  if (!response.ok) throw new Error(`Test account sign-in failed (${response.status})`);
   const body: unknown = await response.json();
   if (!body || typeof body !== 'object' || !('token' in body) || typeof body.token !== 'string' ||
       !/^[A-Za-z0-9_-]{43}$/.test(body.token)) {
-    throw new Error('Local preview session response is invalid');
+    throw new Error('Test account session response is invalid');
   }
   host.storage.setItem(localSessionKey, body.token);
 }
@@ -70,9 +70,9 @@ export async function prepareAuthentication(
     const token = host.storage.getItem(localSessionKey);
     return {
       session: token ? {
-        name: 'Local preview',
+        name: 'Test user',
         getAccessToken: async () => {
-          if (host.storage.getItem(localSessionKey) !== token) throw new SessionExpiredError('Local preview has ended');
+          if (host.storage.getItem(localSessionKey) !== token) throw new SessionExpiredError('Test account session has ended');
           return token;
         },
       } : undefined,
@@ -83,7 +83,7 @@ export async function prepareAuthentication(
           method: 'DELETE', headers: current ? { authorization: `Bearer ${current}` } : {},
           redirect: 'error', signal: AbortSignal.timeout(10_000),
         });
-        if (!response.ok) throw new Error(`Local preview could not be ended (${response.status})`);
+        if (!response.ok) throw new Error(`Test account sign-out failed (${response.status})`);
         host.storage.removeItem(localSessionKey);
         host.reload();
       },
