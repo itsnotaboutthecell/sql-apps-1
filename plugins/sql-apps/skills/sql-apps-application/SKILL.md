@@ -46,7 +46,7 @@ For role-authorized data:
 
 Product screens show account and access states, never persona selectors. Local test identities stay on the developer page. Preview simulation does not prove Entra assignment or cloud token behavior.
 
-Deliver a basic shell and one real interaction before expanding the application. A basic shell means small scope, not unfinished visual quality. Label mock or synthetic-only behavior. Visual approval is not permission for schema or startup changes.
+Deliver a basic shell and one real interaction before expanding the application. A basic shell is an implementation milestone, not final design acceptance: it means small scope, not unfinished visual quality. Label mock or synthetic-only behavior. Use the composition and rendered-review gate in `sql-apps-design`; visual approval is not permission for schema or startup changes.
 
 ## Check the application boundary
 

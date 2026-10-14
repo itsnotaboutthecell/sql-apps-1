@@ -151,7 +151,15 @@ test('SQL Apps routes new apps and meaningful UI changes through intentional des
   for (const state of ['signed-out', 'authorized', 'no-access', 'loading', 'empty', 'error', 'saving', 'success', 'disabled']) {
     assert.match(design.toLowerCase(), new RegExp(state), `design guidance must cover ${state}`);
   }
+  assert.match(design, /maintained frontend or design skill/);
+  assert.match(design, /loading, empty, error, disabled, save, and reload states/i);
+  assert.match(design, /dominant user action/i);
+  assert.match(design, /two distinct compositions/i);
+  assert.match(design, /empty, single-record, and populated states/i);
+  assert.match(design, /mobile and desktop/i);
+  assert.match(design, /Functional acceptance and design acceptance are separate/i);
   assert.doesNotMatch(design, /references\/|craft floor|style recipes/i);
+  assert.match(application, /basic shell is an implementation milestone, not final design acceptance/i);
   const guide = await readFile(resolve('docs', 'guides', 'build-your-app.md'), 'utf8');
   assert.match(guide, /`sql-apps-design` skill[\s\S]*(?:every|all|normal)/i);
 
