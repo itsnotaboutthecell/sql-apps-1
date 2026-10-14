@@ -8,7 +8,7 @@ import { runtimeFor, portState, type WorkspaceRuntime } from './workspace.mjs';
 import { checkSelectedApplication, type ApplicationBuildManifest } from './application-build.js';
 import { localAdminQuery, publishLocalSchema, startLocalSql, verifyLocal, sqlImage, dabImage } from './local.js';
 import { verifyContainerWorkspace } from './local-ownership.js';
-import { saveJson, withDeploymentLock } from './deployment.js';
+import { saveJson, withStateLock } from './state-files.js';
 import { run, type Run } from './process.js';
 import type { DemoOptions } from './demo-app.js';
 
@@ -80,7 +80,7 @@ async function selectedContext(home: string, directory: string) {
 
 async function initializeDatabase(runtime: WorkspaceRuntime, manifest: ApplicationBuildManifest, directory: string, runner: Run) {
   const target = selectedLocalPaths(runtime, manifest.name);
-  await withDeploymentLock(target.stateFile, async () => {
+  await withStateLock(target.stateFile, async () => {
     await verifyLocal(runtime.sqlContainer, runner);
     let state: z.infer<typeof credentials>;
     try { state = await readCredentials(runtime, manifest.name); }
@@ -117,7 +117,7 @@ export async function prepareSelectedLocalApplication(home: string, directory: s
   if (process.env.NODE_ENV === 'production') throw new Error('Selected local startup is disabled in production');
   const context = await selectedContext(home, directory);
   const { runtime, manifest, target } = context;
-  await withDeploymentLock(join(target.directory, 'startup'), async () => {
+  await withStateLock(join(target.directory, 'startup'), async () => {
     if (await portState(runtime.ports.gateway) !== 'free') throw new Error('Selected gateway port is occupied or unverifiable; reuse the intended app without stopping unrelated processes');
     const existing = (await runner('docker', ['ps', '--all', '--filter', `name=^/${target.dataContainer}$`, '--format', '{{.Names}}'])).trim();
     const config = await readFile(join(directory, 'dab', 'dab-config.json'), 'utf8');
@@ -186,7 +186,7 @@ export async function stopSelectedLocalData(home: string, name: string, runner: 
   const runtime = runtimeFor(undefined, home);
   if (runtime.home !== runtimeFor().home) throw new Error('Run selected local commands from the explicitly bound runtime home');
   const target = selectedLocalPaths(runtime, name);
-  await withDeploymentLock(join(target.directory, 'startup'), async () => {
+  await withStateLock(join(target.directory, 'startup'), async () => {
     await verifyData(runtime, name, runner);
     await runner('docker', ['rm', '--force', target.dataContainer]);
   });

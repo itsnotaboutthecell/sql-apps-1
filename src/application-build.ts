@@ -6,9 +6,9 @@ import { build } from 'esbuild';
 import { z } from 'zod';
 import { inspectSource } from '../scripts/workspace-check.mjs';
 import { runtimeFor } from './workspace.mjs';
-import { saveJson, withDeploymentLock } from './deployment.js';
+import { saveJson, withStateLock } from './state-files.js';
 import { composeApplication, type ApplicationDefinition, type ApplicationProfile } from './application.js';
-import { pinnedDabImage } from './artifacts.js';
+import { pinnedDabImage } from './local-images.js';
 
 const selection = z.string().regex(/^[a-z][a-z0-9-]{0,31}$/);
 const path = z.string().min(1).refine(value => !isAbsolute(value) &&
@@ -106,7 +106,7 @@ export async function buildSelectedApplication(home: string, name: string, profi
   const sourceRoot = join('examples', name);
   await checkedFile(home, join(sourceRoot, 'application.ts'));
   const base = join(runtime.stateDirectory, 'applications', name, profile);
-  return withDeploymentLock(join(base, 'build'), async () => {
+  return withStateLock(join(base, 'build'), async () => {
     const temporary = join(base, `artifact-${randomUUID()}`);
     let published = false;
     await mkdir(join(temporary, 'server'), { recursive: true });

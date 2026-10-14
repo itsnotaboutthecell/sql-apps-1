@@ -264,7 +264,7 @@ test('coordinator entry points use the local-first journey and retain sharing bo
   assert.match(sharing, /Static Web Apps.*Free.*managed Functions.*Azure SQL Database free offer/is);
   assert.match(sharing, /potentially \$0|remain at \*\*\$0/is);
   assert.match(sharing, /no Static Web Apps SLA/i);
-  assert.match(sharing, /role-based-data/);
+  assert.match(sharing, /ships no second cloud topology/i);
   assert.doesNotMatch(sharing, /demo-publish|hosting-compare|demo-cost/);
   const guideReference = await readFile('docs/reference/guide.md', 'utf8');
   assert.match(guideReference, /historical/i);
@@ -272,7 +272,7 @@ test('coordinator entry points use the local-first journey and retain sharing bo
   assert.equal((await readFile('content/start.md', 'utf8')).includes('"'), false);
   const cloud = await readFile('plugins/sql-apps/skills/sql-apps-cloud-preview/SKILL.md', 'utf8');
   assert.match(cloud, /Sharing is optional/);
-  assert.match(cloud, /personal-free[\s\S]*default/i);
+  assert.match(cloud, /personal-free[\s\S]*only bundled cloud profile/i);
   assert.match(cloud, /npm run publish -- init[\s\S]*npm run publish -- plan[\s\S]*npm run publish -- deploy/);
 });
 

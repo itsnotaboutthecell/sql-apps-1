@@ -10,7 +10,7 @@ SQL Apps runs one profile locally and in the cloud: [role-based-data](role-based
 
 SQL Apps does not run file storage, queues, background workers or tracing. Add those with the maintained Azure skills (for example `azure-storage`, `azure-prepare` and `azure-deploy`), outside SQL Apps.
 
-Implement domain UI/schema/procedures, configure authorized DAB permissions and verify the real SQL procedure/browser save-reload flow. The selected reference path below is anonymous synthetic-only, not a substitute for your app. The [role-based-data Azure path](role-based-data.md#identity-artifacts-and-deployment) selects matching resources while preserving private SQL.
+Implement domain UI/schema/procedures, configure authorized DAB permissions and verify the real SQL procedure/browser save-reload flow. The selected reference path below is anonymous synthetic-only, not a substitute for your app. Cloud publishing uses the separate [personal-free path](personal-free-deployment.md).
 
 Follow [scoped consent and readiness](../guides/run-locally.md#approvals-and-readiness). A proposed origin or successful build is not a running app. Publish the intended origin only after response/readiness probes, then report workflow acceptance separately.
 
@@ -218,9 +218,6 @@ Ownership labels prevent accidental replacement/removal of unrelated containers.
 
 This is a usable **frontend/gateway/SQL/DAB learning workflow**, not a complete emulation of Azure. Role-authorized procedure access, least-privilege SQL grants and the readiness check are tested locally. First-time package/image/tool downloads need internet, as do changed dependencies that are not already cached.
 
-Browser Entra sign-in can be tested through the explicit local opt-in, but cloud sign-in, managed identity, private endpoints and cloud recovery still require Azure acceptance. Local SQL login/EasyAuth secrets are intentionally separate from cloud Entra/managed-identity configuration. The SQL preview is not a production database or backup service; see the [current known limitations](https://microsoft.github.io/azure-sql-database-container/known-limitations.html).
+Browser Entra sign-in can be tested through the explicit local opt-in, but cloud sign-in and recovery still require Azure acceptance. Local SQL credentials are intentionally separate from cloud application settings. The SQL preview is not a production database or backup service; see the [current known limitations](https://microsoft.github.io/azure-sql-database-container/known-limitations.html).
 
-No Azure free allowance is needed to start locally. The role-based-data cloud
-deployment uses free-limit serverless SQL, scale-to-zero Container Apps and
-capped logs, but ACR, one SQL private endpoint and managed network
-infrastructure can still charge. Do not deploy expecting a guaranteed zero bill.
+No Azure free allowance is needed to start locally. Cloud publishing uses the separate `personal-free` workflow.

@@ -260,7 +260,7 @@ export async function checkApplication(root = process.cwd(), model) {
   }
   await inspect(join(root, 'public', 'app.js'));
   if (model) await inspect(resolve(model));
-  for (const filename of ['Dockerfile', 'dab/Dockerfile']) {
+  for (const filename of ['Dockerfile']) {
     const content = await readFile(join(root, filename), 'utf8');
     for (const line of content.replace(/\\\r?\n\s*/g, ' ').split(/\r?\n/)) {
       const copy = /^\s*COPY\s+(.+)$/i.exec(line);

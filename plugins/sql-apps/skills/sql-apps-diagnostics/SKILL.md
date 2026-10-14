@@ -9,7 +9,7 @@ Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and 
 
 ## Route to the capability owner
 
-- Azure resource health, Container Apps, Container Registry, Azure Monitor, Log Analytics, or production incidents: use `azure-diagnostics`.
+- Azure resource health, monitoring, or production incidents: use `azure-diagnostics`.
 - Azure cost, forecasts, or resource optimization: use the `azure-cost` plugin.
 - Azure SQL connection or engine errors: use `diagnose-connection-errors` or the matching Azure SQL diagnostic skill.
 - DAB configuration, permissions, or API exposure: use `dab-rest-and-graphql` and `azuresql-db-dab`.

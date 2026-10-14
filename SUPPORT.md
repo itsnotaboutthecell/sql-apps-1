@@ -6,6 +6,6 @@ Use the repository's issues for bugs and questions. Include the affected version
 
 No service-level agreement or Microsoft support commitment is provided by this repository. Product-level Azure support remains governed by your Azure agreement.
 
-Start with the [documentation index](docs/README.md) for setup and app-building guides. For deployment prerequisites and limitations, see the [deployment reference](docs/reference/deployment.md) and [operations checks](docs/maintainers/operations.md).
+Start with the [documentation index](docs/README.md) for setup and app-building guides. For deployment prerequisites and limitations, see the [personal-free deployment reference](docs/reference/personal-free-deployment.md).
 
 Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).

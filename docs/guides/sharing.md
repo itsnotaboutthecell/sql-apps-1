@@ -24,13 +24,7 @@ Use the [personal-free deployment reference](../reference/personal-free-deployme
 | One owner, light personal use, potentially $0, no SLA | Primary `personal-free` publisher |
 | No cloud deployment | Keep using the local application |
 | Enterprise SLA, managed identity, private networking, or organizational controls | Plan a production architecture with maintained Azure and Azure SQL skills |
-| Existing Container Apps/DAB deployment | Keep using the retained `sql-apps azure` compatibility path |
-
-Do not add Container Apps, DAB, ACR, a VNet, private endpoints, private DNS, Log Analytics, Application Insights, or Key Vault to the personal default merely because the legacy template uses them. Those services can be valid requirements, but each must be justified by the application rather than inherited as ceremony.
-
-## Existing private deployments
-
-The retained Container Apps/DAB workflow remains supported for existing `role-based-data` deployments. It uses private Azure SQL networking, managed identities, ACR images, a gateway, and DAB. It is not the default for a new personal project. Follow the [legacy deployment reference](../reference/deployment.md), preserve its approval gates, and do not mix its state with `.sql-apps/deployments/`.
+The project ships no second cloud topology. If the personal profile does not meet the requirements, use maintained Azure skills to design, own, and validate a separate production architecture.
 
 ## Acceptance after deployment
 

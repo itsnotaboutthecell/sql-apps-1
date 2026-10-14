@@ -124,7 +124,7 @@ test('packaged check compares project UI with the shipped template', async t => 
   }));
   await writeFile(join(project, 'public', 'app.js'), 'document.body.dataset.ready = "true";');
   for (const file of ['dist/src/client.js', 'dist/src/server.js']) await writeFile(join(project, file), '');
-  for (const file of ['Dockerfile', 'dab/Dockerfile']) {
+  for (const file of ['Dockerfile']) {
     await writeFile(join(project, file), 'COPY --from=build /app/dist/src ./dist/src');
   }
   const checker = join(staged, 'dist', 'scripts', 'check-application.mjs');
@@ -156,7 +156,6 @@ test('bin help is project-independent and its validated command map targets pack
       consent: 'dist/scripts/local-consent.mjs',
       local: 'dist/src/local-cli.js',
       publish: 'dist/src/personal-free-cli.js',
-      azure: 'dist/src/cli.js',
       check: 'dist/scripts/check-application.mjs',
     });
     const originalArgv = process.argv;

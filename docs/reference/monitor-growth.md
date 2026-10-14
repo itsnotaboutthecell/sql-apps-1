@@ -36,8 +36,7 @@ A value of `true` records the opt-in; it does not prove telemetry has arrived or
 Database performance percentages are not a billing meter.
 
 - In the Azure portal, check SQL's **Free monthly vCore amount** / **Free amount remaining**. Review consumption through the month and configure an approved remaining-compute alert before exhaustion.
-- Review Container Apps grants across the subscription, not just this application.
-- In Cost Management, check actual and forecast costs for both the application resource group and the Container Apps managed infrastructure group. Include registry/network charges.
+- In Cost Management, check actual and forecast costs for the application resource group.
 - Configure budget alerts with reviewed recipients and thresholds if needed. Alerts are delayed notifications, not a hard spending cap.
 
 Keep free-tier SQL pause-at-monthly-limit behavior unless the owner deliberately chooses another reviewed billing plan. Database Hub is not an automatic upgrade or billing-control mechanism. Use the Azure Cost plugin and [costs and growth](../guides/costs.md) for current allowances and billing-policy caveats.

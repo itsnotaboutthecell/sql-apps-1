@@ -23,9 +23,8 @@ Functions and the Azure SQL Database free offer. It can plausibly remain at
 allowances. Static Web Apps Free has no SLA. Eligibility, regional availability
 and usage are account-specific, and a free allowance is not a spending cap.
 
-The personal-free profile avoids the fixed-cost supporting inventory in the
-legacy deployment: no container registry, Container Apps, VNet, private
-endpoint, private DNS or monitoring workspace. Read
+The personal-free profile creates no container registry, private network,
+private endpoint, private DNS or monitoring workspace. Read
 [Sharing your app](sharing.md) and the
 [personal-free deployment reference](../reference/personal-free-deployment.md)
 before approving it. Use the Azure Cost plugin to confirm current account and

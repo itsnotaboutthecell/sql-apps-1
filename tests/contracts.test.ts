@@ -2,20 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('starter deployment names use sqlapps for generated URL prefixes', async () => {
-  const config = JSON.parse(await readFile('sql-apps.example.json', 'utf8'));
-  assert.equal(config.name, 'sqlapps');
-  assert.equal(config.profile, 'role-based-data');
-  assert.equal(config.readinessPath, '/api/AppReady');
-  assert.notEqual(config.location, 'eastus');
-  assert.equal('functionsImage' in config, false);
-  const template = await readFile('infra/main.bicep', 'utf8');
-  assert.match(template, /param name string = 'sqlapps'/);
-  assert.ok(template.includes("var prefix = '${name}-${environment}'"));
-  assert.ok(template.includes("output gatewayName string = '${prefix}-gateway'"));
-  assert.doesNotMatch(template, /Microsoft\.Web\/sites|Microsoft\.Storage|Microsoft\.KeyVault/);
-});
-
 test('DAB starter exposes only the AppUser readiness procedure with AzureAD auth', async () => {
   const config = JSON.parse(await readFile('dab/dab-config.json', 'utf8'));
   assert.equal(config['data-source']['connection-string'], "@env('SQL_CONNECTION_STRING')");

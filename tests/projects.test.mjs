@@ -19,7 +19,7 @@ async function sourceFixture(t) {
     'dab/dab-config.json': '{"entities":{}}',
     'docs/guides/build-your-app.md': '# Build your app',
     'functions/src/index.ts': 'export {};',
-    'infra/main.bicep': '',
+    'infra/personal-free.bicep': '',
     'public/index.html': '<h1>SQL Apps</h1>',
     'public/style.css': '',
     'scripts/build-provenance.mjs': '',

@@ -9,7 +9,6 @@ The product journey is **Build -> Sign in -> Give access -> Publish**. Applicati
 | Local preview (default) | Server-issued opaque sessions for fixed simulated identities | Local DAB claim simulation and development services |
 | Local Entra (opt-in) | Real MSAL sign-in and verified delegated Entra access tokens | Local DAB claim simulation and development services |
 | Personal-free Azure deployment | Static Web Apps built-in sign-in and an invited `owner` role | Managed Functions, a procedure allowlist, and least-privilege SQL credentials |
-| Legacy private Azure deployment | Real MSAL sign-in and signature-verified delegated access tokens | Gateway, DAB managed identity, SQL grants and ownership rules |
 
 Local real sign-in does not prove cloud DAB identity or Azure service permissions. Dependency readiness is not user authorization or browser/SQL acceptance.
 
@@ -55,13 +54,11 @@ Hiding UI controls improves usability, but the gateway, DAB and SQL are authorit
 
 In the personal-free profile, **Give access** means creating a time-limited Static Web Apps invitation carrying the custom `owner` role. The API accepts only that role and derives its stable owner ID from the provider and immutable provider user ID, not email. Static Web Apps roles do not themselves grant arbitrary SQL access; the Functions runtime can execute only the procedures declared in `personal-free-api.json`.
 
-In the legacy profile, **Give access** requires an approved Entra application-role assignment and the relevant DAB/SQL permissions. A browser administration console is not implemented.
-
 ## Static Web Apps boundary
 
 The primary personal profile uses Static Web Apps built-in authentication and managed Functions. The browser reads `/.auth/me`; sign-in and sign-out use the platform `/.auth` routes. The Functions boundary strictly parses `x-ms-client-principal`, rejects malformed or oversized principals, and requires exactly the invited `owner` role. Caller-submitted platform identity headers are stripped before request adaptation.
 
-This is intentionally different from the legacy single-tenant delegated-token gateway. Do not copy the Static Web Apps principal model outside its hosting boundary or claim that it supplies a managed identity for Azure SQL.
+Do not copy the Static Web Apps principal model outside its hosting boundary or claim that it supplies a managed identity for Azure SQL.
 
 The SWA CLI is a deployment dependency for the personal-free artifact. Local preview continues to use SQL Apps' local session model; an SWA CLI authentication simulation is not production acceptance.
 

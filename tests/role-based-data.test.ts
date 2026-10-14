@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { run } from '../src/process.js';
 import { parseRoleBasedProfile, roleBasedProfileSchema, validateRoleBasedDab } from '../src/role-based-profile.js';
-import { deploymentSchema, loadRuntimeConfig } from '../src/config.js';
+import { loadRuntimeConfig } from '../src/config.js';
 import { userFromClaims } from '../src/auth.js';
 import { createLocalApp, developmentUsers, localAppOrigin } from '../src/local-app.js';
 import { startLocalApplication } from '../src/local-startup.js';
@@ -109,18 +109,6 @@ test('local authorized profile denies users without the required role and forwar
   assert.equal((await app.inject({ url: '/storage', headers: { ...headers, authorization: `Bearer ${authorized}` } })).statusCode, 404);
   assert.equal((await app.inject({ url: '/health/ready', headers })).statusCode, 200);
 });
-test('authorized deployment requires the authorized role and readiness', () => {
-  const base = { subscriptionId: developmentUsers[0]!.id, tenantId: developmentUsers[0]!.id,
-    apiClientId: developmentUsers[0]!.id, sqlAdminObjectId: developmentUsers[0]!.id, sqlAdminName: 'operator',
-    resourceGroup: 'data-app', location: 'eastus', environment: 'dev', name: 'data-app',
-    gatewayImage: 'app.azurecr.io/gateway:1', dabImage: 'app.azurecr.io/data:1', registryServer: 'app.azurecr.io' };
-  assert.equal('functionsImage' in deploymentSchema.parse({ ...base, ...profile }), false);
-  assert.equal(deploymentSchema.parse({ ...base, ...profile, functionsImage: '' }).functionsImage, '');
-  assert.throws(() => deploymentSchema.parse({ ...base, ...profile, functionsImage: 'app.azurecr.io/functions:1' }));
-  assert.throws(() => deploymentSchema.parse({ ...base, profile: 'role-based-data' }));
-  assert.throws(() => deploymentSchema.parse(base));
-});
-
 test('cloud authorized gateway derives the DAB role from verified claims and has no file/job routes', async t => {
   const tid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   const config = loadRuntimeConfig({

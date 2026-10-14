@@ -51,7 +51,7 @@ fixtures, and derive ports, names, database users, and origins from `runtimeFor(
 Mocked isolated Docker inspections must include the matching workspace, image,
 and loopback port bindings; do not reset `.sql-apps` to make tests pass.
 
-Keep end-user walkthroughs in `docs/guides`, detailed commands in `docs/reference`, and contributor contracts in `docs/maintainers`. See the [documentation index](docs/README.md), [application boundaries](docs/maintainers/application-boundary.md) and [operations checks](docs/maintainers/operations.md).
+Keep end-user walkthroughs in `docs/guides`, detailed commands in `docs/reference`, and contributor contracts in `docs/maintainers`. See the [documentation index](docs/README.md) and [application boundaries](docs/maintainers/application-boundary.md).
 
 ## Commit Messages
 

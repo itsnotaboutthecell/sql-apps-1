@@ -32,7 +32,7 @@ async function fixture(t, selected = false) {
     'src/local-app-smoke.ts': '// browser/API test',
     'src/local-app.ts': '// gateway',
     'src/selected-local.ts': '// selected app',
-    'src/artifacts.ts': '// pinned images',
+    'src/local-images.ts': '// pinned local images',
     'scripts/build-provenance.mjs': '// build',
     'tsconfig.runtime.json': '{}',
     'role-based-data.json': '{"profile":"role-based-data","requiredRole":"AppUser","readinessPath":"/api/Ready"}',

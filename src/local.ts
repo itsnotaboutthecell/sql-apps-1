@@ -2,11 +2,11 @@ import { readFile, unlink } from 'node:fs/promises';
 import { resolve, join, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { saveJson, withDeploymentLock } from './deployment.js';
+import { saveJson, withStateLock } from './state-files.js';
 import type { Run } from './process.js';
 import { runtimeFor } from './workspace.mjs';
 import { verifyContainerWorkspace } from './local-ownership.js';
-import { pinnedDabImage } from './artifacts.js';
+import { pinnedDabImage } from './local-images.js';
 import { type RoleBasedProfile, validateRoleBasedDab, roleBasedProcedureGrants } from './role-based-profile.js';
 import { projectPath } from './runtime-roots.js';
 
@@ -95,7 +95,7 @@ async function recoverLocalSql(container: string, run: Run): Promise<void> {
   }
   const sqlPort = runtime.ports.sql;
   const path = `${localPaths(container).stateFile}.recovery.json`;
-  await withDeploymentLock(path, async () => {
+  await withStateLock(path, async () => {
     let pending = await readSqlRecovery(container);
     if (pending && (pending.workspace !== runtime.id || pending.container !== container)) {
       throw new Error('SQL recovery state belongs to another workspace; no resources were changed');
@@ -284,7 +284,7 @@ export async function publishLocalSchema(container: string, target: {
 
 export async function initLocal(container: string, run: Run, authorized: RoleBasedProfile): Promise<void> {
   const { stateFile } = localPaths(container);
-  await withDeploymentLock(stateFile, async () => {
+  await withStateLock(stateFile, async () => {
     await verifyLocal(container, run);
     let state: LocalState;
     try { state = await readLocal(container); }

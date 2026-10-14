@@ -222,7 +222,7 @@ async function requirementsFor(home, request, proposed) {
     true, artifact ? ['sql', 'setup', 'dab/dab-config.json'] : []);
   const services = () => add('services', target, [
     `Start/reuse ${profile} loopback services; download images and write owned configuration.`,
-  ], ['src/artifacts.ts', 'src/local.ts', 'src/local-app.ts',
+  ], ['src/local-images.ts', 'src/local.ts', 'src/local-app.ts',
     ...(artifact ? ['src/selected-local.ts'] : ['src/role-based-profile.ts'])], true, artifact ? ['server', 'dab/dab-config.json'] : []);
   const composite = ['app', 'role-based-app', 'selected-app'].includes(operation);
   if (composite || operation === 'init') { await restore(); await build(); }

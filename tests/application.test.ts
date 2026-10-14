@@ -190,10 +190,10 @@ const fixture = 'import { application } from "../examples/todo/application.js";'
     'COPY --from=build /app/dist/* /app/dist',
     'COPY --chown=node:node \\\n  tests ./tests',
   ]) {
-    await writeFile(join(root, 'dab/Dockerfile'), copy);
+    await writeFile(join(root, 'Dockerfile'), copy);
     await assert.rejects(run(process.execPath, [checker, root]), /whole build/);
   }
-  await writeFile(join(root, 'dab/Dockerfile'), 'COPY --from=build /app/dist/src ./dist/src');
+  await writeFile(join(root, 'Dockerfile'), 'COPY --from=build /app/dist/src ./dist/src');
   await rm(join(root, 'dist/src/server.js'));
   await assert.rejects(run(process.execPath, [checker, root]), /ENOENT/);
 });

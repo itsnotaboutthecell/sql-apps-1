@@ -12,7 +12,6 @@ export const COMMANDS = {
   consent: 'dist/scripts/local-consent.mjs',
   local: 'dist/src/local-cli.js',
   publish: 'dist/src/personal-free-cli.js',
-  azure: 'dist/src/cli.js',
   check: 'dist/scripts/check-application.mjs',
 };
 
@@ -25,7 +24,6 @@ function help() {
     `Commands: ${Object.keys(COMMANDS).join(', ')}`,
     '',
     '  publish  Primary personal-project Azure path (potentially $0 within allowances; no SLA)',
-    '  azure    Legacy private Container Apps/DAB compatibility path',
   ].join('\n');
 }
 

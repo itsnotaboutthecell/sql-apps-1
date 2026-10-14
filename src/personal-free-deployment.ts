@@ -10,7 +10,7 @@ import {
   type PersonalFreeConfig,
   type ProtectedDeploymentState,
 } from './personal-free-config.js';
-import { deploymentName } from './azure-init.js';
+import { deploymentName } from './deployment-name.js';
 import { buildPersonalFreeArtifact } from './personal-free-build.js';
 import { toolingAsset, projectRoot } from './runtime-roots.js';
 

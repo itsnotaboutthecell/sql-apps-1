@@ -14,4 +14,4 @@ please review the latest guidance for Microsoft repositories at
 
 <!-- END MICROSOFT SECURITY.MD BLOCK -->
 
-The foundation requires live identity, authorization, networking, and recovery validation before production use. See [operations and release checks](docs/maintainers/operations.md).
+The bundled personal-project profile requires live identity, authorization, persistence, and recovery validation before use with real data. See the [personal-free deployment reference](docs/reference/personal-free-deployment.md).

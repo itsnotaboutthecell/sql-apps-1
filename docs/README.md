@@ -26,14 +26,12 @@ To try something already implemented, use the [Todo reference app](../examples/t
 - [Guide command](reference/guide.md): saved brief and checkpoint format.
 - [Monitor usage and growth](reference/monitor-growth.md): free Database Hub preview setup, read-only SQL diagnostics and capacity decisions.
 - [Personal-free Azure deployment](reference/personal-free-deployment.md): primary Static Web Apps Free, managed Functions and Azure SQL free-offer workflow.
-- [Legacy authenticated Azure deployment](reference/deployment.md): retained Container Apps/DAB commands for existing SQL Apps deployments.
 
 ## Contribute and maintain
 
 - [Contributing](../CONTRIBUTING.md): development checks and pull requests.
 - [Agent guidance evaluations](maintainers/agent-evaluations.md): behavior scenarios for prompt, skill and workflow-boundary changes.
 - [Application boundaries](maintainers/application-boundary.md): keep reference examples out of delivered applications.
-- [Legacy operations and release checks](maintainers/operations.md): recovery and production checks for existing custom deployments.
 - [Naming transition](maintainers/naming-transition.md): migration notes for existing development checkouts.
 
 Temporary implementation plans and session notes belong in ignored `docs/superpowers/` or session storage. They are not product guidance and must not be committed as authoritative documentation.

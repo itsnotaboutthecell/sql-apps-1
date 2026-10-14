@@ -6,7 +6,7 @@ This profile has no Static Web Apps SLA. It is **potentially $0**, not guarantee
 
 ## Security and cost boundary
 
-The profile intentionally creates only a Static Web App and Azure SQL server/database. It does not create DAB, Container Apps, ACR, a VNet, private endpoints, private DNS, Log Analytics, Application Insights, or Key Vault.
+The profile intentionally creates only a Static Web App and Azure SQL server/database.
 
 Azure SQL uses a public endpoint and the Azure-services firewall rule. The application uses a generated `sql_apps_runtime` login that receives `CONNECT` plus object-scoped `EXECUTE` and `VIEW DEFINITION` only for procedures declared in `personal-free-api.json`. Secrets are stored under `.sql-apps/deployments/`, which generated projects exclude from Git.
 

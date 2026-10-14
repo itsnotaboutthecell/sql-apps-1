@@ -11,15 +11,7 @@ The primary target for a new personal project is **Azure Static Web Apps Free + 
 
 Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and confirm the requested project with `workspace-check` before reading or changing it.
 
-## Choose the profile
-
-| Requirement | Profile |
-| --- | --- |
-| One owner, light personal use, lowest fixed cost, no SLA acceptable | `personal-free` (default) |
-| Keep using an existing Container Apps/DAB environment | Legacy `sql-apps azure` |
-| SLA, managed identity, private networking, organization controls, multiple application roles | Design a production architecture with maintained Azure and Azure SQL skills |
-
-Do not select the legacy path merely because it is older, more elaborate, or already familiar. Do not add DAB, Container Apps, ACR, VNet, private endpoint, private DNS, Log Analytics, Application Insights, or Key Vault to the personal default unless a stated requirement needs each service.
+`personal-free` is the only bundled cloud profile. If the application requires an SLA, managed identity, private networking, organizational controls, or multiple application roles, stop and design a production architecture with maintained Azure and Azure SQL skills instead of growing a second SQL Apps deployer.
 
 ## Personal-free pipeline
 
@@ -31,7 +23,7 @@ Do not select the legacy path merely because it is older, more elaborate, or alr
 6. **Invite the owner.** Run `npm run publish -- invite-owner --provider <provider> --user <identity>`. Merely authenticated users are not owners.
 7. **Validate live.** Test anonymous, owner, and signed-in-nonowner states, then perform a browser write and prove SQL persistence after reload. A template build or successful ARM deployment is not acceptance.
 
-Before presenting this route as executable, run the repository's focused publisher, infrastructure, authentication, and packaging tests. If the implementation or live canary is incomplete, say exactly what is unverified; do not silently substitute the legacy architecture.
+Before presenting this route as executable, run the repository's focused publisher, infrastructure, authentication, and packaging tests. If the implementation or live canary is incomplete, say exactly what is unverified.
 
 ## Security and cost truth
 
@@ -46,10 +38,6 @@ The low fixed cost is an explicit trade-off:
 
 Never call this private networking, passwordless, guaranteed free, production-grade, or highly available. Use maintained current Azure cost and Azure SQL skills before quoting limits, eligibility, regional availability, or prices.
 
-## Legacy compatibility path
-
-`sql-apps azure` retains the private Container Apps/DAB deployment for existing environments. Read `docs/reference/deployment.md`, preserve its approvals and state, and never mix it with `.sql-apps/deployments/`. Route new production architecture work to maintained Azure skills rather than growing another SQL Apps topology.
-
 ## Report separate verdicts
 
 Always report four independent lines:
@@ -63,7 +51,7 @@ Also state whether live Azure validation was performed. No live deployment or in
 
 ## Red flags
 
-- Recommending Container Apps/DAB because it is “mature”
+- Inventing a second bundled cloud topology
 - Calling a free allowance a guarantee or cap
 - Hiding public SQL or credential storage
 - Treating `authenticated` as `owner`
