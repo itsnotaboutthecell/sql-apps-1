@@ -17,22 +17,24 @@ Use `azure-app-onboard` when comparing Azure architectures. A cost estimate is
 not a quote, spending cap, deployment approval, or proof that a resource is
 eligible for a free offer.
 
-For database-specific provisioning and workload sizing, route to
-`provision-azure-sql-db` or `provision-hyperscale`. For SQL Apps deployment,
-follow the maintained Azure Skills prepare -> validate -> deploy workflow in
-[Sharing your app](sharing.md). Preserve SQL Apps' requirements for managed
-identity, least-privilege database grants, DAB exposure, private networking,
-and live application acceptance.
+The primary personal-project target is Static Web Apps Free with managed
+Functions and the Azure SQL Database free offer. It can plausibly remain at
+**$0 Azure service cost** while both services remain within their current
+allowances. Static Web Apps Free has no SLA. Eligibility, regional availability
+and usage are account-specific, and a free allowance is not a spending cap.
 
-SQL Apps does not ship its own price calculators. Ask the Azure Cost plugin
-to estimate the planned resource inventory before approving any deployment,
-including fixed charges such as the container registry, private endpoints and
-managed networking that free SQL or compute allowances do not cover.
+The personal-free profile avoids the fixed-cost supporting inventory in the
+legacy deployment: no container registry, Container Apps, VNet, private
+endpoint, private DNS or monitoring workspace. Read
+[Sharing your app](sharing.md) and the
+[personal-free deployment reference](../reference/personal-free-deployment.md)
+before approving it. Use the Azure Cost plugin to confirm current account and
+regional facts rather than treating this documentation as a quote.
 
-## Keep the SQL/DAB application contract
+## Keep the application contract
 
-Do not weaken authorization, SQL grants, network isolation, or data retention
-to reduce a cost estimate. Prefer removing optional capabilities from the
-agreed application scope. Before applying any paid deployment, review the
-actual target, resource inventory, expected use, cleanup/retention plan, and
-account-specific estimate with the operator.
+The low-cost profile makes an explicit networking trade-off: public Azure SQL
+with the Azure-services firewall rule and a generated least-privilege SQL
+credential. Do not describe it as private networking or managed identity.
+If those controls or an SLA are requirements, select and price a production
+architecture instead of quietly adding services to the personal default.

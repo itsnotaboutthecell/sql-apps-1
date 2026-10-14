@@ -2,7 +2,7 @@
 
 Use this reference when deploying an authenticated application with the SQL Apps Azure infrastructure template. Start with [sharing your app](../guides/sharing.md) to choose the appropriate path. For an existing pre-rebrand deployment, review [migration notes](../maintainers/naming-transition.md) first.
 
-> **Existing deployments:** This reference documents SQL Apps' retained Azure deployment for the role-based-data profile. For new projects, use maintained Azure Skills (`azure-app-onboard` when architecture is open, then `azure-prepare` -> `azure-validate` -> `azure-deploy`, with `azure-cost-optimization` and `azure-diagnostics`) and the Azure SQL skills (`build-app-on-azure-sql`, `dab-rest-and-graphql`, `deploy-app-to-azure`, `entra-id-auth`), and retain SQL Apps' application-specific identity, DAB, schema, and acceptance requirements. Do not mix `.azure` deployment state with the custom `npm run azure` state.
+> **Legacy compatibility path:** This reference documents the retained private Container Apps/DAB deployment for existing `role-based-data` environments. New personal projects default to [personal-free](personal-free-deployment.md). Use this legacy path only when preserving an existing deployment or when its managed identities and private networking are explicit requirements. Do not mix its state with `.sql-apps/deployments/`.
 
 ## Profile and deployment subject
 

@@ -56,7 +56,7 @@ Restart the App or create a **fresh session** after installation. In **Customize
 | `sql-apps-local` | Start SQL Apps locally; reuse it if it is already running. |
 | `sql-apps-diagnostics` | Check SQL Apps local service status without changing anything. |
 | `sql-apps-validation` | Run SQL Apps unit tests and typecheck; do not restart services. |
-| `sql-apps-cloud-preview` | Explain SQL Apps cloud prerequisites and costs; do not deploy. |
+| `sql-apps-cloud-preview` | Plan or deploy the personal-free Azure target; explain its allowances, no-SLA posture and public-SQL trade-off. |
 | `sql-apps-application` | Build a domain-specific application without copying the Todo example; verify source, build, API and database boundaries. |
 | `sql-apps-design` | Apply intentional visual direction to every new user-facing app and meaningful UI change, then review its rendered desktop and narrow-width experience. |
 

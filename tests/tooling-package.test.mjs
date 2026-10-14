@@ -70,6 +70,7 @@ test('stages publishable package metadata with synchronized exact runtime depend
   ]);
   const expectedDependencies = {
     ...rootPackage.dependencies,
+    '@azure/static-web-apps-cli': rootPackage.devDependencies['@azure/static-web-apps-cli'],
     esbuild: rootPackage.devDependencies.esbuild,
     typescript: rootPackage.devDependencies.typescript,
   };
@@ -154,6 +155,7 @@ test('bin help is project-independent and its validated command map targets pack
       'workspace-check': 'dist/scripts/workspace-check.mjs',
       consent: 'dist/scripts/local-consent.mjs',
       local: 'dist/src/local-cli.js',
+      publish: 'dist/src/personal-free-cli.js',
       azure: 'dist/src/cli.js',
       check: 'dist/scripts/check-application.mjs',
     });

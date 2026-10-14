@@ -3,6 +3,7 @@ import { authRedirectPath, type BrowserConfig } from '../browser-config.js';
 
 export interface BrowserSession {
   name: string;
+  authorized?: boolean;
   getAccessToken: () => Promise<string>;
 }
 
@@ -18,6 +19,7 @@ export interface SessionHost {
   fetch: typeof fetch;
   storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
   reload: () => void;
+  navigate?: (path: string) => void;
 }
 
 export interface MsalClient {
@@ -92,6 +94,30 @@ export async function prepareAuthentication(
   }
 
   host.storage.removeItem(localSessionKey);
+  if (config.mode === 'static-web-apps') {
+    const response = await host.fetch('/.auth/me', { redirect: 'error', signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) throw new Error(`Static Web Apps session check failed (${response.status})`);
+    const body: unknown = await response.json();
+    const principal = body && typeof body === 'object' && 'clientPrincipal' in body ? body.clientPrincipal : undefined;
+    const parsed = principal && typeof principal === 'object' &&
+      'userDetails' in principal && typeof principal.userDetails === 'string' &&
+      'userRoles' in principal && Array.isArray(principal.userRoles) &&
+      principal.userRoles.every(role => typeof role === 'string')
+      ? { name: principal.userDetails, roles: principal.userRoles as string[] }
+      : undefined;
+    const navigate = host.navigate ?? (path => { globalThis.location.href = path; });
+    return {
+      session: parsed ? {
+        name: parsed.name,
+        authorized: parsed.roles.includes('owner'),
+        getAccessToken: async () => 'static-web-apps-platform-session',
+      } : undefined,
+      signIn: async () => navigate(`/.auth/login/${config.provider}?post_login_redirect_uri=/`),
+      signOut: async () => navigate('/.auth/logout?post_logout_redirect_uri=/'),
+      forgetExpiredSession: () => {},
+    };
+  }
+
   const msal = createMsal({
     auth: { clientId: config.clientId, authority: `https://login.microsoftonline.com/${config.tenantId}`,
       redirectUri: new URL(authRedirectPath, host.origin).href },

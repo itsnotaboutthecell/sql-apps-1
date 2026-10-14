@@ -13,7 +13,8 @@ const projectDirectories = ['.config', 'content', 'dab', 'docs', 'infra', 'publi
 const projectFiles = [
   '.dockerignore', '.env.example', '.gitignore', 'Dockerfile', 'LICENSE',
   'application.json', 'package-lock.json', 'package.json',
-  'role-based-data.example.json', 'runtime-contract.json', 'tsconfig.json', 'tsconfig.runtime.json',
+  'role-based-data.example.json', 'personal-free-api.example.json',
+  'runtime-contract.json', 'tsconfig.json', 'tsconfig.runtime.json',
 ];
 
 export function defaultProjectsRoot(userHome = homedir()) {
@@ -128,6 +129,8 @@ async function customizeProject(target, name, slug, toolingVersion) {
   }, null, 2)}\n`);
   await writeFile(join(target, 'role-based-data.json'),
     await readFile(join(target, 'role-based-data.example.json'), 'utf8'));
+  await writeFile(join(target, 'personal-free-api.json'),
+    await readFile(join(target, 'personal-free-api.example.json'), 'utf8'));
   const pkgPath = join(target, 'package.json');
   const pkg = JSON.parse(await readFile(pkgPath, 'utf8'));
   pkg.name = `sql-apps-${slug}`;
@@ -137,6 +140,7 @@ async function customizeProject(target, name, slug, toolingVersion) {
     build: 'sql-apps build',
     guide: 'sql-apps guide',
     local: 'sql-apps local',
+    publish: 'sql-apps publish',
     setup: 'sql-apps setup',
     'setup:check': 'sql-apps setup-check',
     'workspace:check': 'sql-apps workspace-check',

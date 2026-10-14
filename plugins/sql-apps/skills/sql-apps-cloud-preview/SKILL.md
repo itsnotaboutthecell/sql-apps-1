@@ -1,35 +1,71 @@
 ---
 name: sql-apps-cloud-preview
-description: "Use when a user wants to share a SQL Apps project or asks about cloud readiness; hand generic Azure planning, cost, validation, deployment, and diagnostics to maintained Azure skills."
+description: "Use when a user wants to publish, share, deploy, price, or assess cloud readiness for a SQL Apps project, especially a small private or personal application."
 ---
 
-# Share a SQL Apps project
+# Publish a SQL Apps project
 
-Sharing is optional. Confirm the application checkout and preserve the SQL Apps contract: Azure SQL Database is the data store, DAB is the application API, and the user must explicitly request Azure work.
+Sharing is optional.
 
-Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and confirm the requested project with `workspace-check` before reading or testing that project.
+The primary target for a new personal project is **Azure Static Web Apps Free + managed Functions + the Azure SQL Database free offer**. It is a personal-project tier with **no Static Web Apps SLA** and can be described only as **potentially $0 while usage remains within current allowances**.
 
-## Route cloud lifecycle work
+Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and confirm the requested project with `workspace-check` before reading or changing it.
 
-Use maintained skills for generic Azure work rather than extending SQL Apps' custom Azure CLI/Bicep orchestration:
+## Choose the profile
 
-- Use `build-app-on-azure-sql` to sequence Azure SQL identity, schema, API, and deployment decisions.
-- Use `azure-app-onboard` when the target architecture or service choice is open.
-- Use `azure-prepare` to create the Azure deployment plan and infrastructure.
-- Use `azure-validate` before any deployment.
-- Use `azure-deploy` to deploy the reviewed plan.
-- Use the `azure-cost` plugin for forecasts, estimates, actual cost analysis, optimization, and governance.
-- Use `azure-diagnostics` for Azure production incidents.
-- Use `github-actions-for-sql` for SQL-aware CI pipelines.
+| Requirement | Profile |
+| --- | --- |
+| One owner, light personal use, lowest fixed cost, no SLA acceptable | `personal-free` (default) |
+| Keep using an existing Container Apps/DAB environment | Legacy `sql-apps azure` |
+| SLA, managed identity, private networking, organization controls, multiple application roles | Design a production architecture with maintained Azure and Azure SQL skills |
 
-If the Azure Skills plugin or a specialized skill is unavailable, explain the prerequisite and use the project's documented legacy route only when the user explicitly requests that route. Do not implement a parallel generic Azure service, cost, deployment, or diagnostics workflow in SQL Apps.
+Do not select the legacy path merely because it is older, more elaborate, or already familiar. Do not add DAB, Container Apps, ACR, VNet, private endpoint, private DNS, Log Analytics, Application Insights, or Key Vault to the personal default unless a stated requirement needs each service.
 
-## Preserve SQL Apps-specific requirements
+## Personal-free pipeline
 
-Before handing off, record the `role-based-data` profile, SQL/DAB configuration, identity and application-role contract, private-network requirements, database grants, and acceptance criteria. `npm run azure -- grants <config>` writes the exact DAB stored-procedure `EXECUTE` grants to `dist/sql/role-based-grants.sql` for the maintained route to apply. File storage or background jobs are not part of SQL Apps; route them to maintained skills such as `azure-storage`. Treat deployment output and infrastructure validation as necessary, not as proof that the SQL/DAB application works.
+1. **Confirm the application contract.** `personal-free-api.json` must explicitly allowlist every route, procedure, parameter, and sign-in provider. Arbitrary procedure forwarding is forbidden.
+2. **Initialize read-only.** Run `npm run publish -- init --name <name> --location <region> --environment prod`. This reads the active Azure account and writes nonsecret configuration; it must not create resources.
+3. **Plan.** Run `npm run publish -- plan`. Report the exact subscription/resource group, public-SQL boundary, generated SQL credential, excluded services, potentially-$0 allowance posture, and no-SLA status.
+4. **Get explicit approval.** Azure writes require the approval code from that exact plan. Never infer approval from a request to plan, estimate, or explain.
+5. **Deploy.** Run `npm run publish -- deploy --approve <code>`. The publisher provisions only Static Web Apps and Azure SQL, publishes the DACPAC, creates object-scoped runtime grants, deploys the site/API artifact, and verifies database-backed readiness.
+6. **Invite the owner.** Run `npm run publish -- invite-owner --provider <provider> --user <identity>`. Merely authenticated users are not owners.
+7. **Validate live.** Test anonymous, owner, and signed-in-nonowner states, then perform a browser write and prove SQL persistence after reload. A template build or successful ARM deployment is not acceptance.
 
-After deployment, use `sql-apps-validation` for the application-specific acceptance: live sign-in, expected DAB role forwarding, least-privilege procedure access, two-user isolation where required, and a browser write followed by SQL persistence and reload. Report preparation, deployment, and application acceptance as separate results.
+Before presenting this route as executable, run the repository's focused publisher, infrastructure, authentication, and packaging tests. If the implementation or live canary is incomplete, say exactly what is unverified; do not silently substitute the legacy architecture.
 
-## Existing SQL Apps deployment commands
+## Security and cost truth
 
-`npm run azure` commands and their Bicep templates remain a compatibility path for existing projects while migration proceeds. Do not recommend that custom orchestration for new projects by default. If an existing deployment must use it, read `docs/reference/deployment.md` and `docs/reference/role-based-data.md`, preserve its approval gates, and do not mix its state files with an Azure Skills/`azd` deployment. To update one after SQL, DAB or configuration changes, run `artifacts` and then `deploy`; `deploy` refuses images built from different source.
+The low fixed cost is an explicit trade-off:
+
+- Azure SQL has a public endpoint.
+- The `0.0.0.0` firewall rule admits Azure resources outside the subscription.
+- Managed Functions do not provide this profile a SQL managed identity.
+- Generated SQL credentials live in Static Web Apps settings and protected `.sql-apps/deployments/` state.
+- The runtime receives only `CONNECT`, `EXECUTE`, and `VIEW DEFINITION` on declared procedures.
+- The API requires an invited `owner` role and derives ownership from provider plus immutable provider user ID, never email.
+
+Never call this private networking, passwordless, guaranteed free, production-grade, or highly available. Use maintained current Azure cost and Azure SQL skills before quoting limits, eligibility, regional availability, or prices.
+
+## Legacy compatibility path
+
+`sql-apps azure` retains the private Container Apps/DAB deployment for existing environments. Read `docs/reference/deployment.md`, preserve its approvals and state, and never mix it with `.sql-apps/deployments/`. Route new production architecture work to maintained Azure skills rather than growing another SQL Apps topology.
+
+## Report separate verdicts
+
+Always report four independent lines:
+
+- implemented/built;
+- running/deployed;
+- functional acceptance;
+- design acceptance (`accepted`, `partial: N cells`, or `blocked`).
+
+Also state whether live Azure validation was performed. No live deployment or invitation occurs without explicit target, region, resource-group, allowance/spend, and owner approval.
+
+## Red flags
+
+- Recommending Container Apps/DAB because it is “mature”
+- Calling a free allowance a guarantee or cap
+- Hiding public SQL or credential storage
+- Treating `authenticated` as `owner`
+- Reporting deployment success as application acceptance
+- Claiming a canary that was not run

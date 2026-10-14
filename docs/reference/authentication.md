@@ -8,7 +8,8 @@ The product journey is **Build -> Sign in -> Give access -> Publish**. Applicati
 | --- | --- | --- |
 | Local preview (default) | Server-issued opaque sessions for fixed simulated identities | Local DAB claim simulation and development services |
 | Local Entra (opt-in) | Real MSAL sign-in and verified delegated Entra access tokens | Local DAB claim simulation and development services |
-| Authenticated Azure deployment | Real MSAL sign-in and signature-verified delegated access tokens | Configured Azure identity, DAB permissions, SQL grants and ownership rules |
+| Personal-free Azure deployment | Static Web Apps built-in sign-in and an invited `owner` role | Managed Functions, a procedure allowlist, and least-privilege SQL credentials |
+| Legacy private Azure deployment | Real MSAL sign-in and signature-verified delegated access tokens | Gateway, DAB managed identity, SQL grants and ownership rules |
 
 Local real sign-in does not prove cloud DAB identity or Azure service permissions. Dependency readiness is not user authorization or browser/SQL acceptance.
 
@@ -52,19 +53,17 @@ HTTP 401 means authentication is missing, invalid or expired. The browser clears
 
 Hiding UI controls improves usability, but the gateway, DAB and SQL are authoritative. Caller-supplied principal and role headers are untrusted. Ownership uses verified `oid` and `tid`, not an email address or a provider-specific user ID.
 
-**Give access** requires an approved application-role assignment and the relevant DAB/SQL permissions. EasyAuth or Static Web Apps roles do not grant SQL access. Guest invitations and a browser administration console are not implemented.
+In the personal-free profile, **Give access** means creating a time-limited Static Web Apps invitation carrying the custom `owner` role. The API accepts only that role and derives its stable owner ID from the provider and immutable provider user ID, not email. Static Web Apps roles do not themselves grant arbitrary SQL access; the Functions runtime can execute only the procedures declared in `personal-free-api.json`.
 
-## Hosting and SWA tooling
+In the legacy profile, **Give access** requires an approved Entra application-role assignment and the relevant DAB/SQL permissions. A browser administration console is not implemented.
 
-Container Apps is the current supported cloud hosting implementation. This change does not provision a Static Web App or migrate the gateway.
+## Static Web Apps boundary
 
-App Service is the preferred future default for this project's combined browser/API application and nontechnical publishing experience: it offers one public origin and natural Node API hosting. It is not an implemented deployment target. Adoption still needs a networking, identity, readiness, cost, deployment and rollback plan.
+The primary personal profile uses Static Web Apps built-in authentication and managed Functions. The browser reads `/.auth/me`; sign-in and sign-out use the platform `/.auth` routes. The Functions boundary strictly parses `x-ms-client-principal`, rejects malformed or oversized principals, and requires exactly the invited `owner` role. Caller-submitted platform identity headers are stripped before request adaptation.
 
-Static Web Apps can host a static frontend, but that is a separate integration. SWA CLI mocks authentication and is optional; it is neither a prerequisite nor a real local Entra sign-in test. Do not install it just for the authentication UX or invent an SWA launcher.
+This is intentionally different from the legacy single-tenant delegated-token gateway. Do not copy the Static Web Apps principal model outside its hosting boundary or claim that it supplies a managed identity for Azure SQL.
 
-Built-in Static Web Apps Entra authentication is not this application's single-tenant delegated-token contract. Custom authentication and linked-backend integration require the applicable Standard plan. Its `/api` integration is not a replacement for the gateway's full route surface. The forwarded client principal omits the provider claims and is untrusted outside the hosting boundary; it must not replace verified token identity.
-
-App Service is not a promise of free deployment. Private SQL, networking and selected services still have costs. Publishing and spending require separate approval.
+The SWA CLI is a deployment dependency for the personal-free artifact. Local preview continues to use SQL Apps' local session model; an SWA CLI authentication simulation is not production acceptance.
 
 ## References
 

@@ -261,8 +261,9 @@ test('coordinator entry points use the local-first journey and retain sharing bo
     'the beginner entry point should defer hosting topology to the sharing guide');
   assert.match(readme, /docs\/guides\/sharing\.md/);
   const sharing = await readFile('docs/guides/sharing.md', 'utf8');
-  assert.match(sharing, /azure-prepare.*azure-validate.*azure-deploy/is);
-  assert.match(sharing, /azure-cost/);
+  assert.match(sharing, /Static Web Apps.*Free.*managed Functions.*Azure SQL Database free offer/is);
+  assert.match(sharing, /potentially \$0|remain at \*\*\$0/is);
+  assert.match(sharing, /no Static Web Apps SLA/i);
   assert.match(sharing, /role-based-data/);
   assert.doesNotMatch(sharing, /demo-publish|hosting-compare|demo-cost/);
   const guideReference = await readFile('docs/reference/guide.md', 'utf8');
@@ -271,7 +272,8 @@ test('coordinator entry points use the local-first journey and retain sharing bo
   assert.equal((await readFile('content/start.md', 'utf8')).includes('"'), false);
   const cloud = await readFile('plugins/sql-apps/skills/sql-apps-cloud-preview/SKILL.md', 'utf8');
   assert.match(cloud, /Sharing is optional/);
-  assert.match(cloud, /azure-prepare[\s\S]*azure-validate[\s\S]*azure-deploy/);
+  assert.match(cloud, /personal-free[\s\S]*default/i);
+  assert.match(cloud, /npm run publish -- init[\s\S]*npm run publish -- plan[\s\S]*npm run publish -- deploy/);
 });
 
 test('agent guidance stays lean, scoped and progressively disclosed', async () => {

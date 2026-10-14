@@ -14,7 +14,9 @@ export interface AuthElements {
   workspace: { hidden: boolean };
 }
 
-export function authenticationErrorMessage(error: unknown, mode: 'local' | 'entra' = 'entra'): string {
+export type AuthenticationMode = 'local' | 'entra' | 'static-web-apps';
+
+export function authenticationErrorMessage(error: unknown, mode: AuthenticationMode = 'entra'): string {
   if (error instanceof SessionExpiredError || (error instanceof ApiError && error.status === 401)) {
     return mode === 'local' ? 'Your test session expired. Sign in again.' : 'Your session expired. Sign in again.';
   }
@@ -23,10 +25,10 @@ export function authenticationErrorMessage(error: unknown, mode: 'local' | 'entr
   return error instanceof Error ? error.message : 'Operation failed';
 }
 
-export function renderAuthentication(elements: AuthElements, mode: 'local' | 'entra', state: AuthState): void {
+export function renderAuthentication(elements: AuthElements, mode: AuthenticationMode, state: AuthState): void {
   const busy = state.kind === 'signing-in' || state.kind === 'signing-out' || state.kind === 'checking';
   const named = 'name' in state && Boolean(state.name);
-  elements.login.textContent = mode === 'local' ? 'Sign in' : 'Sign in with Microsoft';
+  elements.login.textContent = mode === 'entra' ? 'Sign in with Microsoft' : 'Sign in';
   elements.logout.textContent = 'Sign out';
   elements.login.hidden = state.kind !== 'signed-out' && state.kind !== 'expired' && state.kind !== 'signing-in';
   elements.logout.hidden = state.kind !== 'authorized' && state.kind !== 'forbidden' && state.kind !== 'signing-out' &&

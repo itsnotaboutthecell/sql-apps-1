@@ -7,7 +7,7 @@ Choose a guide for what you want to do. Command details and contributor contract
 1. [Get started](guides/getting-started.md): prepare your computer and get SQL preview access.
 2. [Build your app](guides/build-your-app.md): describe an idea, build a first version and make it yours.
 3. [Run locally](guides/run-locally.md): choose a startup path, stop and resume.
-4. [Sharing your app](guides/sharing.md): use maintained Azure skills for cloud lifecycle work while preserving SQL/DAB acceptance.
+4. [Sharing your app](guides/sharing.md): deploy the personal-free default or choose an explicitly justified production architecture.
 5. [Costs and growth](guides/costs.md): understand local costs and route Azure estimates/analysis to the Azure Cost plugin.
 
 To try something already implemented, use the [Todo reference app](../examples/todo/README.md).
@@ -25,7 +25,8 @@ To try something already implemented, use the [Todo reference app](../examples/t
 - [Copilot plugin](reference/copilot-plugin.md): installation, binding and troubleshooting.
 - [Guide command](reference/guide.md): saved brief and checkpoint format.
 - [Monitor usage and growth](reference/monitor-growth.md): free Database Hub preview setup, read-only SQL diagnostics and capacity decisions.
-- [Authenticated Azure deployment](reference/deployment.md): retained role-based-data deployment commands for existing SQL Apps deployments.
+- [Personal-free Azure deployment](reference/personal-free-deployment.md): primary Static Web Apps Free, managed Functions and Azure SQL free-offer workflow.
+- [Legacy authenticated Azure deployment](reference/deployment.md): retained Container Apps/DAB commands for existing SQL Apps deployments.
 
 ## Contribute and maintain
 

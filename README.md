@@ -59,7 +59,7 @@ For one connected setup journey, ask your assistant to use the [setup coordinato
 
 **A useful first result.** Run the app, sign in as a development user and see its readiness check pass, then add your first table, stored procedure and screen. A launch URL is usable only after the intended server responds. [Run locally](docs/guides/run-locally.md) explains startup paths, scoped approvals and how to keep your data between sessions.
 
-**Sharing is optional.** Azure is the cloud target. Free tier means recurring allowances, not trial credits or unlimited usage. When you are ready to share, read [Sharing your app](docs/guides/sharing.md) and [Costs and growth](docs/guides/costs.md) before choosing a cloud path.
+**Sharing is optional.** The primary personal-project target is Static Web Apps Free, managed Functions and the Azure SQL Database free offer. It can plausibly remain at $0 only within current allowances, and it has no Static Web Apps SLA. When you are ready to share, read [Sharing your app](docs/guides/sharing.md) and [Costs and growth](docs/guides/costs.md).
 
 ## Find your next step
 
@@ -73,7 +73,7 @@ For one connected setup journey, ask your assistant to use the [setup coordinato
 | Share with other people | [Sharing your app](docs/guides/sharing.md) |
 | Find detailed commands or contribute | [Documentation index](docs/README.md) |
 
-Under the hood, SQL Apps uses TypeScript, Azure SQL Database and Data API builder, with a sign-in gateway that admits only users holding the app's role. If your app later needs file storage or background jobs, add them with the maintained Azure skills rather than SQL Apps. You do not need to choose or configure cloud services to begin building locally.
+Under the hood, SQL Apps uses TypeScript and Azure SQL Database. Local development uses Data API builder and a sign-in gateway; the primary personal cloud profile uses a managed Functions API with an explicit stored-procedure allowlist. If your app later needs file storage or background jobs, add them with maintained Azure skills rather than SQL Apps.
 
 ## Trademarks
 

@@ -11,6 +11,7 @@ export const COMMANDS = {
   'workspace-check': 'dist/scripts/workspace-check.mjs',
   consent: 'dist/scripts/local-consent.mjs',
   local: 'dist/src/local-cli.js',
+  publish: 'dist/src/personal-free-cli.js',
   azure: 'dist/src/cli.js',
   check: 'dist/scripts/check-application.mjs',
 };
@@ -22,6 +23,9 @@ function help() {
     'Usage: sql-apps <command> [arguments]',
     '',
     `Commands: ${Object.keys(COMMANDS).join(', ')}`,
+    '',
+    '  publish  Primary personal-project Azure path (potentially $0 within allowances; no SLA)',
+    '  azure    Legacy private Container Apps/DAB compatibility path',
   ].join('\n');
 }
 

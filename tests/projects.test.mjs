@@ -58,6 +58,11 @@ async function sourceFixture(t) {
     'role-based-data.example.json': JSON.stringify({
       profile: 'role-based-data', requiredRole: 'AppUser', readinessPath: '/api/AppReady',
     }),
+    'personal-free-api.example.json': JSON.stringify({
+      version: 1,
+      authenticationProvider: 'aad',
+      routes: [{ method: 'GET', path: '/api/AppReady', procedure: { name: 'AppReady', parameters: {} } }],
+    }),
     'tsconfig.json': '{}',
     'tsconfig.runtime.json': '{}',
   };
@@ -92,6 +97,9 @@ test('create scaffolds an independent named project and records it as active', a
   assert.deepEqual(pkg.sqlApps, { project: true });
   assert.equal(pkg.dependencies['@microsoft/sql-apps'], '1.2.3');
   assert.equal(pkg.scripts.local, 'sql-apps local');
+  assert.equal(pkg.scripts.publish, 'sql-apps publish');
+  assert.equal(JSON.parse(await readFile(join(created.path, 'personal-free-api.json'), 'utf8')).version, 1);
+  assert.match(await readFile(join(created.path, '.gitignore'), 'utf8'), /^\.sql-apps\/$/m);
   assert.equal(JSON.parse(await readFile(join(created.path, '.sql-apps-project.json'), 'utf8')).tooling.version, '1.2.3');
   await assert.rejects(access(join(created.path, 'plugins')), { code: 'ENOENT' });
   await assert.rejects(access(join(created.path, 'examples')), { code: 'ENOENT' });

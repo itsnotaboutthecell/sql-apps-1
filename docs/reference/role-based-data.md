@@ -2,7 +2,7 @@
 
 `role-based-data` is the only SQL Apps profile, locally and in the cloud. Use it for an implemented domain application that needs SQL/DAB/browser access restricted to users assigned the required role. File storage and background jobs are outside SQL Apps; add them with maintained Azure skills such as `azure-storage`, `azure-prepare` and `azure-deploy`. It is a runtime/deployment path, not an application generator. Keep the original foundation checkout and unrelated databases unchanged; use the intended application checkout.
 
-> **Cloud lifecycle:** The Azure commands in this reference remain supported for existing SQL Apps deployments. For new cloud deployments, use maintained Azure Skills for onboarding, infrastructure, predeployment validation, deployment, cost, and Azure diagnostics; preserve the SQL/DAB requirements and acceptance checks described here.
+> **Legacy cloud profile:** The Azure commands in this reference remain supported for existing private Container Apps/DAB deployments. New personal projects default to the [personal-free profile](personal-free-deployment.md). Use this profile for new work only when its Entra application roles, managed identities, DAB, and private networking are explicit requirements.
 
 This is application role-based access control: Entra authenticates users, the gateway requires the configured application role, and DAB enforces procedure permissions. It is not Azure resource-management RBAC and does not automatically provide row-level security (RLS). Implement row/owner restrictions separately where the application requires them. `AppUser` is an example role; choose a role appropriate to your application.
 

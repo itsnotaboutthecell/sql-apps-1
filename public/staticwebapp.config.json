@@ -1,8 +1,17 @@
 {
   "routes": [
     {
-      "route": "/api/*",
+      "route": "/auth/config",
+      "rewrite": "/auth-config.json",
       "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/api/health/ready",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/api/*",
+      "allowedRoles": ["owner"]
     }
   ],
   "navigationFallback": {

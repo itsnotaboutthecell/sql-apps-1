@@ -9,6 +9,9 @@ import { createPreviewSession, localSessionKey, prepareAuthentication, SessionEx
 import { authenticationErrorMessage, renderAuthentication, type AuthElements, type AuthState } from '../src/web/auth-view.js';
 
 const previewConfig = { mode: 'local', readinessPath: '/api/AppReady' } satisfies BrowserConfig;
+const staticWebAppsConfig = {
+  mode: 'static-web-apps', provider: 'aad', readinessPath: '/api/AppReady',
+} satisfies BrowserConfig;
 const entraConfig = {
   mode: 'entra', tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   clientId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -53,6 +56,7 @@ class TestMsalClient implements MsalClient {
     this.calls.push('initialize');
     if (this.initializeError) throw this.initializeError;
   }
+
   async handleRedirectPromise() { this.calls.push('redirect'); return this.redirect; }
   getAllAccounts() { return this.accounts; }
   getActiveAccount() { return this.activeAccount; }
@@ -61,6 +65,7 @@ class TestMsalClient implements MsalClient {
     this.loginRequests.push(options);
     if (this.loginError) throw this.loginError;
   }
+
   async logoutRedirect(options: { postLogoutRedirectUri: string; account?: AccountInfo }) {
     this.logoutRequests.push(options);
   }
@@ -74,6 +79,43 @@ class TestMsalClient implements MsalClient {
     if (this.tokenRedirectError) throw this.tokenRedirectError;
   }
 }
+
+test('Static Web Apps authentication uses the platform session and requires the invited owner role', async () => {
+  const navigations: string[] = [];
+  const fixture = sessionHost(async url => {
+    assert.equal(String(url), '/.auth/me');
+    return Response.json({
+      clientPrincipal: {
+        identityProvider: 'aad',
+        userId: 'provider-id',
+        userDetails: 'owner@example.invalid',
+        userRoles: ['anonymous', 'authenticated', 'owner'],
+      },
+    });
+  });
+  fixture.host.navigate = path => { navigations.push(path); };
+  const authentication = await prepareAuthentication(staticWebAppsConfig, fixture.host);
+  assert.equal(authentication.session?.name, 'owner@example.invalid');
+  assert.equal(authentication.session?.authorized, true);
+  assert.equal(await authentication.session?.getAccessToken(), 'static-web-apps-platform-session');
+  await authentication.signIn();
+  await authentication.signOut();
+  assert.deepEqual(navigations, [
+    '/.auth/login/aad?post_login_redirect_uri=/',
+    '/.auth/logout?post_logout_redirect_uri=/',
+  ]);
+});
+
+test('Static Web Apps keeps a signed-in nonowner visible but unauthorized', async () => {
+  const fixture = sessionHost(async () => Response.json({
+    clientPrincipal: {
+      userDetails: 'reader@example.invalid',
+      userRoles: ['anonymous', 'authenticated'],
+    },
+  }));
+  const authentication = await prepareAuthentication(staticWebAppsConfig, fixture.host);
+  assert.equal(authentication.session?.authorized, false);
+});
 
 test('local test account has an explicit sign-in and sign-out lifecycle without product personas', async () => {
   const requests: { url: string; options: RequestInit }[] = [];

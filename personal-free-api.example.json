@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "authenticationProvider": "aad",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/AppReady",
+      "procedure": {
+        "name": "AppReady",
+        "parameters": {}
+      }
+    }
+  ]
+}

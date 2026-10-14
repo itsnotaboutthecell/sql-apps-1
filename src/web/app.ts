@@ -15,7 +15,7 @@ const authElements = {
   retry: element<HTMLButtonElement>('auth-retry'), status: element('auth-status'), workspace: element('workspace'),
 };
 let authentication: BrowserAuthentication | undefined;
-let authMode: 'local' | 'entra' = 'entra';
+let authMode: 'local' | 'entra' | 'static-web-apps' = 'entra';
 let authState: AuthState = { kind: 'signed-out' };
 const canUseApp = () => authState.kind === 'authorized';
 function showAuth(state: AuthState) {
@@ -71,8 +71,12 @@ async function main() {
   if (!session) { showAuth({ kind: 'signed-out' }); return; }
   showAuth({ kind: 'checking', name: session.name });
   const client = new SqlAppsClient({ baseUrl: location.origin, getAccessToken: session.getAccessToken });
-  const current = parseCurrentUser(await (await client.request('/auth/me')).json());
-  if (!current.access.allowed) { showAuth({ kind: 'forbidden', name: session.name }); return; }
+  if (config.mode === 'static-web-apps') {
+    if (!session.authorized) { showAuth({ kind: 'forbidden', name: session.name }); return; }
+  } else {
+    const current = parseCurrentUser(await (await client.request('/auth/me')).json());
+    if (!current.access.allowed) { showAuth({ kind: 'forbidden', name: session.name }); return; }
+  }
   showAuth({ kind: 'authorized', name: session.name });
   const signedIn = `Signed in as ${session.name}`;
   status.textContent = signedIn;

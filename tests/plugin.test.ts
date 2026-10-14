@@ -87,8 +87,8 @@ test('product guidance documents authentication boundaries and hosting accuratel
   const authentication = await readFile(resolve('docs', 'reference', 'authentication.md'), 'utf8');
   for (const requirement of [
     /SQL_APPS_LOCAL_AUTH/, /\/auth\/redirect\.html/,
-    /App Service.*preferred future/i, /Container Apps.*current/i,
-    /SWA CLI.*mock/i, /does not prove cloud DAB identity/i,
+    /Personal-free Azure deployment/, /Legacy private Azure deployment/,
+    /Static Web Apps built-in authentication/i, /does not prove cloud DAB identity/i,
     /Build -> Sign in -> Give access -> Publish/,
   ]) assert.match(authentication, requirement);
 });
@@ -256,9 +256,10 @@ test('agent guidance stays concise, stack-neutral and script-led', async () => {
   assert.doesNotMatch(application, /Then implement the first useful change/);
   assert.doesNotMatch(application, /npm run build[\s\S]*npm test/, 'the application skill must delegate command selection');
   assert.doesNotMatch(local, /setup-check/, 'setup plan is the normal prerequisite probe');
-  assert.match(cloud, /azure-prepare[\s\S]*azure-validate[\s\S]*azure-deploy/);
-  assert.match(cloud, /azure-cost/);
-  assert.match(cloud, /compatibility path for existing projects/);
+  assert.match(cloud, /personal-free[\s\S]*default/i);
+  assert.match(cloud, /npm run publish -- init[\s\S]*npm run publish -- plan[\s\S]*npm run publish -- deploy/);
+  assert.match(cloud, /no Static Web Apps SLA[\s\S]*potentially \$0|potentially \$0[\s\S]*no Static Web Apps SLA/i);
+  assert.match(cloud, /legacy[\s\S]*Container Apps\/DAB/i);
   assert.doesNotMatch(readme, /Static Web Apps candidate/);
   assert.doesNotMatch(readme, /uses TypeScript, Azure SQL Database, Data API builder, Blob Storage and Azure Functions/);
   await assert.rejects(read('docs/superpowers/plans/2026-10-10-bakery-ordering.md'));
@@ -273,8 +274,9 @@ test('agent guidance stays concise, stack-neutral and script-led', async () => {
   assert.match(application, reportContract);
   assert.match(validation, reportContract);
   for (const [name, content] of [
-    ['getting started', gettingStarted], ['local', local], ['cloud', cloud], ['design', design],
+    ['getting started', gettingStarted], ['local', local], ['design', design],
   ] as const) assert.doesNotMatch(content, reportContract, `${name} must not duplicate the final report contract`);
+  assert.match(cloud, reportContract);
   const statusPhrase = /implemented.*built.*running.*workflow[- ]verified/gi;
   for (const [path, content] of [
     ['README.md', readme],
