@@ -14,11 +14,13 @@ If no suitable design skill or capability is available, perform an intentional d
 The result must have:
 
 - coherent spacing and type hierarchy that make the primary task obvious;
-- domain-led surfaces and actions, with notices and supporting information subordinate;
+- domain-led surfaces with one clear primary action per surface and secondary actions visually subordinate;
+- developer and account notices visually subordinate to domain content and tasks;
 - intentional layout and responsive behavior without clipping, overlap or horizontal overflow;
+- readable long content, with sensible wrapping and line measure that preserve readability;
 - visible keyboard focus, semantic structure, readable contrast and accessible labels;
 - designed signed-out, authorized and no-access states; and
-- truthful loading, empty, error, saving, success and disabled states.
+- truthful loading, empty, error, saving, success and disabled states; error, success, disabled and other status feedback uses text or iconography and must never rely on color alone.
 
 A basic shell may be small, but it is visually complete for its scope. Review the primary state and every reachable state rather than polishing only the happy path.
 

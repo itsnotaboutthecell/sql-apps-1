@@ -131,6 +131,13 @@ test('SQL Apps routes all user-facing work through intentional design', async ()
   assert.match(design, /if no suitable.*(?:skill|capability).*available/is);
   assert.match(design, /starter CSS.*not.*design direction/is);
   assert.match(design, /spacing[\s\S]*type hierarchy[\s\S]*domain[\s\S]*actions[\s\S]*notices[\s\S]*responsive[\s\S]*focus[\s\S]*accessib/i);
+  assert.match(design, /one clear primary action.*(?:each|per) surface/i);
+  assert.match(design, /secondary actions.*visually subordinate/i);
+  assert.match(design, /long content.*(?:wrap|wrapping)/i);
+  assert.match(design, /(?:line )?measure.*readab/i);
+  assert.match(design, /error.*success.*disabled.*status.*(?:text|iconography)/i);
+  assert.match(design, /never rely on color alone/i);
+  assert.match(design, /developer and account notices.*visually subordinate/i);
   for (const state of ['signed-out', 'authorized', 'no-access', 'loading', 'empty', 'error', 'saving', 'success', 'disabled']) {
     assert.match(design.toLowerCase(), new RegExp(state), `design guidance must cover ${state}`);
   }
