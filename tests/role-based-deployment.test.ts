@@ -113,7 +113,7 @@ test('authorized deploy resumes retained schema stage without provisioning or pu
   await saveState(statePath(config), prior);
   t.after(async () => { await unlink(statePath(config)); await unlink(`${statePath(config)}.parameters.json`); await unlink(`${statePath(config)}.redirect.json`); });
   const { run, calls } = runner();
-  await deploy(config, run, async () => new Response('{}'), async () => {});
+  await deploy(config, run, async () => Response.json({ status: 'ready' }), async () => {});
   assert.equal(calls.some(call => call.includes('/Action:Publish') || call.includes(`${config.name}-${config.environment}-infrastructure`)), false);
 });
 test('0.1.x deployment state with foundation outputs still parses', async t => {

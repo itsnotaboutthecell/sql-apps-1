@@ -51,3 +51,17 @@ test('command runner can suppress all output from secret-returning commands', as
   (error: unknown) => error instanceof Error &&
     !error.message.includes(value) && error.message.includes('sensitive command output omitted'));
 });
+
+test('command runner stops commands that exceed their timeout', async () => {
+  await assert.rejects(
+    run(process.execPath, ['-e', 'setTimeout(() => {}, 10_000)'], { timeoutMs: 50 }),
+    /timed out after 50ms/,
+  );
+});
+
+test('command runner stops commands whose output exceeds the configured limit', async () => {
+  await assert.rejects(
+    run(process.execPath, ['-e', 'process.stdout.write("x".repeat(2048))'], { maxOutputBytes: 1024 }),
+    /output exceeded 1024 bytes/,
+  );
+});

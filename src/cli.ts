@@ -1,18 +1,17 @@
-import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import { run } from './process.js';
 import { buildArtifacts } from './artifacts.js';
-import { assignApplicationRole, applicationRegistrationRole } from './role-based-identity.js';
+import { assignApplicationRole, ensureApplicationIdentity } from './role-based-identity.js';
 import { roleBasedSmoke } from './role-based-smoke.js';
 import { roleBasedSchemaFingerprint, validateRoleBasedCloudSource } from './role-based-profile.js';
 import { initDeploymentConfig, planDeployAll, unsetClientId } from './azure-init.js';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import {
-  configureRedirect, delegatedScopeId, deploy, deploymentConfigHash, grantsHandoffPath, parametersFile, preflight,
+  configureRedirect, deploy, deploymentConfigHash, grantsHandoffPath, parametersFile, preflight,
   publishSchema, readConfig, readSavedState, readState, saveJson, saveState, statePath, withDeploymentLock, provision,
-  deploymentTemplatePath, rbacParametersFile, rbacTemplatePath, verifyRbacAssignments, writeGrantsHandoff,
+  deploymentTemplatePath, rbacParametersFile, rbacTemplatePath, requireReadyResponse, verifyRbacAssignments, writeGrantsHandoff,
 } from './deployment.js';
 
 const [command, configPath = 'sql-apps.json', argument] = process.argv.slice(2);
@@ -112,29 +111,9 @@ async function main() {
     return;
   }
   if (command === 'identity') {
-    const account = z.object({ tenantId: z.string() }).parse(JSON.parse(await run('az', ['account', 'show', '-o', 'json'])));
-    if (account.tenantId !== config.tenantId) throw new Error('Sign Azure CLI into the configured tenant before creating its application');
-    const registration = z.object({ id: z.string().uuid(), appId: z.string().uuid() }).parse(JSON.parse(
-      await run('az', ['ad', 'app', 'create', '--display-name', `${config.name}-${config.environment}`, '--sign-in-audience', 'AzureADMyOrg', '-o', 'json']),
-    ));
-    const path = resolve('.sql-apps', 'identity.json');
-    await mkdir('.sql-apps', { recursive: true });
-    await writeFile(path, JSON.stringify({
-      identifierUris: [`api://${registration.appId}`],
-      api: { requestedAccessTokenVersion: 2, oauth2PermissionScopes: [{
-        id: delegatedScopeId, value: 'access_as_user', type: 'User', isEnabled: true,
-        adminConsentDisplayName: 'Access SQL Apps', adminConsentDescription: 'Access this application as the signed-in user.',
-        userConsentDisplayName: 'Access SQL Apps', userConsentDescription: 'Access your application data.',
-      }] },
-      spa: { redirectUris: [] },
-      appRoles: [applicationRegistrationRole(config)],
-    }));
-    await run('az', ['rest', '--method', 'PATCH', '--url', `https://graph.microsoft.com/v1.0/applications/${registration.id}`, '--body', `@${path}`, '-o', 'none']);
-    await run('az', ['ad', 'sp', 'create', '--id', registration.appId, '-o', 'none']);
-    if (config.apiClientId === unsetClientId) {
-      await saveJson(resolve(configPath), { ...config, apiClientId: registration.appId });
-      console.log(`Created app registration ${registration.appId} and saved it as apiClientId in ${configPath}.`);
-    } else console.log(`Created app registration ${registration.appId}. Set apiClientId to this value in your configuration.`);
+    const updated = await withDeploymentLock(statePath(config),
+      () => ensureApplicationIdentity(config, resolve(configPath), run));
+    console.log(`Created or resumed app registration ${updated.apiClientId} and saved it as apiClientId in ${configPath}.`);
     return;
   }
   if (command === 'plan') {
@@ -188,8 +167,9 @@ async function main() {
     console.log(await run('az', ['containerapp', 'show', '--subscription', config.subscriptionId,
       '--resource-group', config.resourceGroup, '--name', state.outputs.gatewayName,
       '--query', '{provisioningState:properties.provisioningState,runningStatus:properties.runningStatus}', '-o', 'json']));
-    const response = await fetch(new URL('/health/ready', state.outputs.gatewayUrl), { signal: AbortSignal.timeout(5_000) });
-    if (!response.ok) throw new Error(`Readiness returned ${response.status}`);
+    const response = await fetch(new URL('/health/ready', state.outputs.gatewayUrl),
+      { signal: AbortSignal.timeout(5_000), redirect: 'error' });
+    await requireReadyResponse(response);
     console.log(`Readiness passed. Last completed stage: ${state.stage}`);
     console.log(`SQL recovery: ${state.outputs.sqlBackupRetentionDays}-day point-in-time restore, ${state.outputs.sqlBackupRedundancy} backup storage redundancy. Audit events go to workspace ${state.outputs.sqlAuditWorkspaceName}. Verify a restore before relying on it.`);
     return;

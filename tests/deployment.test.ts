@@ -8,7 +8,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { deploymentSchema, environmentKey, portFromEnvironment } from '../src/config.js';
 import {
   armParameters, configureRedirect, deploy, deploymentConfigHash, expectedRbacAssignments, grantsHandoffPath, preflight,
-  rbacParameters, saveState, statePath, verifyRbacAssignments, withDeploymentLock,
+  rbacParameters, requireReadyResponse, saveState, statePath, verifyRbacAssignments, withDeploymentLock,
   type DeploymentState, type DeploymentOutputs,
 } from '../src/deployment.js';
 import { roleBasedSchemaFingerprint } from '../src/role-based-profile.js';
@@ -58,6 +58,18 @@ test('runtime port validation rejects empty, invalid, and out-of-range values', 
   assert.equal(portFromEnvironment(undefined), 8080);
   assert.equal(portFromEnvironment('9000'), 9000);
   for (const value of ['', 'bad', '0', '65536']) assert.throws(() => portFromEnvironment(value));
+});
+test('deployment readiness requires the exact successful gateway response', async () => {
+  await requireReadyResponse(Response.json({ status: 'ready' }));
+  for (const response of [
+    new Response(null, { status: 204 }),
+    Response.json({}),
+    Response.json({ status: 'live' }),
+    Response.json({ status: 'ready', dependency: 'data' }),
+    new Response('<h1>ready</h1>', { headers: { 'content-type': 'text/html' } }),
+  ]) {
+    await assert.rejects(requireReadyResponse(response), /readiness response/i);
+  }
 });
 test('ARM parameters exclude local routing settings and identify separate environments', () => {
   const parameters = armParameters(config, false).parameters;
@@ -163,7 +175,7 @@ test('deployment orders infrastructure, schema, service permission, runtime and 
   t.after(cleanupArtifacts);
   const { run, calls, environments } = fakeRunner();
   const stages: string[] = [];
-  const state = await deploy(config, run, async () => new Response('{}'), async state => { stages.push(state.stage); });
+  const state = await deploy(config, run, async () => Response.json({ status: 'ready' }), async state => { stages.push(state.stage); });
   assert.equal(state.stage, 'ready');
   assert.deepEqual(stages, ['infrastructure', 'schema', 'runtime', 'ready']);
   const infra = calls.findIndex(call => call.includes(`${config.name}-${config.environment}-infrastructure`));
@@ -183,14 +195,14 @@ test('failed schema publish does not start the data/gateway deployment or claim 
   t.after(cleanupArtifacts);
   const { run, calls } = fakeRunner(true);
   const stages: string[] = [];
-  await assert.rejects(deploy(config, run, async () => new Response('{}'), async state => { stages.push(state.stage); }), /SQL network unavailable/);
+  await assert.rejects(deploy(config, run, async () => Response.json({ status: 'ready' }), async state => { stages.push(state.stage); }), /SQL network unavailable/);
   assert.deepEqual(stages, ['infrastructure']);
   assert.equal(calls.some(call => call.includes(`${config.name}-${config.environment}-runtime`)), false);
 });
 test('deploy writes the grants handoff and passes the same grants to SqlPackage', async t => {
   t.after(cleanupArtifacts);
   const { run, calls } = fakeRunner();
-  await deploy(config, run, async () => new Response('{}'), async () => {});
+  await deploy(config, run, async () => Response.json({ status: 'ready' }), async () => {});
   const handoff = await readFile(grantsHandoffPath(), 'utf8');
   assert.match(handoff, /GRANT EXECUTE ON (OBJECT::)?\[?dbo\]?\.\[?AppReady\]? TO \[sql_apps_dab\]/);
   const argument = calls.find(call => call.includes('/Action:Publish'))?.find(arg => arg.startsWith('/v:RoleBasedProcedureGrants='));
@@ -200,9 +212,9 @@ test('deploy writes the grants handoff and passes the same grants to SqlPackage'
 test('deploy refuses images built from different SQL/DAB source before any Azure change', async t => {
   t.after(cleanupArtifacts);
   const { run, calls } = fakeRunner();
-  await assert.rejects(deploy({ ...config, imageSource: 'f'.repeat(64) }, run, async () => new Response('{}'), async () => {}),
+  await assert.rejects(deploy({ ...config, imageSource: 'f'.repeat(64) }, run, async () => Response.json({ status: 'ready' }), async () => {}),
     /run artifacts, then deploy/);
-  await assert.rejects(deploy({ ...config, imageSource: undefined }, run, async () => new Response('{}'), async () => {}),
+  await assert.rejects(deploy({ ...config, imageSource: undefined }, run, async () => Response.json({ status: 'ready' }), async () => {}),
     /run artifacts, then deploy/);
   assert.equal(calls.some(call => call[1] === 'deployment' || call.includes('/Action:Publish')), false);
 });
@@ -217,12 +229,12 @@ test('a ready deployment resumes when unchanged and rolls every stage forward wh
   await mkdir(dirname(statePath(config)), { recursive: true });
   await ready(await deploymentConfigHash(config));
   const unchanged = fakeRunner();
-  await deploy(config, unchanged.run, async () => new Response('{}'), async () => {});
+  await deploy(config, unchanged.run, async () => Response.json({ status: 'ready' }), async () => {});
   assert.equal(unchanged.calls.some(call => call[1] === 'deployment' || call.includes('/Action:Publish')), false);
   await ready('previous-source-hash');
   const changed = fakeRunner();
   const stages: string[] = [];
-  await deploy(config, changed.run, async () => new Response('{}'), async state => { stages.push(state.stage); });
+  await deploy(config, changed.run, async () => Response.json({ status: 'ready' }), async state => { stages.push(state.stage); });
   assert.deepEqual(stages, ['infrastructure', 'schema', 'runtime', 'ready']);
   assert.ok(changed.calls.some(call => call.includes('/Action:Publish')));
   assert.ok(changed.calls.some(call => call.includes(`${config.name}-${config.environment}-runtime`)));

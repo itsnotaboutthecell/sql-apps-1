@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { run, type Run } from '../src/process.js';
 import { deploymentSchema } from '../src/config.js';
 import { deploymentName, initDeploymentConfig, planDeployAll, unsetClientId } from '../src/azure-init.js';
+import { ensureApplicationIdentity } from '../src/role-based-identity.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { DeploymentConfig } from '../src/config.js';
@@ -79,6 +80,53 @@ test('azure init derives tenant, subscription, operator and role settings and as
 test('azure init rejects service principals and projects without role-based-data.json', async t => {
   await assert.rejects(initDeploymentConfig({ location: 'westus2', resourceGroup: 'rg', registryServer: 'r1.azurecr.io' }, signedIn('servicePrincipal').run, await home(t)), /signed-in user/);
   await assert.rejects(initDeploymentConfig({ location: 'westus2', resourceGroup: 'rg', registryServer: 'r1.azurecr.io' }, signedIn().run, await home(t, false)), /role-based-data\.json/);
+});
+
+test('identity creation resumes after a partial failure without creating a duplicate application', async t => {
+  const root = await home(t);
+  const configPath = join(root, 'azure.json');
+  const config = await initDeploymentConfig({
+    location: 'westus2', resourceGroup: 'rg-expense', registryServer: 'expense.azurecr.io',
+  }, signedIn().run, root);
+  await writeFile(configPath, JSON.stringify(config));
+  const applicationId = '55555555-5555-4555-8555-555555555555';
+  const objectId = '66666666-6666-4666-8666-666666666666';
+  let creates = 0;
+  let failPatch = true;
+  const calls: string[][] = [];
+  const identityRun: Run = async (_command, args) => {
+    calls.push([...args]);
+    if (args[0] === 'account') return JSON.stringify({ tenantId: config.tenantId });
+    if (args[0] === 'ad' && args[1] === 'app' && args[2] === 'create') {
+      creates++;
+      return JSON.stringify({ id: objectId, appId: applicationId });
+    }
+    if (args[0] === 'rest' && failPatch) throw new Error('Transient Graph failure');
+    return '';
+  };
+  await assert.rejects(ensureApplicationIdentity(config, configPath, identityRun, root), /Transient Graph failure/);
+  failPatch = false;
+  const updated = await ensureApplicationIdentity(config, configPath, identityRun, root);
+  assert.equal(creates, 1);
+  assert.equal(updated.apiClientId, applicationId);
+  assert.equal(JSON.parse(await readFile(configPath, 'utf8')).apiClientId, applicationId);
+  assert.equal(calls.filter(call => call[0] === 'rest').length, 2);
+});
+
+test('identity creation refuses to replace a configured application', async t => {
+  const root = await home(t);
+  const config = {
+    ...await initDeploymentConfig({
+      location: 'westus2', resourceGroup: 'rg-expense', registryServer: 'expense.azurecr.io',
+    }, signedIn().run, root),
+    apiClientId: '33333333-3333-4333-8333-333333333333',
+  };
+  let calls = 0;
+  await assert.rejects(
+    ensureApplicationIdentity(config, join(root, 'azure.json'), async () => { calls++; return ''; }, root),
+    /already has an apiClientId/,
+  );
+  assert.equal(calls, 0);
 });
 
 test('deploy-all review is read-only and a stale approval id runs nothing; init never overwrites', async t => {

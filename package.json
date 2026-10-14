@@ -22,6 +22,7 @@
     "consent": "node scripts/local-consent.mjs",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && tsc && npm run app:check && node --test --test-concurrency=1 dist/tests/*.test.js tests/setup.test.mjs tests/setup-install.test.mjs tests/setup-journey.test.mjs tests/guide.test.mjs tests/workspace.test.mjs tests/workspace-runtime.test.mjs tests/local-consent.test.mjs tests/projects.test.mjs tests/project-contract.test.mjs tests/tooling-package.test.mjs tests/tooling-project-runtime.test.mjs && node scripts/test-examples.mjs",
+    "test:sql-integration": "node --test --test-concurrency=1 examples/todo/tests/*.integration.test.mjs",
     "start": "node dist/src/server.js",
     "azure": "node dist/src/cli.js",
     "local": "node dist/src/local-cli.js",
@@ -45,6 +46,7 @@
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "esbuild": "0.28.2",
+    "testcontainers": "12.2.0",
     "typescript": "5.9.3"
   },
   "overrides": {

@@ -23,6 +23,30 @@ Rerunning the installer is safe for the same checkout/profile. It refuses to rep
 
 Only [plugins/sql-apps](../../plugins/sql-apps) is the installed package: manifest, six focused skills, an MIT license and a Node launcher. Runtime code, `.sql-apps` credentials, dependencies and SQL volumes stay outside the package. **Use this local marketplace, not a direct repository-root installation**, which is the older compatibility package.
 
+## Install companion plugins for cloud work
+
+The SQL Apps plugin is enough for local setup, application work and validation. It does not install or update other plugins. Before planning or operating a cloud deployment, install the maintained plugins that own the workflows referenced by SQL Apps:
+
+| Plugin | Why SQL Apps uses it |
+| --- | --- |
+| `microsoft-sql@microsoft-sql` | Azure SQL provisioning, identity, schema, Data API builder, connection and database diagnostics skills such as `build-app-on-azure-sql`, `entra-id-auth` and `dab-rest-and-graphql`. |
+| `azure@azure-skills` | Azure onboarding, preparation, validation, deployment and production diagnostics. |
+| `azure-cost@azure-skills` | Account-aware estimates, actual cost analysis, optimization and governance. |
+
+Run these slash commands in GitHub Copilot CLI or the Copilot App:
+
+```text
+/plugin marketplace add microsoft/microsoft-sql
+/plugin install microsoft-sql@microsoft-sql
+/plugin marketplace add microsoft/azure-skills
+/plugin install azure@azure-skills
+/plugin install azure-cost@azure-skills
+```
+
+Marketplace registration is safe to repeat when it already points to the same source. Restart the App or begin a fresh session after installation, then use `/plugin list` to verify that all four plugins, including `sql-apps@sql-apps-skills`, are enabled. See the current [Azure plugin catalog](https://learn.microsoft.com/azure/developer/azure-skills/plugins/) because specialized Azure plugins can change independently.
+
+These companion plugins are not prerequisites for local-only development. Install them when you choose to share, estimate, deploy or diagnose the app in Azure. A frontend/design capability used by `sql-apps-design` is optional and host-specific, so SQL Apps does not prescribe another plugin for it.
+
 ## Use the GitHub Copilot App
 
 Restart the App or create a **fresh session** after installation. In **Customize -> Plugins**, look for **sql-apps**, marketplace **sql-apps-skills**, version **0.2.0**, enabled. Its skills should appear under **Skills**:

@@ -47,7 +47,7 @@ Already have Node installed? Check your setup from the generated project folder:
 node scripts/setup-check.mjs
 ```
 
-The check explains missing prerequisites without installing anything. The guides and commands do not require a particular LLM provider. If you use GitHub Copilot, the optional [Copilot plugin](docs/reference/copilot-plugin.md) adds project-specific skills.
+The check explains missing prerequisites without installing anything. The guides and commands do not require a particular LLM provider. If you use GitHub Copilot, the optional [Copilot plugin](docs/reference/copilot-plugin.md) adds project-specific skills. Local work needs only that plugin; its documentation lists the maintained Microsoft SQL, Azure Skills and Azure Cost companion plugins to install when you choose cloud work.
 
 For one connected setup journey, ask your assistant to use the [setup coordinator](docs/reference/setup.md). It plans needed installation, restore, build, workspace and startup steps, then resumes after explicit approvals without repeating current work. It does not generate your domain app, accept licenses or deploy to Azure.
 

@@ -365,17 +365,28 @@ export async function waitForReadiness(
     try {
       const response = await fetcher(new URL('/health/ready', state.outputs.gatewayUrl),
         { signal: AbortSignal.timeout(5_000), redirect: 'error' });
-      if (response.ok) {
-        const ready = { ...state, stage: 'ready' as const };
-        await persist(ready);
-        return ready;
-      }
+      await requireReadyResponse(response);
+      const ready = { ...state, stage: 'ready' as const };
+      await persist(ready);
+      return ready;
     } catch (error) {
       console.error(`Role-based-data readiness attempt ${attempt + 1} failed: ${error instanceof Error ? error.name : 'UnknownError'}`);
     }
     if (attempt < 29) await new Promise(done => setTimeout(done, 10_000));
   }
   throw new Error(`Role-based-data runtime deployed but not ready for ${environmentKey(config)}; state retained, authenticated procedure acceptance still required`);
+}
+
+export async function requireReadyResponse(response: Response): Promise<void> {
+  const mediaType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
+  if (response.status !== 200 || mediaType !== 'application/json') {
+    throw new Error(`Invalid readiness response: expected HTTP 200 application/json, received ${response.status}`);
+  }
+  try {
+    z.strictObject({ status: z.literal('ready') }).parse(await response.json());
+  } catch (error) {
+    throw new Error('Invalid readiness response: expected exactly {"status":"ready"}', { cause: error });
+  }
 }
 
 export async function configureRedirect(config: DeploymentConfig, origin: string, run: Run) {

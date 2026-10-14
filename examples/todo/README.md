@@ -27,6 +27,8 @@ This example is not part of the foundation's browser, runtime client, DAB config
 
 Build the example schema explicitly with `dotnet build examples/todo/database.sqlproj --output dist/examples/todo/sql`. Client/composition/browser/SQL workflow regressions live in this example's `tests/` directory, outside root application tests and production runtime inputs. `npm test` runs them only when this example tree is included. To run example tests separately after `npx tsc`, use `node scripts/test-examples.mjs`. Do not copy this folder or its tests into generated applications unless a user explicitly requests the Todo example.
 
+The concurrency limits also have an opt-in real-engine test. After authenticating Docker to the private-preview Azure SQL Database registry, run `npm run test:sql-integration`. This starts an isolated container, verifies `EngineEdition = 5`, tests the session, mutation, and item boundaries under concurrent requests, and removes the container afterward.
+
 The default local application now demonstrates selected foundation file/job capabilities without a Todo UI or API. Existing databases may retain old sample rows under the non-destructive publishing policy. Review/export them before any separately authorized removal; publishing does not drop them.
 
 ## Selected synthetic-demo assembly
