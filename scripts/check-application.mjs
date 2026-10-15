@@ -90,6 +90,66 @@ function validateReviewMetadata(content) {
   }
 }
 
+const critiqueFields = [
+  'Representative screen', 'First viewport', 'Defining information',
+  'Generic elements', 'Remove or demote', 'Top changes',
+];
+
+function field(section, name) {
+  return new RegExp(`^- ${name.replace(/[/]/g, '\\/')}:[ \\t]+\\S`, 'mi').test(section ?? '');
+}
+
+function designQuality(content) {
+  if (content === undefined) return { status: 'not judged', reason: 'design review missing' };
+  const sections = markdownSections(content);
+  const quality = sections.get('Design quality');
+  if (!quality) return { status: 'not judged', reason: 'no Design quality verdict' };
+  const verdict = /^- Verdict:[ \t]+(.+?)\s*$/mi.exec(quality)?.[1];
+  if (!verdict) throw new Error('Invalid docs/design-review.md: Design quality needs Verdict.');
+  const critique = sections.get('Critique');
+  const missing = critiqueFields.filter(name => !field(critique, name));
+  if (/^accepted$/i.test(verdict)) {
+    if (missing.length) {
+      throw new Error(`Invalid docs/design-review.md: accepted design quality needs Critique ${missing.join(', ')}.`);
+    }
+    if (!field(quality, 'Rationale')) {
+      throw new Error('Invalid docs/design-review.md: accepted design quality needs Rationale.');
+    }
+    return { status: 'accepted' };
+  }
+  const revise = /^revise:\s+(\S.*)$/i.exec(verdict);
+  if (revise) return { status: 'revise', reason: revise[1] };
+  const blocked = /^blocked:\s+(\S.*)$/i.exec(verdict);
+  if (blocked) return { status: 'blocked', reason: blocked[1] };
+  throw new Error(`Invalid docs/design-review.md: unsupported Design quality verdict "${verdict}".`);
+}
+
+function plural(count, word) {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
+function designReport(coverage, quality, intentPresent) {
+  const coverageLine = coverage.blocked ?
+    `blocked: ${plural(coverage.blocked, 'cell')}${coverage.unreviewed ? `; ${coverage.unreviewed} unreviewed` : ''}` :
+    coverage.unreviewed ? `partial: ${plural(coverage.unreviewed, 'unreviewed cell')}` :
+      `complete (${plural(coverage.reviewed, 'reviewed cell')})`;
+  const qualityLine = quality.status === 'accepted' ? 'accepted' :
+    `${quality.status}: ${quality.reason}`;
+  const gaps = [];
+  if (!intentPresent) gaps.push('design intent missing');
+  if (coverage.blocked) gaps.push(`${plural(coverage.blocked, 'blocked cell')}`);
+  if (coverage.unreviewed) gaps.push(plural(coverage.unreviewed, 'unreviewed cell'));
+  if (quality.status !== 'accepted') gaps.push(`design quality ${quality.status}`);
+  const acceptance = !gaps.length ? 'accepted' :
+    (coverage.blocked || quality.status === 'blocked') ? `blocked: ${gaps.join('; ')}` :
+      `partial: ${gaps.join('; ')}`;
+  return [
+    `Rendered coverage: ${coverageLine}.`,
+    `Design quality: ${qualityLine}.`,
+    `Design acceptance: ${acceptance}.`,
+  ];
+}
+
 function validateReviewCell(value, state, viewport) {
   if (!value) return 'unreviewed';
   if (value === 'observed' || value === 'fixed+re-reviewed' || /^n\/a:\s+\S/i.test(value)) return 'reviewed';
@@ -288,14 +348,8 @@ export async function checkApplication(root = process.cwd(), model) {
     console.log('Design warning: customized UI has no docs/design-intent.md.');
   }
   if (customized || intent !== undefined || review !== undefined) {
-    const status = await designReviewStatus(root, review);
-    console.log(status.blocked ?
-      `Design acceptance: blocked: ${status.blocked} cell${status.blocked === 1 ? '' : 's'}` +
-        `${status.unreviewed ? `; ${status.unreviewed} unreviewed` : ''}.` :
-      status.unreviewed ?
-      `Design acceptance: partial: ${status.unreviewed} unreviewed cell${status.unreviewed === 1 ? '' : 's'}.` :
-      intent === undefined ? 'Design acceptance: blocked: design intent missing.' :
-        `Design acceptance: accepted (${status.reviewed} reviewed cells).`);
+    const coverage = await designReviewStatus(root, review);
+    for (const line of designReport(coverage, designQuality(review), intent !== undefined)) console.log(line);
   }
   console.log(`Clean application passed (${config.name}): ${inspected} source/build/schema/test files; no selected examples.`);
 }

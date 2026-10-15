@@ -127,6 +127,7 @@ test('SQL Apps routes new apps and meaningful UI changes through intentional des
   const gettingStarted = await readFile(resolve('skills', 'sql-apps-getting-started', 'SKILL.md'), 'utf8');
   const application = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-application', 'SKILL.md'), 'utf8');
   const design = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-design', 'SKILL.md'), 'utf8');
+  const validation = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-validation', 'SKILL.md'), 'utf8');
   const pluginReference = await readFile(resolve('docs', 'reference', 'copilot-plugin.md'), 'utf8');
   const runGuide = await readFile(resolve('docs', 'guides', 'run-locally.md'), 'utf8');
   assert.match(application, /before implementing a new user-facing app or meaningful UI change[\s\S]*sql-apps-design/i);
@@ -159,6 +160,15 @@ test('SQL Apps routes new apps and meaningful UI changes through intentional des
   assert.match(design, /docs\/design-review\.md/);
   assert.match(design, /sql-apps check/i);
   assert.match(design, /Functional acceptance and design acceptance are separate/i);
+  assert.match(design, /first implementation is a candidate, not an approved design/i);
+  assert.match(design, /representative primary-task screen at desktop and narrow widths together/i);
+  assert.match(design, /first viewport[\s\S]*defining information[\s\S]*unrelated app[\s\S]*removed or demoted[\s\S]*three highest-impact/i);
+  assert.match(design, /visible problem, task consequence and concrete change/i);
+  assert.match(design, /not a loop count/i);
+  assert.match(design, /Expand\*\* to remaining states once the composition stabilizes/i);
+  assert.match(design, /Coverage is not quality/i);
+  assert.match(validation, /render-critique-improve loop before broad coverage/i);
+  assert.match(validation, /rendered coverage and design quality separately/i);
   assert.doesNotMatch(design, /references\/|craft floor|style recipes/i);
   assert.match(application, /basic shell is an implementation milestone, not final design acceptance/i);
   assert.match(application, /sql-apps-validation[\s\S]*four-verdict/i);
@@ -270,7 +280,7 @@ test('publisher guidance scopes maintainer checks without weakening deployment g
   for (const requirement of [
     /project=sql-apps/, /deployment=personal-free/, /environment/,
     /Cost guard: verified/, /explicit approval/i, /never email/i,
-    /0\.0\.0\.0/, /live Azure validation/i,
+    /0\.0\.0\.0/, /live Azure validation/i, /disclose unverified implementation or live canary checks/i,
   ]) assert.match(cloud, requirement);
 });
 

@@ -61,6 +61,12 @@ or the capability record fails validation.
 
 ## Rendered review
 
+Review in this order: **brief → composition choice → one representative
+screen → render → critique → improve → re-render → remaining states.** The first
+implementation is a candidate. Critique the screen that carries the primary
+task at desktop and narrow widths before building out the whole state matrix,
+while weak composition is still cheap to replace.
+
 Create `docs/design-review.md` and record direct rendered observations:
 
 ```markdown
@@ -87,6 +93,19 @@ Create `docs/design-review.md` and record direct rendered observations:
 
 ## Findings
 - populated desktop: tightened summary spacing, then re-reviewed.
+
+## Critique
+- Representative screen: single-record, desktop + narrow, build abc123.
+- First viewport: The record's identifying details lead; the header is compact.
+- Defining information: Visible above the fold at both widths.
+- Generic elements: Summary tiles and a marketing hero were removed.
+- Remove or demote: Persistent status banner and a prominent Refresh button.
+- Top changes: 1. Compact header; 2. Identity-first records; 3. Domain-led capture.
+
+## Design quality
+- Verdict: accepted
+- Rationale: The primary task and its information lead; no material defects remain.
+- Unresolved tradeoffs: none
 ```
 
 Use only:
@@ -104,6 +123,41 @@ unsupported status text. Record the reviewed origin, source/build, findings and
 re-review result in the same artifact. Blocked and `n/a` cells are explicit
 evidence, not claims that a state was observed.
 
+## Coverage versus quality
+
+The matrix is **rendered coverage**: it shows which states and widths were
+inspected. It is not a design verdict; "22 cells reviewed" says nothing about
+whether the design is good. **Design quality** is a separate judgment of
+hierarchy, task fit, density and product character against the brief.
+
+The `Critique` section must be tied to an actual render. Each item records a
+visible problem, its task consequence and a concrete change; avoid findings
+such as "more polish" or "add personality". List at most three ranked changes
+per iteration, apply them in one batch, and re-render affected views. Further
+passes follow unresolved findings rather than a fixed loop count. After the
+composition stabilizes, complete broad state coverage.
+
+`Design quality` accepts one verdict:
+
+- `accepted` — requires every `Critique` field plus a `Rationale`. Use it only
+  when the primary task and information lead, the composition demonstrably
+  serves this domain, and no material visual or usability defects remain.
+  Record any remaining tradeoff under `Unresolved tradeoffs`.
+- `revise: <finding>` — material shortcomings remain.
+- `blocked: <reason>` — quality could not be judged from a real render.
+
+`sql-apps check` prints three lines:
+
+```text
+Rendered coverage: complete (22 reviewed cells).
+Design quality: accepted.
+Design acceptance: accepted.
+```
+
+Design acceptance requires design intent, complete coverage and an accepted
+quality verdict. A complete matrix without a quality verdict reports
+`Design acceptance: partial: design quality not judged`.
+
 ## Final report
 
 Report four separate verdicts:
@@ -111,7 +165,8 @@ Report four separate verdicts:
 1. **Implemented/built:** exact build and source evidence.
 2. **Running:** intended origin and readiness evidence.
 3. **Functional acceptance:** accepted, partial or blocked, with exact checks.
-4. **Design acceptance:** accepted, `partial: N cells`, or blocked, citing
-   `docs/design-review.md`.
+4. **Design acceptance:** accepted, partial or blocked, citing
+   `docs/design-review.md` and stating rendered coverage and design quality
+   separately.
 
 Do not substitute one verdict for another.

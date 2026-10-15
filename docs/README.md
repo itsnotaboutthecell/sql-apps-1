@@ -20,7 +20,7 @@ To try something already implemented, use the [Todo reference app](../examples/t
 - [Remember local permissions](reference/local-consent.md): one setup approval covering restore, build, workspace, startup and SQL terms, reusable grants and revocation.
 - [Manage projects](reference/projects.md): create independent application repositories under the user-level SQL Apps project root.
 - [Authentication and application access](reference/authentication.md): account states, local preview, real Entra opt-in, access permissions and current/future hosting boundaries.
-- [Design acceptance](reference/design-acceptance.md): required design intent, rendered state/viewport matrix and final verdicts.
+- [Design acceptance](reference/design-acceptance.md): design intent, the render-critique-improve loop, rendered coverage versus design quality, and final verdicts.
 - [Role-based-data profile](reference/role-based-data.md): SQL/DAB/browser startup, application-role authorization and private SQL Azure deployment.
 - [Copilot plugin](reference/copilot-plugin.md): installation, binding and troubleshooting.
 - [Guide command](reference/guide.md): saved brief and checkpoint format.

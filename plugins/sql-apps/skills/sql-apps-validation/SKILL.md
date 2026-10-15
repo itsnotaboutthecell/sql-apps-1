@@ -33,15 +33,9 @@ Unavailable input/services/tools mean missing evidence, not acceptance. Forced D
 
 Keep API/SQL acceptance, real browser workflow acceptance, and rendered visual review distinct. Screenshots do not prove persistence or access; compile/API results do not prove visuals.
 
-For every new user-facing app and meaningful UI change:
+For new user-facing apps and meaningful UI changes, run `sql-apps-design`'s render-critique-improve loop before broad coverage. Verify the intended origin; use semantic browser inspection and real interactions. Never invent page handles or confuse instance/page handles. Inspect desktop and narrow widths; if tooling fails, discover supported alternatives. Opening a tab or source review is not visual review. If blocked, state the exact evidence not observed, separate from user-reported feedback.
 
-1. Verify the intended origin; use semantic browser inspection and real interactions. Never invent page handles or confuse instance/page handles.
-2. Inspect desktop and narrow widths. If tooling fails, discover supported alternatives; otherwise record blocked cells with reasons.
-3. Review primary and reachable states using `sql-apps-design`'s quality bar; fix defects and re-review.
-
-Opening a tab or source review is not visual review. If blocked, state the exact evidence not observed. Keep user-reported feedback separate from direct observations.
-
-Record origin, source/build, viewport, state, artifact, findings and re-review in `docs/design-review.md` using `docs/reference/design-acceptance.md`. Run `sql-apps check` and report unreviewed cells.
+Record origin, source/build, viewport, state, artifact, findings and re-review in `docs/design-review.md` per `docs/reference/design-acceptance.md`, then run `sql-apps check`.
 
 ## Four-verdict report
 
@@ -50,6 +44,6 @@ Record exact commands/results and four independent lines:
 - **Implemented/built:** source/build evidence.
 - **Running:** intended origin/readiness.
 - **Functional acceptance:** accepted, partial or blocked, with browser/API/SQL evidence.
-- **Design acceptance:** accepted, `partial: N cells` or blocked, citing the review.
+- **Design acceptance:** accepted, partial or blocked, reporting rendered coverage and design quality separately; a complete matrix is not a quality verdict.
 
 Historical checkpoints and local simulation do not prove current cloud identity, networking or authorization.

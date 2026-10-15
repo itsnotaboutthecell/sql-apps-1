@@ -7,7 +7,7 @@ description: "Use when a user wants to publish, share, deploy, price, or assess 
 
 Sharing is optional. `personal-free` is the primary and only bundled cloud profile for a personal project: **Static Web Apps Free + managed Functions + Azure SQL Database free offer**. It has **no Static Web Apps SLA** and is only **potentially $0 within current allowances**.
 
-Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and confirm the requested project with `workspace-check` before reading or changing it.
+Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and confirm the project with `workspace-check` before any change.
 
 For an SLA, private networking, organizational controls, multiple application roles, or managed identity that does not meet the conditions below, design a production architecture with maintained Azure/SQL skills; do not add another bundled topology.
 
@@ -19,11 +19,11 @@ Hand infrastructure to `azure-prepare` → `azure-validate` → `azure-deploy`; 
 
 ## Personal-free pipeline
 
-1. **Confirm the application contract.** `personal-free-api.json` must explicitly allowlist every route, procedure, parameter, and sign-in provider. Arbitrary procedure forwarding is forbidden.
-2. **Initialize local configuration.** `npm run publish -- init --name <name> --location <region> --environment prod` reads the Azure account and writes nonsecret configuration, not resources.
+1. **Confirm the application contract.** `personal-free-api.json` must explicitly allowlist every route, procedure, parameter, and sign-in provider. No arbitrary forwarding.
+2. **Initialize local configuration.** `npm run publish -- init --name <name> --location <region> --environment prod` writes nonsecret configuration, not resources.
 3. **Plan.** `npm run publish -- plan`: report subscription/resource group, public SQL, credential storage, excluded services, allowances and no-SLA posture.
 4. **Get explicit approval.** Azure writes require the approval code from that exact plan. Never infer approval from a request to plan, estimate, or explain.
-5. **Deploy.** `npm run publish -- deploy --approve <code>` provisions Static Web Apps/SQL, applies `project=sql-apps`, environment and `deployment=personal-free` tags, verifies live free settings, publishes the DACPAC/object-scoped grants, deploys site/API and checks database-backed readiness.
+5. **Deploy.** `npm run publish -- deploy --approve <code>` provisions resources with `project=sql-apps`, environment and `deployment=personal-free` tags, verifies free settings, publishes schema/grants, deploys and checks readiness.
 6. **Invite the owner.** Run `npm run publish -- invite-owner --provider <provider> --user <identity>`. Merely authenticated users are not owners.
 7. **Validate live.** `npm run publish -- status` must report `Cost guard: verified`. Test anonymous, owner and signed-in-nonowner states, a browser write and SQL persistence after reload. ARM deployment is not acceptance.
 
@@ -31,15 +31,15 @@ Hand infrastructure to `azure-prepare` → `azure-validate` → `azure-deploy`; 
 
 - Free limits stop rather than bill and can interrupt service. The cost guard fails closed unless the deployed Free SKU and SQL free-offer/AutoPause settings are proven.
 - SQL is public; the `0.0.0.0` firewall rule admits Azure resources outside the subscription.
-- Managed Functions have no SQL managed identity here. Generated credentials live in Static Web Apps settings and protected `.sql-apps/deployments/` state.
+- Managed Functions lack SQL managed identity. Generated credentials live in Static Web Apps settings and protected `.sql-apps/deployments/` state.
 - Runtime grants are only `CONNECT`, `EXECUTE` and `VIEW DEFINITION` on declared procedures.
-- The invited `owner` role derives ownership from provider plus immutable provider user ID, never email.
+- Ownership derives from provider plus immutable provider user ID, never email.
 
-The guard excludes manual additions, future offer changes, GitHub Actions, domains and third parties. Never claim guaranteed free, private networking, passwordless, production-grade or highly available. Consult maintained current Azure cost/SQL skills before quoting limits, eligibility, regions or prices.
+The guard excludes manual additions, offer changes, GitHub Actions, domains and third parties. Never claim guaranteed free, private networking, passwordless, production-grade or highly available. Consult maintained current Azure cost/SQL skills before quoting limits, eligibility, regions or prices.
 
 ## Evidence and approval
 
-For foundation publisher changes, run focused publisher, infrastructure, authentication and packaging tests. Routine app publishing does not assume foundation tests; disclose unverified implementation or live canary checks.
+For foundation publisher changes, run focused publisher, infrastructure, authentication and packaging tests; routine publishing does not assume them. Disclose unverified implementation or live canary checks.
 
 Use `sql-apps-validation`'s four-verdict report and state whether live Azure validation was performed. Deployment/invitation requires explicit target, region, resource-group, allowance/spend and owner approval.
-For an externally owned architecture, also report cost safeguards separately as configured, exercised, partial or blocked; state whether live access, persistence, scaling, shutdown and recovery checks were actually performed.
+For an external architecture, report cost safeguards as configured, exercised, partial or blocked, and which live checks ran.

@@ -73,6 +73,8 @@ Pass:
 - compares two distinct compositions and records the task-led choice in the design intent;
 - treats a basic shell as small but visually complete;
 - reviews rendered primary and reachable states at desktop and narrow widths when supported, fixes defects and re-reviews;
+- checkpoints one representative screen and critiques it before building the full state matrix;
+- reports rendered coverage and design quality separately and does not treat a complete matrix as design acceptance;
 - keeps this disposable scenario separate from the Todo reference example: it neither copies nor modifies that example, and does not infer database/access changes from visual choices.
 
 ## 6. Design without companion skills
@@ -85,6 +87,19 @@ Pass:
 - does not claim starter CSS is sufficient design direction;
 - compares hierarchy, density and action placement rather than palettes;
 - records `sql-apps-design` as the design capability without requiring a framework, package, font, asset or universal theme.
+
+## 6a. Challenge a working but generic interface
+
+Prompt: `The household serials app works. Its matrix is fully reviewed, but the first screen looks like a generic dashboard. Is the design accepted?`
+
+Pass:
+
+- treats the complete matrix as rendered coverage, not a design-quality verdict;
+- renders the single-possession screen at desktop and narrow widths before reviewing other states;
+- critiques what dominates the first viewport, where serial information appears, which elements could belong to an unrelated app, and what to remove or demote;
+- ranks at most three concrete changes, each with its visible problem and task consequence; avoids "more polish" or "add personality";
+- applies the changes in one batch, re-renders the affected views and records `revise` until material findings are resolved;
+- does not rerun unrelated backend acceptance for visual-only edits or change data, identity or access scope.
 
 ## 7. Recover from a missing browser page handle
 

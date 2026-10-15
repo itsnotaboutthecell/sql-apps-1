@@ -129,13 +129,14 @@ test('packaged check compares project UI with the shipped template', async t => 
   }
   const checker = join(staged, 'dist', 'scripts', 'check-application.mjs');
   const unchanged = await runNode([checker, project]);
-  assert.doesNotMatch(unchanged.stdout, /Design warning|Design acceptance/);
+  assert.doesNotMatch(unchanged.stdout, /Design warning|Design acceptance|Rendered coverage/);
 
   await writeFile(join(project, 'src', 'web', 'app.ts'),
     `${await readFile(join(project, 'src', 'web', 'app.ts'), 'utf8')}\ndocument.body.dataset.custom = "true";\n`);
   const customized = await runNode([checker, project]);
   assert.match(customized.stdout, /Design warning: customized UI/);
-  assert.match(customized.stdout, /Design acceptance: partial: 22 unreviewed cells/);
+  assert.match(customized.stdout, /Rendered coverage: partial: 22 unreviewed cells/);
+  assert.match(customized.stdout, /Design acceptance: partial: design intent missing; 22 unreviewed cells/);
 });
 
 test('bin help is project-independent and its validated command map targets packaged modules', async () => {
