@@ -48,19 +48,16 @@ What users must understand first.
 ...
 
 ## Design capability
-- Skill: frontend-design
+- Skill: sql-apps-design
 ```
 
 The two compositions must differ in hierarchy and layout, not only in color or
-type. If no maintained design capability is available, replace `Skill` with:
-
-```markdown
-- Manual fallback reason: No maintained frontend design skill was available in the host.
-```
+type. `sql-apps-design` owns this pass in the app's existing stack; no companion
+skill is required.
 
 `sql-apps check` warns when customized UI has no intent. An intent that omits
 required sections, either composition, comparison fields, selection rationale
-or the capability/fallback record fails validation.
+or the capability record fails validation.
 
 ## Rendered review
 

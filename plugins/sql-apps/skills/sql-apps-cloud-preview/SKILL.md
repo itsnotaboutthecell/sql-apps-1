@@ -5,57 +5,41 @@ description: "Use when a user wants to publish, share, deploy, price, or assess 
 
 # Publish a SQL Apps project
 
-Sharing is optional.
-
-The primary target for a new personal project is **Azure Static Web Apps Free + managed Functions + the Azure SQL Database free offer**. It is a personal-project tier with **no Static Web Apps SLA** and can be described only as **potentially $0 while usage remains within current allowances**.
+Sharing is optional. `personal-free` is the primary and only bundled cloud profile for a personal project: **Static Web Apps Free + managed Functions + Azure SQL Database free offer**. It has **no Static Web Apps SLA** and is only **potentially $0 within current allowances**.
 
 Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and confirm the requested project with `workspace-check` before reading or changing it.
 
-`personal-free` is the only bundled cloud profile. If the application requires an SLA, managed identity, private networking, organizational controls, or multiple application roles, stop and design a production architecture with maintained Azure and Azure SQL skills instead of growing a second SQL Apps deployer.
+For an SLA, private networking, organizational controls, multiple application roles, or managed identity that does not meet the conditions below, design a production architecture with maintained Azure/SQL skills; do not add another bundled topology.
+
+## When personal-free does not fit
+
+When Entra-only SQL/managed identity is the only unmet need and the user accepts scale-to-zero, cold starts, interruptions and possible charges, Container Apps Consumption with a public gateway and localhost-only DAB is a candidate—not a bundled profile. Otherwise (guaranteed $0, continuous availability, no SQL-resume delay, blocked policy or permissions) use a production architecture. Verify current DAB auth for the pinned image, access, availability and quotas with maintained skills. Expose declared DAB operations only; derive roles from validated identity.
+
+Hand infrastructure to `azure-prepare` → `azure-validate` → `azure-deploy`; do not build another publisher. Before writes, inventory and estimate supporting services; get separate approvals for spend, identity changes and interruption. Replica limits and budgets are not spending caps. Validate shutdown, alerts and manual recovery in a disposable deployment, preserving the database.
 
 ## Personal-free pipeline
 
 1. **Confirm the application contract.** `personal-free-api.json` must explicitly allowlist every route, procedure, parameter, and sign-in provider. Arbitrary procedure forwarding is forbidden.
-2. **Initialize read-only.** Run `npm run publish -- init --name <name> --location <region> --environment prod`. This reads the active Azure account and writes nonsecret configuration; it must not create resources.
-3. **Plan.** Run `npm run publish -- plan`. Report the exact subscription/resource group, public-SQL boundary, generated SQL credential, excluded services, potentially-$0 allowance posture, and no-SLA status.
+2. **Initialize local configuration.** `npm run publish -- init --name <name> --location <region> --environment prod` reads the Azure account and writes nonsecret configuration, not resources.
+3. **Plan.** `npm run publish -- plan`: report subscription/resource group, public SQL, credential storage, excluded services, allowances and no-SLA posture.
 4. **Get explicit approval.** Azure writes require the approval code from that exact plan. Never infer approval from a request to plan, estimate, or explain.
-5. **Deploy.** Run `npm run publish -- deploy --approve <code>`. The publisher provisions only Static Web Apps and Azure SQL, applies the `project=sql-apps`, environment and `deployment=personal-free` tracking tags, verifies the live free SKU and non-billing SQL settings before continuing, publishes the DACPAC, creates object-scoped runtime grants, deploys the site/API artifact, and verifies database-backed readiness.
+5. **Deploy.** `npm run publish -- deploy --approve <code>` provisions Static Web Apps/SQL, applies `project=sql-apps`, environment and `deployment=personal-free` tags, verifies live free settings, publishes the DACPAC/object-scoped grants, deploys site/API and checks database-backed readiness.
 6. **Invite the owner.** Run `npm run publish -- invite-owner --provider <provider> --user <identity>`. Merely authenticated users are not owners.
-7. **Validate live.** Run `npm run publish -- status` and require `Cost guard: verified`. Then test anonymous, owner, and signed-in-nonowner states, perform a browser write, and prove SQL persistence after reload. A template build or successful ARM deployment is not acceptance.
-
-Before presenting this route as executable, run the repository's focused publisher, infrastructure, authentication, and packaging tests. If the implementation or live canary is incomplete, say exactly what is unverified.
+7. **Validate live.** `npm run publish -- status` must report `Cost guard: verified`. Test anonymous, owner and signed-in-nonowner states, a browser write and SQL persistence after reload. ARM deployment is not acceptance.
 
 ## Security and cost truth
 
-The low fixed cost is an explicit trade-off:
+- Free limits stop rather than bill and can interrupt service. The cost guard fails closed unless the deployed Free SKU and SQL free-offer/AutoPause settings are proven.
+- SQL is public; the `0.0.0.0` firewall rule admits Azure resources outside the subscription.
+- Managed Functions have no SQL managed identity here. Generated credentials live in Static Web Apps settings and protected `.sql-apps/deployments/` state.
+- Runtime grants are only `CONNECT`, `EXECUTE` and `VIEW DEFINITION` on declared procedures.
+- The invited `owner` role derives ownership from provider plus immutable provider user ID, never email.
 
-- The profile creates no always-billable Azure service. Static Web Apps Free and Azure SQL AutoPause stop rather than bill when their free limits are exhausted, which can interrupt service.
-- The cost guard fails closed unless the deployed Static Web Apps Free SKU and Azure SQL free-offer settings can be proven. It does not cover manual additions, future offer changes, GitHub Actions, domains, or third-party services.
-- Azure SQL has a public endpoint.
-- The `0.0.0.0` firewall rule admits Azure resources outside the subscription.
-- Managed Functions do not provide this profile a SQL managed identity.
-- Generated SQL credentials live in Static Web Apps settings and protected `.sql-apps/deployments/` state.
-- The runtime receives only `CONNECT`, `EXECUTE`, and `VIEW DEFINITION` on declared procedures.
-- The API requires an invited `owner` role and derives ownership from provider plus immutable provider user ID, never email.
+The guard excludes manual additions, future offer changes, GitHub Actions, domains and third parties. Never claim guaranteed free, private networking, passwordless, production-grade or highly available. Consult maintained current Azure cost/SQL skills before quoting limits, eligibility, regions or prices.
 
-Never call this private networking, passwordless, guaranteed free, production-grade, or highly available. Use maintained current Azure cost and Azure SQL skills before quoting limits, eligibility, regional availability, or prices.
+## Evidence and approval
 
-## Report separate verdicts
+For foundation publisher changes, run focused publisher, infrastructure, authentication and packaging tests. Routine app publishing does not assume foundation tests; disclose unverified implementation or live canary checks.
 
-Always report four independent lines:
-
-- implemented/built;
-- running/deployed;
-- functional acceptance;
-- design acceptance (`accepted`, `partial: N cells`, or `blocked`).
-
-Also state whether live Azure validation was performed. No live deployment or invitation occurs without explicit target, region, resource-group, allowance/spend, and owner approval.
-
-## Red flags
-
-- Inventing a second bundled cloud topology
-- Calling a free allowance a guarantee or cap
-- Hiding public SQL or credential storage
-- Treating `authenticated` as `owner`
-- Reporting deployment success as application acceptance
-- Claiming a canary that was not run
+Use `sql-apps-validation`'s four-verdict report and state whether live Azure validation was performed. Deployment/invitation requires explicit target, region, resource-group, allowance/spend and owner approval.
+For an externally owned architecture, also report cost safeguards separately as configured, exercised, partial or blocked; state whether live access, persistence, scaling, shutdown and recovery checks were actually performed.

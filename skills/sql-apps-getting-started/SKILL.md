@@ -1,50 +1,32 @@
 ---
 name: sql-apps-getting-started
-description: Guide a beginner from an app idea to one verified local SQL Apps workflow, routing every new user-facing app and meaningful UI change through sql-apps-design and rendered validation before optional sharing.
+description: "Use when a beginner is starting a SQL Apps project, shaping an app idea, or choosing the next local-first step."
 ---
 
 # SQL Apps
 
-Confirm the absolute SQL Apps application project before edits. If the user is
-starting a new app or the resolved home is the foundation checkout, use the
-installed launcher's `projects create "<name>"` command first. Generated apps
-belong under the configured project root (`%USERPROFILE%\SqlAppsProjects` by
-default), never beside or inside the foundation/plugin checkout. Use the
-generated project's commands and leave other plugins unchanged.
+Confirm the absolute application project before edits. For a new app, use the installed launcher's `projects create "<name>"`, then the generated project's commands. Never build inside or beside the foundation/plugin checkout; leave other plugins unchanged.
 
 Follow **Describe -> Run locally -> Make it yours -> Share optionally**.
 
 ## Describe
 
-Read `README.md`, then open only the guide needed for the current stage. Ask one outcome-focused question at a time about users, information and actions. Summarize the smallest useful scope, selected capabilities and one first improvement. Do not ask beginners to choose frameworks, Azure services or deployment topology.
-
-Run `npm run guide` to recover saved decisions. Saved evidence is historical, not current readiness or permission.
+Run `npm run guide` for saved decisions; they are historical, not current readiness or permission. Open only the current stage's guide. Ask one outcome-focused question at a time about missing users, information and actions. Summarize scope and exclusions; do not ask beginners to choose frameworks, Azure services or topology.
 
 ## Route the work
 
 - Route every new user-facing app and meaningful UI change through `sql-apps-design`.
-  It discovers and invokes a suitable available host design capability, or
-  performs the intentional stack-neutral fallback when none exists. Preserve
-  the design intent for the audience, primary task, hierarchy, typography,
-  palette, layout and responsive behavior, along with real account/access
-  boundaries and truthful loading, empty, error, saving, success and disabled
-  data states.
-- Use `sql-apps-application` for screens, SQL behavior, access rules and the first useful change.
-- Use `sql-apps-local` for prerequisites, approval, startup, resume and stop.
-- Use `sql-apps-validation` for tests and live workflow checks.
-- Use `sql-apps-diagnostics` for an existing failure.
-- Use `sql-apps-cloud-preview` only after the user asks to share; it routes general Azure preparation, cost, deployment, and diagnostics to maintained Azure skills.
+  It owns the design pass; no companion skill is required.
+- `sql-apps-application`: domain scope, code and access rules.
+- `sql-apps-local`: prerequisites, approval and lifecycle.
+- `sql-apps-validation`: checks and evidence.
+- `sql-apps-diagnostics`: an existing failure.
+- `sql-apps-cloud-preview`: requested publishing, pricing or cloud readiness; owns the bundled publisher.
 
-Do not preload those skills or their references. Load the next stage only, and stop gathering context once its command or blocker is known.
+Load only the needed stage, not all skills/references. Stop gathering context once its command or blocker is known.
 
 ## Finish locally
 
-After authorized startup, verify a real browser action and SQL save/reload with
-synthetic data. Then implement and verify one useful change without breaking
-the original workflow. Hand off to `sql-apps-validation` for current evidence
-and reporting, including its **Rendered browser review** contract in addition
-to functional browser and SQL evidence. Follow that contract for truthful
-desktop and narrow-width review and for explicit blocked or unobserved evidence;
-do not claim visual acceptance for evidence that was not observed.
+After authorized startup, use `sql-apps-validation` to verify a real browser action and SQL save/reload, including required rendered browser review for new apps or meaningful UI changes. Follow its evidence/reporting contract; never claim unobserved checks passed.
 
 Keep secrets and real records out of saved briefs. A useful local app is success; Azure remains optional.

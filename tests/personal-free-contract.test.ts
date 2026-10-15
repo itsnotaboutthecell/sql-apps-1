@@ -16,7 +16,8 @@ test('cloud guidance names the free personal target and its limits', async () =>
   assert.match(skill, /potentially \$0/i);
   assert.match(skill, /cost guard/i);
   assert.match(skill, /stop rather than bill/i);
-  assert.doesNotMatch(skill, /legacy|Container Apps|compatibility path/i);
+  assert.doesNotMatch(skill, /legacy|compatibility path/i);
+  assert.match(skill, /Container Apps[^.]*candidate—not a bundled profile/i);
 });
 
 test('cost guidance distinguishes the zero-cost profile from almost-free architectures', async () => {

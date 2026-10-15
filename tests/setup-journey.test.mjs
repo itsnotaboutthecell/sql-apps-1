@@ -421,7 +421,7 @@ test('setup commands, CI and entry guidance consistently expose the guarded jour
     'docs/guides/getting-started.md']) {
     assert.match(await readFile(resolve(file), 'utf8'), /setup.*plan|plan.*setup/i);
   }
-  assert.match(await readFile(resolve('skills/sql-apps-getting-started/SKILL.md'), 'utf8'), /Use `sql-apps-local` for prerequisites/);
+  assert.match(await readFile(resolve('skills/sql-apps-getting-started/SKILL.md'), 'utf8'), /`sql-apps-local`: prerequisites/);
 });
 
 test('post-launch verification failure stops the attached child before reporting a blocker', async t => {

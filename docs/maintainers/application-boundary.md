@@ -2,32 +2,39 @@
 
 Contributor and agent reference: use these checks when changing application composition or preparing a domain application for delivery. For the user journey, start with [Build your app](../guides/build-your-app.md).
 
-The reusable foundation contains authentication, ownership security, storage/jobs and deployment tooling. A real application selects capabilities and supplies its own domain UI, client operations and schema. Examples are explicitly separate, not hidden UI sections shipped to every user.
+The reusable foundation supplies SQL/DAB, browser authentication, ownership security and deployment tooling. A real application supplies its own domain UI, client operations and schema using the `role-based-data` profile. File storage and jobs are outside SQL Apps. Examples are explicitly separate, not hidden UI sections shipped to every user.
 
 ## Default boundary
 
 `application.json` names the application and declares `selectedExamples: []`. The default runtime client, browser, DAB and SQL project are sample-free. Optional examples own their client, schema, acceptance and workflow tests under `examples/<name>/tests`; they are not application dependencies.
 
-`tsconfig.runtime.json` compiles only runtime sources, excluding tests/examples. Container builds do not compile example tests and copy only intended runtime output. The local Functions image no longer copies the entire `dist` tree. The domain-neutral `dbo.OwnerPredicate` is independently defined under `sql/security`; file-job RLS has no dependency on a Todo table/function.
+`tsconfig.runtime.json` compiles only runtime sources, excluding tests/examples. Container builds do not compile example tests and copy only intended runtime output. The domain-neutral `dbo.OwnerPredicate` is independently defined under `sql/security`.
 
 New applications must not copy `examples/` or its workflow tests unless explicitly requested. Inherited tests importing an excluded example are a broken application boundary, not a reason to restore the placeholder. Keep domain-neutral tests and negative regression checks proving legacy sample SQL/API absence. The installed `sql-apps-application` skill guides application-specific development and requires the checks below. This is a validated workflow, not a general schema/application generator.
 
 ## Required evidence
 
-Run in the intended application checkout, not the foundation or plugin cache:
+Confirm the intended checkout, not a plugin cache. Inspect its `package.json`;
+generated apps do not inherit foundation-only validation wrappers. The common
+checks below use scaffolded commands or project-owned scripts. Restore/build,
+schema and acceptance-session work retain their documented approval boundaries.
 
 ```powershell
 npm run build
-npm run app:check
-npm run sql:build
+node scripts\check-application.mjs .
+dotnet build sql\database.sqlproj --output dist\sql
 node scripts\check-application.mjs . sql\obj\Debug\model\model.xml
-npm test
-npm run app:check-api -- http://127.0.0.1:18080
+```
+
+Against an approved running local app, use the verified startup origin and the
+selected SQL container:
+
+```powershell
+node scripts\check-application-api.mjs "<verified-origin>"
 npm run local -- app-check <sql-container-name>
 ```
 
 - **Source and artifacts:** scans active `src`, `public`, `dab`, `sql`, compiled `dist/src`, `dist/functions`, browser bundle and supplied SQL model. It also parses root `tests` and `dist/tests` for example imports/re-exports and literal file dependencies, including absent example trees. Fixture strings, developer TODO comments and negative SQL/API checks remain valid. The SQL project extracts the DACPAC model using MSBuild's built-in Unzip task. Rejects broad Docker copies that ship examples/test output. Missing build output fails rather than proving absence.
-- **CI:** `npm test` runs the delivery check and all root tests, then compiled workflow tests for examples actually present. An absent examples tree is explicitly skipped; a present test with missing compiled output or a failing workflow fails the command. Keep application-specific behavior/security tests too. A targeted domain-test pass is not full-suite evidence. CI repeats delivery checking after SQL build.
 - **API:** creates a separate local acceptance session, verifies authenticated `/api/Todo` returns 404 and the GraphQL `todos` field produces an unknown-field/schema-validation error, then revokes its own session. A backend outage or authentication denial is not accepted as proof of absence.
 - **Database:** an admin-only read-only check detects sample table/security objects and requires the shared ownership predicate. It fails on legacy databases instead of dropping objects. Fresh databases published from the default project have no sample table.
 
@@ -36,8 +43,21 @@ No one check proves all layers. These checks target the known reference example,
 Test dependency inspection includes imports/re-exports, literal filesystem calls
 and simple paths stored in variables or arrays. Fixture-source strings and
 paths under dynamically created temporary checkouts are not example dependencies.
-Arbitrary computed paths cannot all be proved statically; full-suite execution
-remains required.
+Arbitrary computed paths cannot all be proved statically; applicable behavior
+tests are still needed. Use declared application test scripts or the existing
+compiler/Node runner on real files; missing tests are missing evidence.
+
+## Foundation CI
+
+In the foundation, `npm test` runs the delivery check and root tests, then
+compiled workflow tests for examples actually present. An absent examples tree
+is explicitly skipped; missing compiled output or a failing present workflow
+fails the command. CI repeats delivery checking after SQL build.
+
+Generated apps do not initially declare this script. Keep their own
+behavior/security tests without restoring excluded examples. A targeted pass
+is not full-suite evidence; use the validation skill to select checks for the
+actual target.
 
 ## Domain contracts and live acceptance
 

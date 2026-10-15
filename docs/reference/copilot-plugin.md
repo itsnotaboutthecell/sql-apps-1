@@ -45,7 +45,7 @@ Run these slash commands in GitHub Copilot CLI or the Copilot App:
 
 Marketplace registration is safe to repeat when it already points to the same source. Restart the App or begin a fresh session after installation, then use `/plugin list` to verify that all four plugins, including `sql-apps@sql-apps-skills`, are enabled. See the current [Azure plugin catalog](https://learn.microsoft.com/azure/developer/azure-skills/plugins/) because specialized Azure plugins can change independently.
 
-These companion plugins are not prerequisites for local-only development. Install them when you choose to share, estimate, deploy or diagnose the app in Azure. A frontend/design capability used by `sql-apps-design` is optional and host-specific, so SQL Apps does not prescribe another plugin for it.
+These companion plugins are not prerequisites for local-only development. Install them when you choose to share, estimate, deploy or diagnose the app in Azure.
 
 ## Use the GitHub Copilot App
 
@@ -56,15 +56,20 @@ Restart the App or create a **fresh session** after installation. In **Customize
 | `sql-apps-local` | Start SQL Apps locally; reuse it if it is already running. |
 | `sql-apps-diagnostics` | Check SQL Apps local service status without changing anything. |
 | `sql-apps-validation` | Run SQL Apps unit tests and typecheck; do not restart services. |
-| `sql-apps-cloud-preview` | Plan or deploy the personal-free Azure target; explain its allowances, no-SLA posture and public-SQL trade-off. |
+| `sql-apps-cloud-preview` | Assess whether personal-free fits; hand separately planned architectures to maintained Azure skills and explain their cost, access and interruption trade-offs. |
 | `sql-apps-application` | Build a domain-specific application without copying the Todo example; verify source, build, API and database boundaries. |
 | `sql-apps-design` | Apply intentional visual direction to every new user-facing app and meaningful UI change, then review its rendered desktop and narrow-width experience. |
 
-The `sql-apps-design` skill discovers and invokes an available host frontend-design
-capability. If none is available, it performs an intentional, stack-neutral design fallback
-itself. In either path it retains SQL Apps requirements for real account/access states and
-truthful loading, empty, error, saving, success, and disabled states; SQL, identity, and
-runtime decisions remain in `sql-apps-application`.
+The `sql-apps-design` skill owns design direction and rendered review in the app's
+existing stack; no companion skill is required. It compares two compositions and
+retains SQL Apps requirements for real account/access states and truthful loading,
+empty, error, saving, success, and disabled states. SQL, identity, and runtime
+decisions remain in `sql-apps-application`.
+
+`sql-apps-local` owns lifecycle and approval. `sql-apps-validation` selects checks
+from the actual target package, distinguishing generated apps from foundation
+maintenance, and owns evidence collection and the four-verdict report.
+Application and cloud skills hand off to that contract rather than duplicating it.
 
 Invoke a skill explicitly from the App's skill picker/slash completion if natural-language discovery picks another plugin instead. Ask for **SQL Apps** and confirm the **sql-apps-skills** marketplace. The plugin does not embed the browser UI; use the startup-reported origin (`http://127.0.0.1:18080/` in fixed-port mode) for the actual application.
 

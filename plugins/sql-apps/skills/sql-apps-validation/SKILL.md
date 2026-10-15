@@ -1,63 +1,55 @@
 ---
 name: sql-apps-validation
-description: "Use when testing SQL Apps changes or verifying application, plugin, SQL, API, browser, role-based access, ownership or deployment contracts."
+description: "Use when validating SQL Apps changes or collecting test, browser, SQL, access, ownership, or deployment evidence."
 ---
 
 # Validate SQL Apps
 
-Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home` and execute commands in that confirmed application checkout.
+Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and confirm the target checkout. Inspect `package.json`: `sqlApps.project` identifies generated apps. Choose the smallest covering check; full suite only when targeted evidence warrants it.
 
-Choose the smallest checks that cover the change:
+## Generated applications
 
-- Plugin packaging: `npm run plugin:check`.
-- Unit and regression tests: `npm test`.
-- TypeScript: `npm run typecheck`.
-- Application boundary: `npm run app:check`.
-- SQL project: `npm run sql:build`.
-- DAB configuration: `npm run dab:validate`.
-- Infrastructure syntax: `npm run infra:build`.
+Use `npm run build`. Run declared test scripts when present; otherwise use the existing Node runner on real test files. Typecheck with `npx --no-install tsc --noEmit`. Never invent scripts/paths, install another runner or switch projects to make a check available. Report missing checks.
 
-Use the exact commands in `docs/maintainers/application-boundary.md` for SQL model, live API and database absence checks. A targeted pass is not a full-suite pass.
+## Foundation and plugin maintenance
 
-For an approved running application, use the launcher checks: `app-check` for the clean application database acceptance, `test` for the read-only SQL acceptance and `app-test` for the two-user role check (Development Alice admitted, Development Bob 403). Run acceptance commands sequentially. Tests that stop or restart owned services, create fixtures or mutate data need their documented approval.
+Only in the foundation, select its declared scripts: `npm run plugin:check`, `npm run typecheck`, `npm run app:check`, `npm run sql:build`, `npm run dab:validate`, `npm run infra:build`, or `npm test`. Use focused compiler/Node tests first; a targeted pass is not a full-suite pass.
+
+Use `docs/maintainers/application-boundary.md` for source, SQL model and live API/database absence checks in either target.
 
 ## Live workflow evidence
 
-Verify the agreed browser action and actual SQL save/reload. Apply **Domain contracts and live acceptance** from `docs/maintainers/application-boundary.md`, including UTF-16 limits, exact values, readiness, mutation ordering and positive controls.
+For approved running local apps, run launcher checks sequentially: `app-check` (clean database), `test` (read-only SQL), and `app-test` (Development Alice admitted, Bob 403). Fixture writes and service restarts need documented approval; startup belongs to `sql-apps-local`. Cloud probes follow the publisher contract.
 
-- Use synthetic, uniquely named fixtures and owned sessions.
-- Snapshot preexisting records before writes and remove only this run's fixtures.
-- Verify initial-load failure, failed-save retention and successful reload where relevant.
-- Supply the expected Origin and valid authorization for mutation probes.
-- Prove foreign or invalid writes fail and leave data unchanged.
-- Treat a genuinely new browser document and refetched SQL state as reload evidence.
+Apply **Domain contracts and live acceptance** from the boundary reference:
 
-If browser input, a service or a host tool is unavailable, report the missing check. A forced DOM click, screenshot, source review, mock, health response or compilation result is not workflow acceptance.
+- Use unique synthetic fixtures and owned sessions; snapshot preexisting records and remove only this run's fixtures.
+- Supply the expected Origin and authorization. Pair invalid/foreign writes with a positive control; prove rejected writes leave data unchanged.
+- Verify a real browser action, initial-load failure, failed-save retention and SQL save/reload. Reload means a new browser document and refetched SQL state.
 
-Use the existing compiler and Node test runner when editor discovery fails. Do not install another runner or invent test paths.
-
-Record exact commands and results. The final report has four separate lines:
-
-- **Implemented/built:** source and build evidence.
-- **Running:** intended origin and readiness evidence.
-- **Functional acceptance:** accepted, partial or blocked, with browser/API/SQL checks.
-- **Design acceptance:** accepted, `partial: N cells` or blocked, citing `docs/design-review.md`.
-
-Historical checkpoints and local simulation do not prove current cloud identity, private networking or production authorization.
+Unavailable input/services/tools mean missing evidence, not acceptance. Forced DOM clicks, mocks, source review, health responses and compilation do not prove the workflow.
 
 ## Rendered browser review
 
-Keep three evidence lanes distinct: API/SQL acceptance proves data and access contracts; real browser workflow acceptance proves interaction and persistence; rendered visual review proves the interface's presentation. Screenshots do not prove persistence or access, and compile/API results do not prove visuals.
+Keep API/SQL acceptance, real browser workflow acceptance, and rendered visual review distinct. Screenshots do not prove persistence or access; compile/API results do not prove visuals.
 
 For every new user-facing app and meaningful UI change:
 
-1. Verify the intended origin before review.
-2. Use semantic browser inspection and real interactions. Never invent page handles or confuse instance handles with browser page handles.
-3. Inspect screenshots or rendered output at desktop and narrow viewport widths. If the preferred tool cannot resize, use another available browser/computer-use capability; otherwise record the narrow cells as blocked with the exact reason.
-4. Review the primary state and reachable signed-out, authorized, no-access, loading, empty, error, saving, success and disabled states.
-5. Check hierarchy, spacing, wrapping, overflow, focus visibility, and useful empty/error guidance.
-6. Fix observed defects, then re-review the affected viewport and state.
+1. Verify the intended origin; use semantic browser inspection and real interactions. Never invent page handles or confuse instance/page handles.
+2. Inspect desktop and narrow widths. If tooling fails, discover supported alternatives; otherwise record blocked cells with reasons.
+3. Review primary and reachable states using `sql-apps-design`'s quality bar; fix defects and re-review.
 
-If a preferred browser or screenshot path fails, discover supported host alternatives rather than fabricating success. Opening a tab or source review is not visual review. If blocked, state the exact evidence not observed. Label feedback supplied by the user as user-reported; do not merge it with direct observations.
+Opening a tab or source review is not visual review. If blocked, state the exact evidence not observed. Keep user-reported feedback separate from direct observations.
 
-Visual evidence provenance records the intended origin, source/build reviewed, viewport, state, artifact when available, findings and re-review result in `docs/design-review.md`. Use the matrix contract in `docs/reference/design-acceptance.md`; run `sql-apps check` and report its unreviewed-cell count. Keep blocked and user-reported evidence separate from observed evidence.
+Record origin, source/build, viewport, state, artifact, findings and re-review in `docs/design-review.md` using `docs/reference/design-acceptance.md`. Run `sql-apps check` and report unreviewed cells.
+
+## Four-verdict report
+
+Record exact commands/results and four independent lines:
+
+- **Implemented/built:** source/build evidence.
+- **Running:** intended origin/readiness.
+- **Functional acceptance:** accepted, partial or blocked, with browser/API/SQL evidence.
+- **Design acceptance:** accepted, `partial: N cells` or blocked, citing the review.
+
+Historical checkpoints and local simulation do not prove current cloud identity, networking or authorization.

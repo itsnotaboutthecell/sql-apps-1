@@ -110,6 +110,35 @@ test('create scaffolds an independent named project and records it as active', a
   assert.deepEqual(state.projects.map(project => project.path), [created.path]);
 });
 
+test('generated app validation guidance uses available project scripts', async t => {
+  const source = await sourceFixture(t);
+  const userHome = await mkdtemp(join(tmpdir(), 'sql-apps-project-validation-'));
+  t.after(() => rm(userHome, { recursive: true, force: true }));
+  const created = await projects.createProject(source, 'Validation App', { userHome, initializeGit: false });
+  const pkg = JSON.parse(await readFile(join(created.path, 'package.json'), 'utf8'));
+  const validation = await readFile(join('plugins', 'sql-apps', 'skills', 'sql-apps-validation', 'SKILL.md'), 'utf8');
+  const generated = validation.split('## Generated applications')[1]?.split('\n## ')[0];
+  assert.ok(generated, 'Generated applications need validation guidance separate from foundation commands');
+  const commands = Array.from(generated.matchAll(/\bnpm run ([a-z][a-z0-9:-]*)/g), match => match[1]);
+  assert.ok(commands.length > 0, 'Document the scaffolded build command');
+  for (const command of commands) {
+    assert.ok(Object.hasOwn(pkg.scripts, command), `Generated apps do not declare npm run ${command}`);
+  }
+  assert.match(generated, /npx --no-install tsc --noEmit/);
+  assert.doesNotMatch(generated, /\bnpm test\b/);
+  for (const command of ['test', 'typecheck', 'plugin:check', 'app:check', 'sql:build', 'dab:validate', 'infra:build']) {
+    assert.equal(pkg.scripts[command], undefined, `${command} must not be assumed in a generated application`);
+  }
+
+  const boundary = await readFile(join('docs', 'maintainers', 'application-boundary.md'), 'utf8');
+  const evidence = boundary.split('## Required evidence')[1]?.split('\n## ')[0];
+  assert.ok(evidence, 'Keep application evidence separate from foundation CI');
+  for (const [, command] of evidence.matchAll(/\bnpm run ([a-z][a-z0-9:-]*)/g)) {
+    assert.ok(Object.hasOwn(pkg.scripts, command), `Application evidence assumes undeclared npm run ${command}`);
+  }
+  assert.doesNotMatch(evidence, /\bnpm test\b/);
+});
+
 test('create refuses an existing project folder without changing the registry', async t => {
   const source = await sourceFixture(t);
   const userHome = await mkdtemp(join(tmpdir(), 'sql-apps-project-collision-'));

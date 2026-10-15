@@ -121,6 +121,8 @@ The browser never supplies object IDs to the data proxy. The gateway validates t
 
 The local server binds only to `127.0.0.1`, requires the exact development Host, and requires the same Origin on mutations, including session creation. It refuses `NODE_ENV=production`. The developer page/script, `/local/users` and `/local/session` exist only in preview mode, not local Entra mode or production. Production requires verified Entra access tokens. Preview users are not real authenticated people, and local sessions are not a security boundary against other processes on your machine. Never expose the local stack remotely.
 
+Keep non-exposure warnings in startup output and on the local-only developer page, not in the product header. Real Microsoft sign-in backed by locally simulated services retains its distinct development notice.
+
 See [Authentication and application access](authentication.md) for `SQL_APPS_LOCAL_AUTH=entra`, the UUID tenant/client settings, the exact printed `/auth/redirect.html` callback and the separately approved development registration. Invalid Entra configuration or sign-in failure never falls back to simulation. Setup matches authentication mode, tenant and client in addition to ownership and source fingerprint; changing them requires stopping only the intended gateway and restarting with the reviewed configuration, not resetting data or replacing another process.
 
 Do not deploy the local generated DAB configuration to Azure.
@@ -148,8 +150,9 @@ npm run build
 npm run local -- init
 npm run local -- data
 npm run local -- serve
-npm test
 ```
+
+Run application tests using declared project scripts or the existing Node runner. `npm test` is a foundation command unless the application declares it. These lifecycle mutations still need their scoped approvals.
 
 Repeated `init` preserves existing rows. Repeated `data` recreates only the project-labeled DAB container and reloads current configuration; it does not delete SQL data.
 

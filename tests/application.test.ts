@@ -69,7 +69,7 @@ A bounded summary region followed by a responsive detail list.
 Desktop shows summary and detail together; narrow widths stack them without horizontal scrolling.
 
 ## Design capability
-- Manual fallback reason: No maintained frontend design skill was available in the host.
+- Skill: sql-apps-design
 `;
 
 const designReview = `# Design Review
@@ -120,6 +120,11 @@ test('design gate warns for customized UI and validates intent and review artifa
   const accepted = await run(process.execPath, [checker, root]);
   assert.match(accepted, /Design acceptance: accepted \(22 reviewed cells\)/);
   assert.doesNotMatch(accepted, /Design warning/);
+
+  await writeFile(join(root, 'docs', 'design-intent.md'),
+    designIntent.replace('- Skill: sql-apps-design', '- Manual fallback reason: The original host lacked a design skill.'));
+  const legacy = await run(process.execPath, [checker, root]);
+  assert.match(legacy, /Design acceptance: accepted \(22 reviewed cells\)/);
 });
 
 test('clean application validation rejects leftovers in each actual delivery surface', async t => {

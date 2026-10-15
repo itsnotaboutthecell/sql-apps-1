@@ -14,6 +14,11 @@ const recordFixture = (home: string) => run(process.execPath, ['--input-type=mod
 { env: { SQL_APPS_HOME: home } });
 const probe = async (code: string, env: NodeJS.ProcessEnv = {}) =>
   run(process.execPath, ['--input-type=module', '-e', `import { resolveHome, status, main } from ${JSON.stringify(moduleUrl)}; ${code}`], { env });
+const skillPaths = [
+  'skills/sql-apps-getting-started/SKILL.md',
+  ...['application', 'local', 'validation', 'cloud-preview', 'diagnostics', 'design']
+    .map(name => `plugins/sql-apps/skills/sql-apps-${name}/SKILL.md`),
+];
 
 test('local plugin bundle validates its manifests, matching skill names and isolated sources', async () => {
   assert.match(await run(process.execPath, [resolve('scripts', 'check-plugin.mjs')]), /six focused skills, MIT license/);
@@ -124,54 +129,44 @@ test('SQL Apps routes new apps and meaningful UI changes through intentional des
   const design = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-design', 'SKILL.md'), 'utf8');
   const pluginReference = await readFile(resolve('docs', 'reference', 'copilot-plugin.md'), 'utf8');
   const runGuide = await readFile(resolve('docs', 'guides', 'run-locally.md'), 'utf8');
-  assert.match(application, /every new user-facing app and meaningful UI change/i);
-  assert.match(application, /before implementing a new user-facing app or meaningful UI change/i);
+  assert.match(application, /before implementing a new user-facing app or meaningful UI change[\s\S]*sql-apps-design/i);
   assert.doesNotMatch(application, /sql-apps-design` for substantial|substantial visual work/i);
-  assert.match(application, /audience[\s\S]*primary task[\s\S]*hierarchy[\s\S]*typography[\s\S]*palette[\s\S]*layout[\s\S]*responsive/i);
   assert.match(application, /basic shell.*small scope.*(?:not|never).*unfinished visual quality/is);
 
   assert.match(gettingStarted, /every new user-facing app and meaningful UI change[\s\S]*through `sql-apps-design`/i);
-  assert.match(gettingStarted, /discovers and invokes[\s\S]*available host design capability/i);
-  assert.match(gettingStarted, /intentional stack-neutral fallback when none exists/i);
-  assert.match(gettingStarted, /audience[\s\S]*primary task[\s\S]*hierarchy[\s\S]*typography[\s\S]*palette[\s\S]*layout[\s\S]*responsive/i);
-  assert.match(gettingStarted, /real account\/access[\s\S]*loading[\s\S]*empty[\s\S]*error[\s\S]*saving[\s\S]*success[\s\S]*disabled/i);
+  assert.match(gettingStarted, /owns the design pass/i);
   assert.doesNotMatch(gettingStarted, /optional design|design is optional/i);
 
-  assert.match(design, /discover[\s\S]*available[\s\S]*(?:frontend|design).*(?:skill|capability)/i);
-  assert.match(design, /if no suitable.*(?:skill|capability).*available/is);
   assert.match(design, /starter CSS.*not.*design direction/is);
-  assert.match(design, /spacing[\s\S]*type hierarchy[\s\S]*domain[\s\S]*actions[\s\S]*notices[\s\S]*responsive[\s\S]*focus[\s\S]*accessib/i);
-  assert.match(design, /one clear primary action.*(?:each|per) surface/i);
-  assert.match(design, /secondary actions.*visually subordinate/i);
-  assert.match(design, /long content.*(?:wrap|wrapping)/i);
-  assert.match(design, /(?:line )?measure.*readab/i);
-  assert.match(design, /error.*success.*disabled.*status.*(?:text|iconography)/i);
-  assert.match(design, /never rely on color alone/i);
-  assert.match(design, /developer and account notices.*visually subordinate/i);
+  assert.match(design, /typography, spacing, color, and layout.*hierarchy/i);
+  assert.match(design, /each surface one clear primary action/i);
+  assert.match(design, /secondary and destructive actions.*distinct/i);
+  assert.match(design, /wrapping long content/i);
+  assert.match(design, /readable line lengths/i);
+  assert.match(design, /keyboard focus[\s\S]*semantic structure[\s\S]*accessible labels/i);
+  assert.match(design, /status.*text or iconography.*never color alone/i);
+  assert.match(design, /account, setup, and administration secondary/i);
   for (const state of ['signed-out', 'authorized', 'no-access', 'loading', 'empty', 'error', 'saving', 'success', 'disabled']) {
     assert.match(design.toLowerCase(), new RegExp(state), `design guidance must cover ${state}`);
   }
-  assert.match(design, /maintained frontend or design skill/);
-  assert.match(design, /loading, empty, error, disabled, save, and reload states/i);
-  assert.match(design, /dominant user action/i);
+  assert.match(design, /recurring task/i);
   assert.match(design, /two distinct compositions/i);
   assert.match(design, /empty, single-record, and populated states/i);
-  assert.match(design, /mobile and desktop/i);
+  assert.match(design, /desktop and narrow widths/i);
+  assert.match(design, /Fix observed problems and re-review/i);
+  assert.match(design, /Source review and compilation are not visual review/i);
   assert.match(design, /docs\/design-intent\.md/);
-  assert.match(design, /frontend-design|web-artifacts-builder/);
-  assert.match(design, /manual fallback/i);
+  assert.match(design, /docs\/design-review\.md/);
+  assert.match(design, /sql-apps check/i);
   assert.match(design, /Functional acceptance and design acceptance are separate/i);
   assert.doesNotMatch(design, /references\/|craft floor|style recipes/i);
   assert.match(application, /basic shell is an implementation milestone, not final design acceptance/i);
-  assert.match(application, /docs\/design-review\.md/);
-  assert.match(application, /design acceptance.*accepted.*partial.*blocked/is);
-  assert.match(application, /implemented\/built[\s\S]*running[\s\S]*functional acceptance[\s\S]*design acceptance/i);
+  assert.match(application, /sql-apps-validation[\s\S]*four-verdict/i);
   const guide = await readFile(resolve('docs', 'guides', 'build-your-app.md'), 'utf8');
   assert.match(guide, /`sql-apps-design` skill[\s\S]*(?:every|all|normal)/i);
 
   assert.match(pluginReference, /`sql-apps-design`\s*\|[^\n]*every new user-facing app[^\n]*meaningful UI change/i);
-  assert.match(pluginReference, /discovers and invokes[\s\S]*available host[\s\S]*design[\s\S]*capability/i);
-  assert.match(pluginReference, /if none is available[\s\S]*intentional[\s\S]*stack-neutral[\s\S]*fallback[\s\S]*itself/i);
+  assert.match(pluginReference, /owns design direction and rendered review/i);
   assert.match(pluginReference, /real account\/access states/i);
   for (const state of ['loading', 'empty', 'error', 'saving', 'success', 'disabled']) {
     assert.match(pluginReference.toLowerCase(), new RegExp(`\\b${state}\\b`), `plugin reference must cover ${state}`);
@@ -187,6 +182,30 @@ test('SQL Apps routes new apps and meaningful UI changes through intentional des
   assert.doesNotMatch(runGuide, /substantial (?:UI|visual) work|when feasible/i);
 });
 
+test('SQL Apps design is self-contained and does not require external design skills', async () => {
+  const paths = [
+    'plugins/sql-apps/skills/sql-apps-design/SKILL.md',
+    'skills/sql-apps-getting-started/SKILL.md',
+    'docs/reference/copilot-plugin.md',
+    'docs/reference/design-acceptance.md',
+    'docs/maintainers/agent-evaluations.md',
+  ];
+  const contents = await Promise.all(paths.map(path => readFile(resolve(path), 'utf8')));
+  for (const [index, content] of contents.entries()) {
+    assert.doesNotMatch(content,
+      /web-artifacts-builder|\bfrontend-design\b|manual fallback|stack-neutral fallback|discovers and invokes/i,
+      `${paths[index]} must not route design through an external skill or fallback`);
+  }
+  const [design, gettingStarted, pluginReference, acceptance] = contents;
+  assert.ok(design && gettingStarted && pluginReference && acceptance);
+  assert.match(design, /Own the design pass/i);
+  for (const content of [design, gettingStarted, pluginReference]) {
+    assert.match(content, /no companion skill is required/i);
+  }
+  assert.match(acceptance, /^- Skill: sql-apps-design$/m);
+  assert.ok(design.trim().split(/\s+/).length <= 400, 'Keep the design skill within a 400-word context budget');
+});
+
 test('SQL Apps requires rendered browser review with bounded evidence claims', async () => {
   const read = (path: string) => readFile(resolve(path), 'utf8');
   const gettingStarted = await read('skills/sql-apps-getting-started/SKILL.md');
@@ -195,10 +214,14 @@ test('SQL Apps requires rendered browser review with bounded evidence claims', a
   const validation = await read('plugins/sql-apps/skills/sql-apps-validation/SKILL.md');
   const boundary = await read('docs/maintainers/application-boundary.md');
 
-  assert.match(application, /rendered (?:browser|visual) review[\s\S]*sql-apps-validation/i);
-  assert.match(local, /rendered (?:browser|visual) review[\s\S]*sql-apps-validation/i);
-  assert.match(application, /every new user-facing app and meaningful UI change[\s\S]*rendered (?:browser|visual) review/i);
-  assert.match(local, /every new user-facing app and meaningful UI change[\s\S]*rendered (?:browser|visual) review/i);
+  for (const [name, content] of [
+    ['application', application], ['local', local], ['getting started', gettingStarted],
+  ] as const) {
+    assert.match(content, /sql-apps-validation/i, `${name} must hand evidence collection to validation`);
+    assert.match(content, /required rendered (?:browser )?review/i, `${name} must preserve the rendered-review requirement`);
+    assert.doesNotMatch(content, /semantic browser inspection|page handles|user-reported/i,
+      `${name} must not duplicate the browser evidence procedure`);
+  }
   assert.doesNotMatch(`${application}\n${local}`, /(?:before implementing|complete|for) user-facing work/i);
 
   assert.match(validation, /API\/SQL[\s\S]*browser workflow[\s\S]*rendered visual review/i);
@@ -213,10 +236,57 @@ test('SQL Apps requires rendered browser review with bounded evidence claims', a
   assert.match(validation, /screenshots.*do not prove.*(?:persistence|access)/i);
   assert.match(validation, /compile.*do not prove.*visual/i);
   assert.match(gettingStarted, /after authorized startup[\s\S]*real browser action[\s\S]*SQL save\/reload/i);
-  assert.match(gettingStarted, /`sql-apps-validation`[\s\S]*Rendered browser review[\s\S]*in addition[\s\S]*functional browser and SQL evidence/i);
-  assert.match(gettingStarted, /contract[\s\S]*desktop and narrow-width review[\s\S]*blocked or unobserved evidence/i);
-  assert.match(gettingStarted, /do not claim visual acceptance.*not observed/i);
+  assert.match(gettingStarted, /never claim unobserved checks passed/i);
   assert.match(boundary, /blocked[\s\S]*user-reported/i);
+});
+
+test('workflow skill descriptions use discovery triggers rather than workflow summaries', async () => {
+  const contents = await Promise.all(skillPaths.map(path => readFile(resolve(path), 'utf8')));
+  for (const [index, content] of contents.entries()) {
+    const description = content.match(/^description: "?([^\r\n]+?)"?$/m)?.[1];
+    assert.ok(description, `${skillPaths[index]} needs a description`);
+    assert.ok(description.startsWith('Use when '), `${skillPaths[index]} needs a trigger-focused description`);
+    assert.ok(!/\brouting\b|[.;]\s*route\b/i.test(description),
+      `${skillPaths[index]} must keep routing instructions in its body`);
+  }
+});
+
+test('validation distinguishes generated applications from foundation maintenance', async () => {
+  const validation = await readFile(resolve('plugins/sql-apps/skills/sql-apps-validation/SKILL.md'), 'utf8');
+  assert.ok(/Inspect `package\.json`/i.test(validation), 'Select checks from the actual target package');
+  assert.ok(/sqlApps\.project/i.test(validation), 'Identify generated apps using their package metadata');
+  assert.ok(/## Generated applications/.test(validation), 'Generated-app commands need their own scope');
+  assert.ok(/## Foundation and plugin maintenance/.test(validation), 'Foundation checks need their own scope');
+  const foundation = validation.split('## Foundation and plugin maintenance')[1]?.split('\n## ')[0];
+  assert.ok(foundation?.includes('npm run plugin:check'), 'Keep plugin checking in the foundation scope');
+  assert.ok(/full suite only/i.test(validation), 'Do not default every focused change to the full suite');
+});
+
+test('publisher guidance scopes maintainer checks without weakening deployment guards', async () => {
+  const cloud = await readFile(resolve('plugins/sql-apps/skills/sql-apps-cloud-preview/SKILL.md'), 'utf8');
+  assert.ok(/Initialize local configuration/i.test(cloud), 'Initialization writes local configuration');
+  assert.ok(/For foundation publisher changes/i.test(cloud), 'Repository regression checks belong to publisher maintenance');
+  assert.ok(!/Before presenting this route as executable/i.test(cloud), 'Routine publishing must not assume foundation tests');
+  for (const requirement of [
+    /project=sql-apps/, /deployment=personal-free/, /environment/,
+    /Cost guard: verified/, /explicit approval/i, /never email/i,
+    /0\.0\.0\.0/, /live Azure validation/i,
+  ]) assert.match(cloud, requirement);
+});
+
+test('diagnostics establishes local evidence before specialist routing', async () => {
+  const diagnostics = await readFile(resolve('plugins/sql-apps/skills/sql-apps-diagnostics/SKILL.md'), 'utf8');
+  const local = diagnostics.indexOf('## Diagnose the selected app');
+  const specialist = diagnostics.indexOf('## Escalate the isolated issue');
+  assert.ok(local >= 0 && specialist > local, 'Diagnose the SQL Apps boundary before loading platform specialists');
+  assert.match(diagnostics, /positive control/i);
+  assert.match(diagnostics, /explicit approval/i);
+});
+
+test('workflow skills stay within their shared context budget', async () => {
+  const contents = await Promise.all(skillPaths.map(path => readFile(resolve(path), 'utf8')));
+  const words = contents.reduce((total, content) => total + content.trim().split(/\s+/).length, 0);
+  assert.ok(words <= 2800, `The seven active skills use ${words} words; expected at most 2800`);
 });
 
 test('design and review guidance preserves access, consent, state and stack boundaries', async () => {
@@ -246,6 +316,7 @@ test('agent guidance stays concise, stack-neutral and script-led', async () => {
   const runGuide = await read('docs/guides/run-locally.md');
   const guideReference = await read('docs/reference/guide.md');
   const roleBasedReference = await read('docs/reference/role-based-data.md');
+  const sharing = await read('docs/guides/sharing.md');
   const evaluations = await read('docs/maintainers/agent-evaluations.md');
   const readme = await read('README.md');
 
@@ -260,24 +331,35 @@ test('agent guidance stays concise, stack-neutral and script-led', async () => {
   assert.match(cloud, /npm run publish -- init[\s\S]*npm run publish -- plan[\s\S]*npm run publish -- deploy/);
   assert.match(cloud, /no Static Web Apps SLA[\s\S]*potentially \$0|potentially \$0[\s\S]*no Static Web Apps SLA/i);
   assert.match(cloud, /only bundled cloud profile/i);
-  assert.doesNotMatch(cloud, /Container Apps|compatibility path|sql-apps azure/i);
+  assert.match(cloud, /Container Apps Consumption[\s\S]*candidate—not a bundled profile/i);
+  assert.match(cloud, /azure-prepare[\s\S]*azure-validate[\s\S]*azure-deploy/);
+  assert.match(cloud, /budgets are not spending caps/i);
+  assert.match(cloud, /manual recovery/i);
+  assert.doesNotMatch(cloud, /npm run publish -- (?:container|aca)/i, 'SQL Apps must not add a second cloud deployer');
+  assert.doesNotMatch(cloud, /For an SLA, managed identity/, 'Managed identity must not route to both production and Container Apps');
+  assert.match(cloud, /managed identity that does not meet the conditions below/i);
+  assert.match(sharing, /only the gateway has public ingress[\s\S]*DAB is reachable over localhost/i);
+  assert.match(sharing, /managed identity[\s\S]*object-scoped permissions/i);
+  assert.match(sharing, /not a bundled SQL Apps deployment/i);
+  assert.match(sharing, /Setting minimum replicas to zero is not shutdown/i);
   assert.doesNotMatch(readme, /Static Web Apps candidate/);
   assert.doesNotMatch(readme, /uses TypeScript, Azure SQL Database, Data API builder, Blob Storage and Azure Functions/);
   await assert.rejects(read('docs/superpowers/plans/2026-10-10-bakery-ordering.md'));
   await assert.rejects(read('docs/superpowers/specs/2026-10-10-bakery-ordering-design.md'));
   assert.match(await read('docs/README.md'), /Temporary implementation plans.*not product guidance/is);
 
-  assert.match(design, /maintained frontend or design skill/);
-  assert.match(design, /Product screens show real account and access states/);
+  assert.match(design, /app's existing stack/i);
+  assert.match(design, /test-persona selection off product screens/i);
   assert.doesNotMatch(design, /references\/|craft floor|style recipes/i);
 
   const reportContract = /implemented\/built[\s\S]*running[\s\S]*functional acceptance[\s\S]*design acceptance/i;
-  assert.match(application, reportContract);
   assert.match(validation, reportContract);
   for (const [name, content] of [
-    ['getting started', gettingStarted], ['local', local], ['design', design],
+    ['getting started', gettingStarted], ['application', application], ['local', local],
+    ['cloud', cloud], ['design', design],
   ] as const) assert.doesNotMatch(content, reportContract, `${name} must not duplicate the final report contract`);
-  assert.match(cloud, reportContract);
+  assert.match(application, /sql-apps-validation[\s\S]*four-verdict/i);
+  assert.match(cloud, /sql-apps-validation[\s\S]*four-verdict/i);
   const statusPhrase = /implemented.*built.*running.*workflow[- ]verified/gi;
   for (const [path, content] of [
     ['README.md', readme],

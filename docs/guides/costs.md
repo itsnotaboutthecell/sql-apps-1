@@ -65,3 +65,24 @@ with the Azure-services firewall rule and a generated least-privilege SQL
 credential. Do not describe it as private networking or managed identity.
 If those controls or an SLA are requirements, select and price a production
 architecture instead of quietly adding services to the personal default.
+
+### Separately planned Container Apps candidate
+
+When Entra-only SQL or managed identity is required and scale-to-zero is
+acceptable, maintained Azure and Azure SQL skills may determine that a
+Container Apps Consumption gateway/DAB topology fits. This is not a second
+SQL Apps profile, a guaranteed-free route, or a spending-capped design. Confirm
+current allowances and subscription-wide usage; include SQL, registry,
+logging, networking, automation and notification costs in the estimate.
+
+Replica limits constrain consumption rate, not cumulative spend. Budgets are
+delayed notifications, and shutdown has latency and does not stop supporting
+service charges. Use early usage monitoring where available, and exercise any
+approved shutdown and manual recovery operation in a disposable deployment.
+Never report these safeguards as proof of $0 cost.
+
+Recheck the current [Container Apps billing](https://learn.microsoft.com/azure/container-apps/billing)
+and [Azure budget guidance](https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets)
+when planning; subscription-wide free grants and metering change. For Entra-only
+SQL, verify the [Data API Builder managed identity requirements](https://learn.microsoft.com/azure/data-api-builder/quickstart/managed-identity)
+for the pinned DAB version instead of assuming the authentication boundary.
