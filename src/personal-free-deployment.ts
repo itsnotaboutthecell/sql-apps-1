@@ -12,6 +12,7 @@ import {
 } from './personal-free-config.js';
 import { deploymentName } from './deployment-name.js';
 import { buildPersonalFreeArtifact } from './personal-free-build.js';
+import { verifyPersonalFreeCostGuard } from './personal-free-cost-guard.js';
 import { toolingAsset, projectRoot } from './runtime-roots.js';
 
 export interface PersonalFreeInitOptions {
@@ -153,6 +154,25 @@ export function personalFreeStatePath(config: PersonalFreeConfig): string {
     return outputsSchema.parse(Object.fromEntries(Object.entries(envelope).map(([name, item]) => [name, item.value])));
   }
 
+  export async function verifyPersonalFreeInfrastructure(
+    config: PersonalFreeConfig,
+    state: ProtectedDeploymentState,
+    outputs: z.infer<typeof outputsSchema>,
+    run: Run,
+    persist: (prepared: ProtectedDeploymentState) => Promise<void>,
+  ): Promise<ProtectedDeploymentState> {
+    const infrastructureState = protectedDeploymentStateSchema.parse({
+      ...state,
+      stage: 'infrastructure',
+      staticWebAppName: outputs.staticWebAppName,
+      staticWebAppHostname: outputs.staticWebAppHostname,
+      sqlServer: outputs.sqlServer,
+    });
+    await persist(infrastructureState);
+    await verifyPersonalFreeCostGuard(config, infrastructureState, run);
+    return infrastructureState;
+  }
+
   async function requireProviders(config: PersonalFreeConfig, run: Run): Promise<void> {
     for (const namespace of ['Microsoft.Web', 'Microsoft.Sql']) {
       const state = (await run('az', ['provider', 'show', '--subscription', config.subscriptionId,
@@ -161,6 +181,32 @@ export function personalFreeStatePath(config: PersonalFreeConfig): string {
         throw new Error(`${namespace} is not registered in subscription ${config.subscriptionId}; register it explicitly before deployment`);
       }
     }
+  }
+
+  export async function createPersonalFreeResourceGroup(
+    config: PersonalFreeConfig,
+    run: Run,
+  ): Promise<void> {
+    await run('az', ['group', 'create', '--subscription', config.subscriptionId,
+      '--name', config.resourceGroup, '--location', config.location, '-o', 'none']);
+    await run('az', ['group', 'update', '--subscription', config.subscriptionId,
+      '--name', config.resourceGroup,
+      '--set',
+      'tags.project=sql-apps',
+      `tags.environment=${config.environment}`,
+      'tags.deployment=personal-free',
+      '-o', 'none']);
+  }
+
+  export async function verifyPersonalFreeReadiness(
+    hostname: string,
+    fetcher: typeof fetch = fetch,
+  ): Promise<void> {
+    const response = await fetcher(`https://${hostname}/api/health/ready`, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new Error(`Personal-free readiness failed with HTTP ${response.status}`);
   }
 
   async function applyInfrastructure(
@@ -255,18 +301,16 @@ export function personalFreeStatePath(config: PersonalFreeConfig): string {
       await saveProtectedDeploymentState(statePath, state);
     }
     await requireProviders(config, run);
-    await run('az', ['group', 'create', '--subscription', config.subscriptionId,
-      '--name', config.resourceGroup, '--location', config.location, '-o', 'none']);
+    await createPersonalFreeResourceGroup(config, run);
     {
       const outputs = await applyInfrastructure(config, state, run);
-      state = {
-        ...state,
-        stage: 'infrastructure',
-        staticWebAppName: outputs.staticWebAppName,
-        staticWebAppHostname: outputs.staticWebAppHostname,
-        sqlServer: outputs.sqlServer,
-      };
-      await saveProtectedDeploymentState(statePath, state);
+      state = await verifyPersonalFreeInfrastructure(
+        config,
+        state,
+        outputs,
+        run,
+        prepared => saveProtectedDeploymentState(statePath, prepared),
+      );
       await publishPersonalSchema(config, outputs.sqlServer, run);
       state = { ...state, stage: 'schema' };
       await saveProtectedDeploymentState(statePath, state);
@@ -283,8 +327,7 @@ export function personalFreeStatePath(config: PersonalFreeConfig): string {
       ], { env: { SWA_CLI_DEPLOYMENT_TOKEN: deploymentToken }, sensitiveOutput: true });
       state = { ...state, stage: 'application' };
       await saveProtectedDeploymentState(statePath, state);
-      const response = await fetch(`https://${outputs.staticWebAppHostname}/api/health/ready`);
-      if (!response.ok) throw new Error(`Personal-free readiness failed with HTTP ${response.status}`);
+      await verifyPersonalFreeReadiness(outputs.staticWebAppHostname);
       state = { ...state, stage: 'ready' };
       await saveProtectedDeploymentState(statePath, state);
       return state;
@@ -309,7 +352,14 @@ export async function rotatePersonalFreeRuntimeSecret(
     await configureRuntimeUser(config, state, server, run);
     state = { ...state, stage: 'runtime-user' };
     await saveProtectedDeploymentState(statePath, state);
-    await applyInfrastructure(config, state, run);
+    const outputs = await applyInfrastructure(config, state, run);
+    state = await verifyPersonalFreeInfrastructure(
+      config,
+      state,
+      outputs,
+      run,
+      prepared => saveProtectedDeploymentState(statePath, prepared),
+    );
     state = { ...state, stage: 'ready' };
     await saveProtectedDeploymentState(statePath, state);
     return state;

@@ -19,7 +19,7 @@ async function fixture(t) {
   await writeFile(join(home, 'package.json'), JSON.stringify({
     name: 'fixture', version: '0.1.0', sqlApps: { project: true },
     scripts: { local: 'sql-apps local' },
-    dependencies: { '@microsoft/sql-apps': '0.2.1' },
+    dependencies: { '@microsoft/sql-apps': '0.2.2' },
   }));
   await writeFile(join(home, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3 }));
   await writeFile(join(home, 'tsconfig.json'), JSON.stringify({ compilerOptions: {} }));
@@ -32,7 +32,7 @@ async function fixture(t) {
     starter: 'data',
     profile: 'role-based-data',
     scaffoldVersion: 1,
-    tooling: { package: '@microsoft/sql-apps', version: '0.2.1' },
+    tooling: { package: '@microsoft/sql-apps', version: '0.2.2' },
   }));
   await writeFile(join(home, 'application.json'), JSON.stringify({ name: 'fixture', selectedExamples: [] }));
   await writeFile(join(home, 'role-based-data.json'), JSON.stringify({

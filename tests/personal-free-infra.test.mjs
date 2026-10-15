@@ -11,6 +11,16 @@ test('personal-free template contains only SWA Free and Azure SQL free-offer res
   const output = join(directory, 'main.json');
   await run('az', ['bicep', 'build', '--file', resolve('infra', 'personal-free.bicep'), '--outfile', output]);
   const template = JSON.parse(await readFile(output, 'utf8'));
+  assert.deepEqual(
+    [...new Set(template.resources.map(resource => resource.type))].sort(),
+    [
+      'Microsoft.Sql/servers',
+      'Microsoft.Sql/servers/databases',
+      'Microsoft.Sql/servers/firewallRules',
+      'Microsoft.Web/staticSites',
+      'Microsoft.Web/staticSites/config',
+    ],
+  );
   const site = template.resources.find(resource => resource.type === 'Microsoft.Web/staticSites');
   assert.deepEqual(site.sku, { name: 'Free', tier: 'Free' });
   const server = template.resources.find(resource => resource.type === 'Microsoft.Sql/servers');
@@ -23,8 +33,17 @@ test('personal-free template contains only SWA Free and Azure SQL free-offer res
   assert.equal(database.properties.useFreeLimit, true);
   assert.equal(database.properties.freeLimitExhaustionBehavior, 'AutoPause');
   assert.equal(database.properties.maxSizeBytes, 34359738368);
+  assert.equal(database.properties.requestedBackupStorageRedundancy, 'Local');
   assert.equal(database.properties.autoPauseDelay, 60);
   assert.equal(database.properties.minCapacity, "[json('0.5')]");
+  assert.deepEqual(template.variables.tags, {
+    project: 'sql-apps',
+    environment: "[parameters('environment')]",
+    deployment: 'personal-free',
+  });
+  for (const resource of [site, server, database]) {
+    assert.equal(resource.tags, "[variables('tags')]");
+  }
   const forbidden = template.resources.filter(resource =>
     /Microsoft\.(App\/|ContainerRegistry|Network\/(?:virtualNetworks|privateEndpoints)|OperationalInsights|Insights\/components|KeyVault)/.test(resource.type));
   assert.deepEqual(forbidden, []);

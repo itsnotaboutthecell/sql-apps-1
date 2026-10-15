@@ -26,7 +26,34 @@ export interface PersonalFreeRequest {
 
 const scalar = z.union([z.string(), z.boolean(), z.number(), z.null()]);
 
-export function createPersonalFreeHandler(routes: readonly PersonalFreeRoute[], runtime: PersonalFreeRuntime) {
+export function parsePersonalFreeBody(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw Object.assign(new Error('Invalid JSON request body'), { statusCode: 400 });
+    }
+    throw error;
+  }
+}
+
+function validParameter(type: ProcedureDefinition['parameters'][string], value: string | boolean | number | null): boolean {
+  if (value === null) return true;
+  if (type === 'nvarchar') return typeof value === 'string';
+  if (type === 'uniqueidentifier') return typeof value === 'string' && z.uuid().safeParse(value).success;
+  if (type === 'bit') return typeof value === 'boolean';
+  if (type === 'int') {
+    return typeof value === 'number' && Number.isInteger(value) &&
+      value >= -2_147_483_648 && value <= 2_147_483_647;
+  }
+  return typeof value === 'string' && Number.isFinite(Date.parse(value));
+}
+
+export function createPersonalFreeHandler(
+  routes: readonly PersonalFreeRoute[],
+  runtime: PersonalFreeRuntime,
+  reportError: (error: unknown) => void = error => console.error('Personal-free procedure failed', error),
+) {
   const routeMap = new Map(routes.map(route => [`${route.method} ${route.path}`, route]));
   if (routeMap.size !== routes.length) throw new Error('Personal-free routes must be unique');
   return async (request: PersonalFreeRequest): Promise<Response> => {
@@ -53,12 +80,18 @@ export function createPersonalFreeHandler(routes: readonly PersonalFreeRoute[], 
       ? Object.fromEntries(url.searchParams.entries())
       : request.body ?? {};
     const parsed = z.record(z.string(), scalar).safeParse(candidate);
-    if (!parsed.success) return Response.json({ error: 'Invalid procedure parameters' }, { status: 400 });
+    const expected = Object.keys(route.procedure.parameters).sort();
+    if (!parsed.success || JSON.stringify(Object.keys(parsed.data).sort()) !== JSON.stringify(expected) ||
+        Object.entries(route.procedure.parameters).some(([name, type]) =>
+          !(name in parsed.data) || !validParameter(type, parsed.data[name]!))) {
+      return Response.json({ error: 'Invalid procedure parameters' }, { status: 400 });
+    }
     try {
       const rows = await runtime.execute(principal.ownerId, route.procedure.name, parsed.data);
       return Response.json({ value: rows });
     } catch (error) {
-      return Response.json({ error: error instanceof Error ? error.message : 'Procedure failed' }, { status: 500 });
+      reportError(error);
+      return Response.json({ error: 'Service operation failed' }, { status: 500 });
     }
   };
 }

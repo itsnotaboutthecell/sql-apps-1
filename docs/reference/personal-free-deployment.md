@@ -4,15 +4,30 @@
 
 This profile has no Static Web Apps SLA. It is **potentially $0**, not guaranteed free: the subscription must be eligible and usage must remain within current allowances.
 
+The resources are fail-closed for cost: Static Web Apps Free has no bandwidth
+overage path, and Azure SQL is configured to stop rather than bill by pausing
+when its monthly free compute or storage limit is reached. This can interrupt
+the application until the allowance resets.
+
 ## Security and cost boundary
 
 The profile intentionally creates only a Static Web App and Azure SQL server/database.
 
 Azure SQL uses a public endpoint and the Azure-services firewall rule. The application uses a generated `sql_apps_runtime` login that receives `CONNECT` plus object-scoped `EXECUTE` and `VIEW DEFINITION` only for procedures declared in `personal-free-api.json`. Secrets are stored under `.sql-apps/deployments/`, which generated projects exclude from Git.
 
+The resource group, Static Web App, SQL server and SQL database carry
+`project=sql-apps`, `environment=<dev|test|prod>` and
+`deployment=personal-free` tags for usage and cost tracking. Resource-group
+tagging merges these values without removing unrelated existing tags.
+
 ## Configure the API surface
 
 `personal-free-api.json` is an allowlist, not an automatic schema explorer. Declare each HTTP route, stored procedure, and exact parameter type. The supported types are `nvarchar`, `uniqueidentifier`, `bit`, `int`, and `datetime2`.
+Requests must provide exactly those parameters. JSON strings map to `nvarchar`,
+JSON booleans to `bit`, 32-bit whole numbers to `int`, UUID strings to
+`uniqueidentifier`, and parseable date-time strings to `datetime2`. Invalid
+JSON or parameters return HTTP 400; internal SQL errors are logged without
+being returned to callers.
 
 Set `authenticationProvider` to `aad`, `github`, or `google`. The same provider must be used by `invite-owner`.
 
@@ -41,6 +56,21 @@ Check status without printing secrets:
 ```powershell
 npm run publish -- status
 ```
+
+For a deployed application, status reads the live Azure resource settings and
+must report:
+
+```text
+Cost guard: verified
+Static Web Apps: Free
+Azure SQL: free offer, AutoPause at monthly limit
+```
+
+Deployment, secret rotation, and status all fail if the cost guard cannot prove
+those settings. The check detects a site or database upgraded manually, paid
+SQL overage, a larger database maximum, or nonlocal backup storage. It proves
+configuration at that moment; it does not guarantee future Azure terms or
+cover unrelated resources, GitHub Actions, domains, or third-party services.
 
 Rotate the runtime SQL secret using the current deployment approval code:
 

@@ -5,17 +5,35 @@ import { z } from 'zod';
 import { toolingRoot } from './runtime-roots.js';
 
 const parameterType = z.enum(['nvarchar', 'uniqueidentifier', 'bit', 'int', 'datetime2']);
+const routeSchema = z.strictObject({
+  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
+  path: z.string().regex(/^\/api\/[A-Za-z][A-Za-z0-9_/-]*$/),
+  procedure: z.strictObject({
+    name: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,127}$/),
+    parameters: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,127}$/), parameterType),
+  }),
+});
 const apiSchema = z.strictObject({
   version: z.literal(1),
   authenticationProvider: z.enum(['aad', 'github', 'google']),
-  routes: z.array(z.strictObject({
-    method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
-    path: z.string().regex(/^\/api\/[A-Za-z][A-Za-z0-9_/-]*$/),
-    procedure: z.strictObject({
-      name: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,127}$/),
-      parameters: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,127}$/), parameterType),
-    }),
-  })).min(1),
+  routes: z.array(routeSchema).min(1).superRefine((routes, context) => {
+    const routeKeys = new Set<string>();
+    const procedures = new Set<string>();
+    for (const [index, route] of routes.entries()) {
+      const key = `${route.method} ${route.path}`;
+      if (routeKeys.has(key)) {
+        context.addIssue({ code: 'custom', path: [index], message: `Duplicate personal-free route: ${key}` });
+      }
+      routeKeys.add(key);
+      if (procedures.has(route.procedure.name)) {
+        context.addIssue({
+          code: 'custom', path: [index, 'procedure', 'name'],
+          message: `Duplicate personal-free procedure: ${route.procedure.name}`,
+        });
+      }
+      procedures.add(route.procedure.name);
+    }
+  }),
 });
 
 export interface PersonalFreeBuildManifest {
@@ -63,7 +81,7 @@ export async function buildPersonalFreeArtifact(root: string, destination: strin
       await copyFile(join(toolingRoot, 'dist', 'src', name), join(temporary, 'api', 'dist', name));
     }
     const entry = `import { app } from '@azure/functions';
-import { createPersonalFreeHandler } from './personal-free-app.js';
+import { createPersonalFreeHandler, parsePersonalFreeBody } from './personal-free-app.js';
 import { createProcedureRuntime } from './sql-procedure-runtime.js';
 const routes = ${JSON.stringify(api.routes)};
 const runtime = createProcedureRuntime(process.env, routes.map(route => route.procedure));
@@ -76,7 +94,14 @@ app.http('sqlAppsApi', {
     let body;
     if (!['GET','HEAD'].includes(request.method)) {
       const text = await request.text();
-      body = text ? JSON.parse(text) : undefined;
+      try {
+        body = text ? parsePersonalFreeBody(text) : undefined;
+      } catch (error) {
+        if (error instanceof Error && 'statusCode' in error && error.statusCode === 400) {
+          return { status: 400, jsonBody: { error: error.message } };
+        }
+        throw error;
+      }
     }
     const response = await handler({ method: request.method, url: request.url, headers: request.headers, body });
     return { status: response.status, headers: Object.fromEntries(response.headers.entries()), body: await response.text() };

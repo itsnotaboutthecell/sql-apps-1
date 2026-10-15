@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { createProcedureRuntime, type SqlRuntimeDriver } from '../src/sql-procedure-runtime.js';
+import {
+  createProcedureRuntime,
+  SqlConnectionDiscardedError,
+  type SqlRuntimeDriver,
+} from '../src/sql-procedure-runtime.js';
 
 const env = {
   AZURE_SQL_SERVER: 'personal.database.windows.net',
@@ -86,4 +90,35 @@ test('SQL runtime requires exact declared parameters', async () => {
   assert.deepEqual(await runtime.execute('11111111-1111-5111-8111-111111111111', 'UpdateItem', {
     id: '22222222-2222-5222-8222-222222222222', completed: true,
   }), [{ outcome: 'ok' }]);
+});
+
+test('SQL runtime reconnects after a connection is discarded during cleanup', async () => {
+  let connects = 0;
+  const runtime = createProcedureRuntime(env, [{ name: 'AppReady', parameters: {} }], {
+    driver: {
+      async connect() {
+        connects++;
+        const current = connects;
+        return {
+          async execute() {
+            if (current === 1) {
+              throw new SqlConnectionDiscardedError(new Error('session context cleanup failed'));
+            }
+            return [{ status: 'ready' }];
+          },
+          async close() {},
+        };
+      },
+    },
+    sleep: async () => {},
+  });
+  await assert.rejects(
+    runtime.execute('11111111-1111-5111-8111-111111111111', 'AppReady', {}),
+    /SQL owner context cleanup failed/,
+  );
+  assert.deepEqual(
+    await runtime.execute('11111111-1111-5111-8111-111111111111', 'AppReady', {}),
+    [{ status: 'ready' }],
+  );
+  assert.equal(connects, 2);
 });

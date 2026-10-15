@@ -13,6 +13,7 @@ import {
   rotatePersonalFreeRuntimeSecret,
 } from './personal-free-deployment.js';
 import { protectedDeploymentStateSchema } from './personal-free-config.js';
+import { verifyPersonalFreeCostGuard } from './personal-free-cost-guard.js';
 import { projectRoot } from './runtime-roots.js';
 
 const defaultConfig = join(projectRoot, 'sql-apps.personal-free.json');
@@ -120,26 +121,30 @@ async function inviteOwner(args: readonly string[], command: Run): Promise<strin
   return `Owner invitation (expires in 7 days):\n${invitation.trim()}`;
 }
 
-async function status(args: readonly string[]): Promise<string> {
+async function status(args: readonly string[], command: Run): Promise<string> {
   const values = flags(args);
   const configPath = resolve(take(values, '--config', defaultConfig));
   rejectUnknown(values);
   const config = await readPersonalFreeConfig(configPath);
+  let serializedState: string;
   try {
-    const state = protectedDeploymentStateSchema.parse(JSON.parse(
-      await readFile(personalFreeStatePath(config), 'utf8')));
-    return [
-      `Profile: ${config.profile}`,
-      `Target: ${config.subscriptionId}/${config.resourceGroup}`,
-      `Stage: ${state.stage}`,
-      state.staticWebAppHostname ? `Application: https://${state.staticWebAppHostname}` : undefined,
-      'Cost posture: potentially $0 within current allowances; personal-project tier; no Static Web Apps Free SLA.',
-    ].filter(Boolean).join('\n');
+    serializedState = await readFile(personalFreeStatePath(config), 'utf8');
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return 'Stage: not started';
     throw error;
   }
-
+  const state = protectedDeploymentStateSchema.parse(JSON.parse(serializedState));
+  const report = await verifyPersonalFreeCostGuard(config, state, command);
+  return [
+    `Profile: ${config.profile}`,
+    `Target: ${config.subscriptionId}/${config.resourceGroup}`,
+    `Stage: ${state.stage}`,
+    state.staticWebAppHostname ? `Application: https://${state.staticWebAppHostname}` : undefined,
+    'Cost guard: verified',
+    `Static Web Apps: ${report.staticWebApp}`,
+    'Azure SQL: free offer, AutoPause at monthly limit',
+    'Cost posture: configured to stop rather than bill at free limits; personal-project tier; no Static Web Apps Free SLA.',
+  ].filter(Boolean).join('\n');
 }
 
 async function rotateSecret(args: readonly string[], command: Run): Promise<string> {
@@ -168,7 +173,7 @@ export async function main(
     deploy: () => deploy(rest, command),
     'invite-owner': () => inviteOwner(rest, command),
     'rotate-secret': () => rotateSecret(rest, command),
-    status: () => status(rest),
+    status: () => status(rest, command),
   };
   const handler = handlers[action];
   if (!handler) throw new Error(`Unknown publish action "${action}".\n${usage()}`);

@@ -19,9 +19,9 @@ Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and 
 2. **Initialize read-only.** Run `npm run publish -- init --name <name> --location <region> --environment prod`. This reads the active Azure account and writes nonsecret configuration; it must not create resources.
 3. **Plan.** Run `npm run publish -- plan`. Report the exact subscription/resource group, public-SQL boundary, generated SQL credential, excluded services, potentially-$0 allowance posture, and no-SLA status.
 4. **Get explicit approval.** Azure writes require the approval code from that exact plan. Never infer approval from a request to plan, estimate, or explain.
-5. **Deploy.** Run `npm run publish -- deploy --approve <code>`. The publisher provisions only Static Web Apps and Azure SQL, publishes the DACPAC, creates object-scoped runtime grants, deploys the site/API artifact, and verifies database-backed readiness.
+5. **Deploy.** Run `npm run publish -- deploy --approve <code>`. The publisher provisions only Static Web Apps and Azure SQL, applies the `project=sql-apps`, environment and `deployment=personal-free` tracking tags, verifies the live free SKU and non-billing SQL settings before continuing, publishes the DACPAC, creates object-scoped runtime grants, deploys the site/API artifact, and verifies database-backed readiness.
 6. **Invite the owner.** Run `npm run publish -- invite-owner --provider <provider> --user <identity>`. Merely authenticated users are not owners.
-7. **Validate live.** Test anonymous, owner, and signed-in-nonowner states, then perform a browser write and prove SQL persistence after reload. A template build or successful ARM deployment is not acceptance.
+7. **Validate live.** Run `npm run publish -- status` and require `Cost guard: verified`. Then test anonymous, owner, and signed-in-nonowner states, perform a browser write, and prove SQL persistence after reload. A template build or successful ARM deployment is not acceptance.
 
 Before presenting this route as executable, run the repository's focused publisher, infrastructure, authentication, and packaging tests. If the implementation or live canary is incomplete, say exactly what is unverified.
 
@@ -29,6 +29,8 @@ Before presenting this route as executable, run the repository's focused publish
 
 The low fixed cost is an explicit trade-off:
 
+- The profile creates no always-billable Azure service. Static Web Apps Free and Azure SQL AutoPause stop rather than bill when their free limits are exhausted, which can interrupt service.
+- The cost guard fails closed unless the deployed Static Web Apps Free SKU and Azure SQL free-offer settings can be proven. It does not cover manual additions, future offer changes, GitHub Actions, domains, or third-party services.
 - Azure SQL has a public endpoint.
 - The `0.0.0.0` firewall rule admits Azure resources outside the subscription.
 - Managed Functions do not provide this profile a SQL managed identity.

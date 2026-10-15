@@ -5,10 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   approveProtectedDeploymentRevision,
+  createPersonalFreeResourceGroup,
   createProtectedDeploymentState,
   initPersonalFreeConfig,
   planPersonalFreeDeployment,
   saveProtectedDeploymentState,
+  verifyPersonalFreeReadiness,
+  verifyPersonalFreeInfrastructure,
 } from '../src/personal-free-deployment.js';
 import type { Run } from '../src/process.js';
 
@@ -43,6 +46,39 @@ test('personal-free init is read-only and plan binds warnings to approval', asyn
   assert.equal(planPersonalFreeDeployment(config, 'changed').approval === plan.approval, false);
 });
 
+test('personal-free resource group carries the project tracking tag', async () => {
+  const calls: string[][] = [];
+  const config = await initPersonalFreeConfig({
+    name: 'Personal Tracker',
+    location: 'westus2',
+    resourceGroup: 'rg-personal',
+    environment: 'prod',
+  }, async (_command, args) => args[0] === 'account'
+    ? JSON.stringify({ id: subscriptionId, tenantId, user: { name: 'owner@example.com', type: 'user' } })
+    : operatorId);
+  const command: Run = async (executable, args) => {
+    calls.push([executable, ...args]);
+    return '';
+  };
+  await createPersonalFreeResourceGroup(config, command);
+  assert.deepEqual(calls, [
+    [
+      'az', 'group', 'create',
+      '--subscription', subscriptionId,
+      '--name', 'rg-personal',
+      '--location', 'westus2',
+      '-o', 'none',
+    ],
+    [
+      'az', 'group', 'update',
+      '--subscription', subscriptionId,
+      '--name', 'rg-personal',
+      '--set', 'tags.project=sql-apps', 'tags.environment=prod', 'tags.deployment=personal-free',
+      '-o', 'none',
+    ],
+  ]);
+});
+
 test('protected deployment state contains strong secrets and is written privately', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'sql-apps-personal-state-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -66,4 +102,54 @@ test('a newly approved build preserves protected credentials for the existing de
   assert.equal(revised.stage, 'new');
   assert.equal(revised.sqlAdministratorPassword, state.sqlAdministratorPassword);
   assert.equal(revised.runtimePassword, state.runtimePassword);
+});
+
+test('infrastructure stage is returned only after the live cost guard passes', async () => {
+  const state = createProtectedDeploymentState('0123456789ab');
+  const config = await initPersonalFreeConfig({
+    name: 'Personal Tracker',
+    location: 'westus2',
+    resourceGroup: 'rg-personal',
+  }, async (_command, args) => args[0] === 'account'
+    ? JSON.stringify({ id: subscriptionId, tenantId, user: { name: 'owner@example.com', type: 'user' } })
+    : operatorId);
+  const outputs = {
+    staticWebAppName: 'personal-tracker-prod-abc',
+    staticWebAppHostname: 'personal-tracker-prod-abc.azurestaticapps.net',
+    sqlServer: 'personal-tracker-prod-abc.database.windows.net',
+    databaseName: 'app' as const,
+  };
+  const paidRun: Run = async (_command, args) => {
+    if (args[0] === 'staticwebapp') {
+      return JSON.stringify({ name: outputs.staticWebAppName, sku: { name: 'Standard', tier: 'Standard' } });
+    }
+    return JSON.stringify({
+      name: 'app',
+      edition: 'GeneralPurpose',
+      currentServiceObjectiveName: 'GP_S_Gen5_2',
+      maxSizeBytes: 34359738368,
+      currentBackupStorageRedundancy: 'Local',
+      requestedBackupStorageRedundancy: 'Local',
+      useFreeLimit: true,
+      freeLimitExhaustionBehavior: 'AutoPause',
+    });
+  };
+  const savedStages: string[] = [];
+  await assert.rejects(
+    verifyPersonalFreeInfrastructure(config, state, outputs, paidRun, async prepared => {
+      savedStages.push(prepared.stage);
+    }),
+    /Static Web Apps SKU is Standard\/Standard/,
+  );
+  assert.deepEqual(savedStages, ['infrastructure']);
+});
+
+test('personal-free readiness uses a bounded request', async () => {
+  let signal: AbortSignal | null | undefined;
+  const fetcher: typeof fetch = async (_input, init) => {
+    signal = init?.signal;
+    return Response.json({ status: 'ready' });
+  };
+  await verifyPersonalFreeReadiness('personal-tracker.azurestaticapps.net', fetcher);
+  assert.ok(signal instanceof AbortSignal);
 });

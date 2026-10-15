@@ -47,5 +47,39 @@ test('personal-free build emits only static and managed Functions artifacts', as
   });
   const serialized = await readFile(join(destination, 'personal-free-build.json'), 'utf8');
   assert.doesNotMatch(serialized, /password|token|connection/i);
-  assert.doesNotMatch(await readFile(join(destination, 'api', 'dist', 'index.mjs'), 'utf8'), /test-only-not-a-real-password/);
+  const entry = await readFile(join(destination, 'api', 'dist', 'index.mjs'), 'utf8');
+  assert.doesNotMatch(entry, /test-only-not-a-real-password/);
+  assert.match(entry, /parsePersonalFreeBody/);
+});
+
+test('personal-free build rejects duplicate routes and procedure declarations before deployment', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'sql-apps-personal-free-duplicates-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, 'public'), { recursive: true });
+  for (const [name, content] of [
+    ['index.html', '<main>Personal</main>'],
+    ['style.css', 'main{display:block}'],
+    ['app.js', ''],
+    ['staticwebapp.config.json', '{}'],
+  ] as const) await writeFile(join(root, 'public', name), content);
+  const destination = join(root, 'artifact');
+  const route = {
+    method: 'GET',
+    path: '/api/AppReady',
+    procedure: { name: 'AppReady', parameters: {} },
+  };
+  await writeFile(join(root, 'personal-free-api.json'), JSON.stringify({
+    version: 1, authenticationProvider: 'aad', routes: [route, route],
+  }));
+  await assert.rejects(buildPersonalFreeArtifact(root, destination), /duplicate.*route/i);
+
+  await writeFile(join(root, 'personal-free-api.json'), JSON.stringify({
+    version: 1,
+    authenticationProvider: 'aad',
+    routes: [
+      route,
+      { method: 'POST', path: '/api/ReadyAgain', procedure: route.procedure },
+    ],
+  }));
+  await assert.rejects(buildPersonalFreeArtifact(root, destination), /duplicate.*procedure/i);
 });

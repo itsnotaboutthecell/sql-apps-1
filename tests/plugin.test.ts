@@ -30,7 +30,7 @@ test('SQL Apps identity is consistent across packages, platform manifests and ma
     assert.equal(manifest.name, 'sql-apps', path);
     assert.equal(manifest.homepage, repository, path);
     assert.equal(manifest.repository, repository, path);
-    assert.equal(manifest.version, '0.2.1', path);
+    assert.equal(manifest.version, '0.2.2', path);
     assert.deepEqual(manifest.author, { name: 'Microsoft SQL team (mssql)', url: 'https://github.com/microsoft' }, path);
     if (manifest.interface) {
       assert.equal(manifest.interface.displayName, 'SQL Apps');
@@ -291,21 +291,25 @@ test('agent guidance stays concise, stack-neutral and script-led', async () => {
 
 test('plugin launcher binds the actual checkout independently of plugin cache/session directory', async t => {
   const profile = await mkdtemp(join(tmpdir(), 'sql-apps-plugin-'));
+  const userHome = await mkdtemp(join(tmpdir(), 'sql-apps-plugin-home-'));
   t.after(() => rm(profile, { recursive: true, force: true }));
+  t.after(() => rm(userHome, { recursive: true, force: true }));
   const home = resolve('.');
   await writeFile(join(profile, 'sql-apps-local.json'), JSON.stringify({ version: 1, home }));
-  assert.equal((await probe('process.chdir(process.env.COPILOT_HOME); console.log(await resolveHome());',
-    { COPILOT_HOME: profile, SQL_APPS_HOME: undefined })).trim(), home);
+  assert.equal((await probe('process.chdir(process.env.COPILOT_HOME); console.log(await resolveHome({ userHome: process.env.TEST_USER_HOME }));',
+    { COPILOT_HOME: profile, SQL_APPS_HOME: undefined, TEST_USER_HOME: userHome })).trim(), home);
   assert.equal((await probe('console.log(await resolveHome());', { SQL_APPS_HOME: home })).trim(), home);
 });
 
 test('plugin launcher reports invalid bindings and commands rather than falling back silently', async t => {
   const profile = await mkdtemp(join(tmpdir(), 'sql-apps-plugin-invalid-'));
+  const userHome = await mkdtemp(join(tmpdir(), 'sql-apps-plugin-invalid-home-'));
   t.after(() => rm(profile, { recursive: true, force: true }));
+  t.after(() => rm(userHome, { recursive: true, force: true }));
   await mkdir(join(profile, 'not-sql-apps'));
   await writeFile(join(profile, 'sql-apps-local.json'), '{ invalid');
-  await assert.rejects(probe('process.chdir(process.env.COPILOT_HOME); await resolveHome();',
-    { COPILOT_HOME: profile, SQL_APPS_HOME: undefined }), /JSON|SyntaxError/);
+  await assert.rejects(probe('process.chdir(process.env.COPILOT_HOME); await resolveHome({ userHome: process.env.TEST_USER_HOME });',
+    { COPILOT_HOME: profile, SQL_APPS_HOME: undefined, TEST_USER_HOME: userHome }), /JSON|SyntaxError/);
   await assert.rejects(probe('await resolveHome();', { SQL_APPS_HOME: join(profile, 'not-sql-apps') }), /ENOENT/);
   await assert.rejects(run(process.execPath, [launcher, 'deploy']), /Unsupported plugin command/);
   await assert.rejects(run(process.execPath, [launcher, 'verify', 'invalid;container']), /Invalid SQL container name/);

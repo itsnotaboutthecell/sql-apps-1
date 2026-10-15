@@ -33,6 +33,13 @@ export interface SqlRuntimeDriver {
   connect(config: SqlConnectionConfig): Promise<SqlRuntimeConnection>;
 }
 
+export class SqlConnectionDiscardedError extends Error {
+  constructor(cause: unknown) {
+    super('SQL owner context cleanup failed; the connection pool was discarded', { cause });
+    this.name = 'SqlConnectionDiscardedError';
+  }
+}
+
 interface RuntimeDependencies {
   driver?: SqlRuntimeDriver;
   sleep?: (milliseconds: number) => Promise<void>;
@@ -99,7 +106,7 @@ const mssqlDriver: SqlRuntimeDriver = {
           await transaction.rollback().catch(() => {});
           if (cleanupError) {
             await pool.close();
-            throw new Error('SQL owner context cleanup failed; the connection pool was discarded', { cause: cleanupError });
+            throw new SqlConnectionDiscardedError(cleanupError);
           }
           throw error;
         }
@@ -166,7 +173,12 @@ export function createProcedureRuntime(
       const expected = Object.keys(definition.parameters).sort();
       const actual = Object.keys(values).sort();
       if (JSON.stringify(expected) !== JSON.stringify(actual)) throw new Error('SQL procedure parameters do not match the declaration');
-      return (await connect()).execute(subject, procedure, values, definition);
+      try {
+        return await (await connect()).execute(subject, procedure, values, definition);
+      } catch (error) {
+        if (error instanceof SqlConnectionDiscardedError) connection = undefined;
+        throw error;
+      }
     },
     async ready() { await connect(); },
     async close() {

@@ -16,6 +16,9 @@ This is a personal-project tier with **no Static Web Apps SLA**. It can plausibl
 The trade-off for the low fixed cost is deliberate: Azure SQL has a public endpoint, and its `0.0.0.0` firewall rule admits connections from Azure resources outside your subscription. SQL authentication remains enabled because Static Web Apps managed Functions do not provide the application a managed identity. Stored-procedure allowlisting, object-scoped grants, an invited owner role, encryption, and certificate validation limit the resulting access, but do not turn this into an enterprise private-network architecture.
 
 Use the [personal-free deployment reference](../reference/personal-free-deployment.md). The workflow is read-only until `deploy --approve` receives the approval code from the current plan.
+Deployment applies `project=sql-apps`, the selected environment and
+`deployment=personal-free` tags to the resource group and each taggable
+application resource so usage and cost views can group this project.
 
 ## Choose the right path
 
