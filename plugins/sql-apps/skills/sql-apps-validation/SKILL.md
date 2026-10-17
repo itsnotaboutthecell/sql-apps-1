@@ -5,21 +5,22 @@ description: "Use when validating SQL Apps changes or collecting test, browser, 
 
 # Validate SQL Apps
 
-Resolve `../../scripts/sql-apps.mjs` from this installed skill, run `home`, and confirm the target checkout. Inspect `package.json`: `sqlApps.project` identifies generated apps. Choose the smallest covering check; full suite only when targeted evidence warrants it.
+Run absolute installed `../../scripts/sql-apps.mjs` with `home`; confirm checkout. Inspect `package.json`: `sqlApps.project` identifies generated apps. Choose the smallest covering check; full suite only when warranted.
 
 ## Generated applications
 
-Use `npm run build`. Run declared test scripts when present; otherwise use the existing Node runner on real test files. Typecheck with `npx --no-install tsc --noEmit`. Never invent scripts/paths, install another runner or switch projects to make a check available. Report missing checks.
+After restore: `npm run build`, `npm run app:check`, declared tests and `npx --no-install tsc --noEmit`. Approved API checks: `npm run app:check-api -- "<verified-origin>"`. No copied foundation scripts, invented commands, new runners or project switching; report missing checks.
 
 ## Foundation and plugin maintenance
 
-Only in the foundation, select its declared scripts: `npm run plugin:check`, `npm run typecheck`, `npm run app:check`, `npm run sql:build`, `npm run dab:validate`, `npm run infra:build`, or `npm test`. Use focused compiler/Node tests first; a targeted pass is not a full-suite pass.
+Foundation only: use declared `npm run plugin:check`, `npm run typecheck` and
+relevant tests. Targeted passes are not full-suite passes.
 
 Use `docs/maintainers/application-boundary.md` for source, SQL model and live API/database absence checks in either target.
 
 ## Live workflow evidence
 
-For approved running local apps, run launcher checks sequentially: `app-check` (clean database), `test` (read-only SQL), and `app-test` (Development Alice admitted, Bob 403). Fixture writes and service restarts need documented approval; startup belongs to `sql-apps-local`. Cloud probes follow the publisher contract.
+For approved running local apps, run sequential launcher checks: `app-check` (clean database), `test` (read-only SQL), `app-test` (Development Alice admitted, Bob 403). Fixture writes/restarts need documented approval; startup belongs to `sql-apps-local`. Cloud probes follow the publisher contract.
 
 Apply **Domain contracts and live acceptance** from the boundary reference:
 
@@ -27,15 +28,17 @@ Apply **Domain contracts and live acceptance** from the boundary reference:
 - Supply the expected Origin and authorization. Pair invalid/foreign writes with a positive control; prove rejected writes leave data unchanged.
 - Verify a real browser action, initial-load failure, failed-save retention and SQL save/reload. Reload means a new browser document and refetched SQL state.
 
-Unavailable input/services/tools mean missing evidence, not acceptance. Forced DOM clicks, mocks, source review, health responses and compilation do not prove the workflow.
+Unavailable input/services/tools mean missing evidence. Forced DOM clicks, mocks, source review, health and compilation do not prove workflows.
+
+For performance work or changed reads, apply `docs/reference/read-performance.md` for comparable before/after measurements, sample counts and correctness checks. Report unobserved performance as missing evidence within functional acceptance.
 
 ## Rendered browser review
 
-Keep API/SQL acceptance, real browser workflow acceptance, and rendered visual review distinct. Screenshots do not prove persistence or access; compile/API results do not prove visuals.
+Keep API/SQL acceptance, real browser workflow acceptance and rendered visual review distinct. Screenshots do not prove persistence/access; compile/API results do not prove visuals.
 
-For new user-facing apps and meaningful UI changes, run `sql-apps-design`'s render-critique-improve loop before broad coverage. Verify the intended origin; use semantic browser inspection and real interactions. Never invent page handles or confuse instance/page handles. Inspect desktop and narrow widths; if tooling fails, discover supported alternatives. Opening a tab or source review is not visual review. If blocked, state the exact evidence not observed, separate from user-reported feedback.
+For new apps and meaningful UI changes, run `sql-apps-design`'s render-critique-improve loop before broad coverage. Verify the intended origin; use semantic browser inspection and real interactions. Never invent or confuse page/instance handles. Inspect desktop and narrow widths; if tooling fails, discover supported alternatives. Source review or opening a tab is not visual review. If blocked, state exact evidence not observed separately from user-reported feedback.
 
-Record origin, source/build, viewport, state, artifact, findings and re-review in `docs/design-review.md` per `docs/reference/design-acceptance.md`, then run `sql-apps check`.
+Record origin, source/build, viewport, state, artifact, findings/re-review in `docs/design-review.md` per `docs/reference/design-acceptance.md`; run `sql-apps check`. Progressive Ready additionally requires `creation accept` with retained current evidence; see `docs/reference/progressive-creation.md`.
 
 ## Four-verdict report
 

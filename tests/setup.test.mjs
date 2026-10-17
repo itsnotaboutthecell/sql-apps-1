@@ -24,7 +24,8 @@ function fixture(overrides = {}) {
     run: async (command, args) => {
       calls.push([command, ...args]);
       if (command === 'npm') return '10.9.4';
-      if (command === 'dotnet') return args[0] === '--list-sdks' ? '8.0.421 [SDK]' : '8.0.421';
+      if (command === 'dotnet') return args[0] === '--list-sdks' ? '8.0.421 [SDK]' :
+        args[0] === '--list-runtimes' ? 'Microsoft.NETCore.App 8.0.27 [runtime]\nMicrosoft.AspNetCore.App 8.0.27 [runtime]' : '8.0.421';
       if (args[0] === '--version') return 'Docker version 28.0.0';
       if (args[0] === 'info') return '{"OSType":"linux","Architecture":"x86_64","MemTotal":8589934592}';
       if (args[0] === 'image') return '[{"Architecture":"amd64","Os":"linux"}]';
@@ -47,6 +48,138 @@ test('read-only pre-build diagnostics work on Windows, macOS and Linux without d
     assert.ok(deps.calls.every(call => !call.some(value => ['pull', 'run', 'login', 'start', 'stop', 'rm', 'install', 'restore'].includes(value))));
     assert.ok(deps.calls.every(call => !call.some(value => value.includes('Config.Env'))));
   }
+});
+
+test('missing preview access offers Azure SQL before Express without running login or installation', async () => {
+  const base = fixture();
+  const deps = fixture({ run: async (command, args) => {
+    if (command === 'docker' && args[0] === 'image') throw new Error('not cached');
+    return base.run(command, args);
+  } });
+  const report = await checkSetup({ root: process.cwd() }, deps);
+  assert.equal(report.sqlRoutes?.recommended, 'azure');
+  assert.deepEqual(report.sqlRoutes.routes.map(route => route.provider), ['container', 'azure', 'express']);
+  assert.equal(report.ready, false, 'an alternative is not approval or database readiness');
+  assert.equal(base.calls.some(call => call.includes('login') || call.includes('install')), false);
+});
+
+test('unsupported hosts do not recommend an Express installation', async () => {
+  const report = await checkSetup({ root: process.cwd() }, fixture({ platform: 'darwin', architecture: 'arm64' }));
+  assert.equal(report.sqlRoutes?.routes.find(route => route.provider === 'express').availability, 'unavailable');
+});
+
+test('selected Azure and Express prerequisites do not probe Docker or require preview access', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'sql-apps-endpoint-check-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const provider of ['azure', 'express']) {
+    const target = provider === 'azure' ? { version: 1, provider, server: 'example.database.windows.net', database: 'development',
+      subscriptionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tenantId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', resourceGroup: 'development' } :
+      { version: 1, provider, instance: 'SQLEXPRESS', server: '127.0.0.1', port: 1433, database: 'development' };
+    const path = join(root, `${provider}.json`);
+    await writeFile(path, JSON.stringify(target));
+    const base = fixture(), calls = [];
+    const deps = fixture({ run: async (command, args) => {
+      calls.push([command, ...args]);
+      if (command === 'az') return JSON.stringify({ id: target.subscriptionId, tenantId: target.tenantId });
+      if (command === 'powershell.exe') return JSON.stringify({ supported: true,
+        instances: [{ instance: 'SQLEXPRESS', majorVersion: 17, edition: 'Express Edition', verified: true, integratedSecurityOnly: 0, containedAuthentication: 1, loopbackPorts: [1433] }] });
+      return base.run(command, args);
+    } });
+    const report = await checkSetup({ root: process.cwd(), sqlProvider: provider, sqlTarget: path }, deps);
+    assert.equal(report.ready, true);
+    assert.equal(report.sqlRoutes.recommended, provider);
+    assert.equal(calls.some(call => call[0] === 'docker'), false);
+    if (provider === 'express') assert.equal(calls.some(call => call[0] === 'az'), false);
+  }
+});
+
+test('Windows-only or unknown Express authentication requires separate mixed-mode review without changing the instance', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'sql-apps-express-auth-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const path = join(root, 'express.json');
+  await writeFile(path, JSON.stringify({ version: 1, provider: 'express', instance: 'SQLEXPRESS',
+    server: '127.0.0.1', port: 1433, database: 'development' }));
+  for (const integratedSecurityOnly of [1, undefined]) {
+    const base = fixture(), calls = [];
+    const report = await checkSetup({ root: process.cwd(), sqlProvider: 'express', sqlTarget: path }, fixture({
+      run: async (command, args) => {
+        calls.push([command, ...args]);
+        if (command === 'powershell.exe') return JSON.stringify({ supported: true, instances: [{
+          instance: 'SQLEXPRESS', majorVersion: 17, edition: 'Express Edition', verified: true,
+          containedAuthentication: 1, loopbackPorts: [1433], integratedSecurityOnly,
+        }] });
+        return base.run(command, args);
+      },
+    }));
+    assert.equal(report.ready, false);
+    const check = report.checks.find(item => item.id === 'sql-express');
+    assert.equal(check.code, 'EXPRESS_SQL_AUTHENTICATION_REVIEW_REQUIRED');
+    assert.match(JSON.stringify(check), /configure-express-auth/);
+    assert.ok(calls.every(call => !call.includes('ConfigureSqlAuthentication')));
+  }
+});
+
+test('host DAB requires both stable .NET 8 runtimes even when a newer SDK is selected', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'sql-apps-host-runtime-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const core = 'Microsoft.NETCore.App 8.0.27 [runtime]';
+  const aspnet = 'Microsoft.AspNetCore.App 8.0.27 [runtime]';
+  for (const provider of ['azure', 'express']) {
+    const target = provider === 'azure' ? { version: 1, provider, server: 'example.database.windows.net', database: 'development',
+      subscriptionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tenantId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', resourceGroup: 'development' } :
+      { version: 1, provider, instance: 'SQLEXPRESS', server: '127.0.0.1', port: 1433, database: 'development' };
+    const path = join(root, `${provider}.json`);
+    await writeFile(path, JSON.stringify(target));
+    for (const [runtimes, state] of [
+      ['Microsoft.NETCore.App 10.0.0 [runtime]\nMicrosoft.AspNetCore.App 10.0.0 [runtime]', 'missing'],
+      [core, 'missing'], [aspnet, 'missing'], ['', 'missing'],
+      [`${core}\nMicrosoft.AspNetCore.App 8.0.0-preview.1 [runtime]`, 'missing'],
+      [`${core}\n${aspnet}\nMicrosoft.NETCore.App 10.0.0 [runtime]`, 'ready'],
+      ['invalid runtime listing', 'check-failed'], [new Error('permission denied'), 'check-failed'],
+    ]) {
+      const base = fixture(), calls = [];
+      const report = await checkSetup({ root: process.cwd(), sqlProvider: provider, sqlTarget: path }, fixture({
+        run: async (command, args) => {
+          calls.push([command, ...args]);
+          if (command === 'dotnet') {
+            if (args[0] === '--list-sdks') return '10.0.100 [SDK]';
+            if (args[0] === '--version') return '10.0.100';
+            if (runtimes instanceof Error) throw runtimes;
+            return runtimes;
+          }
+          if (command === 'az') return JSON.stringify({ id: target.subscriptionId, tenantId: target.tenantId });
+          if (command === 'powershell.exe') return JSON.stringify({ supported: true, instances: [{
+            instance: 'SQLEXPRESS', majorVersion: 17, edition: 'Express Edition', verified: true,
+            integratedSecurityOnly: 0, containedAuthentication: 1, loopbackPorts: [1433],
+          }] });
+          return base.run(command, args);
+        },
+      }));
+      const check = report.checks.find(item => item.id === 'host-dab-runtime');
+      assert.equal(check?.toolState, state, `${provider}: ${runtimes}`);
+      assert.equal(report.ready, state === 'ready');
+      assert.equal(report.checks.find(item => item.id === 'dotnet').toolState, 'ready');
+      assert.equal(calls.some(call => call.includes('--list-runtimes')), true);
+      assert.equal(calls.some(call => call.includes('install')), false);
+    }
+  }
+});
+
+test('a saved container selection remains sticky even when image access fails', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'sql-apps-sticky-container-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { realpath } = await import('node:fs/promises');
+  const home = await realpath(root);
+  await mkdir(join(home, '.sql-apps'));
+  await writeFile(join(home, '.sql-apps', 'sql-target.json'), JSON.stringify({ version: 1, home,
+    target: { version: 1, provider: 'container', container: runtimeFor(undefined, home).defaultSql } }));
+  const base = fixture();
+  const report = await checkSetup({ root: home }, fixture({ run: (command, args) => {
+    if (command === 'docker' && args[0] === 'image') throw new Error('image absent');
+    return base.run(command, args);
+  } }));
+  assert.equal(report.sqlRoutes.recommended, 'container');
+  assert.equal(report.sqlRoutes.selectionRequired, false);
 });
 
 test('role-based-data setup checks only selected service ports and remains read-only', async () => {
@@ -248,6 +381,16 @@ test('CLI-only dependencies require their locked package and executable, not a l
   assert.equal((await setup.inspectDependencies(home, probe)).npmReady, false);
   await writeFile(join(home, 'node_modules', 'fixture', 'dist', 'cli.js'), 'console.log("fixture");');
   assert.equal((await setup.inspectDependencies(home, probe)).npmReady, true);
+  await writeFile(join(home, 'node_modules', 'fixture', 'package.json'), JSON.stringify({
+    name: 'fixture', version: '1.0.0', bin: { fixture: 'dist/cli.js' },
+    exports: { './contract': './dist/contract.js' },
+  }));
+  assert.equal((await setup.inspectDependencies(home, probe)).npmReady, true,
+    'subpath-only exports do not require a root library entry for a CLI');
+  await unlink(join(home, 'node_modules', 'fixture', 'dist', 'cli.js'));
+  assert.equal((await setup.inspectDependencies(home, probe)).npmReady, false,
+    'subpath exports must not hide a missing declared executable');
+  await writeFile(join(home, 'node_modules', 'fixture', 'dist', 'cli.js'), 'console.log("fixture");');
   await writeFile(join(home, 'node_modules', 'fixture', 'package.json'),
     '{"name":"fixture","version":"2.0.0","bin":{"fixture":"dist/cli.js"}}');
   assert.equal((await setup.inspectDependencies(home, probe)).npmReady, false);

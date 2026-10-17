@@ -2,8 +2,8 @@ export const authRedirectPath = '/auth/redirect.html';
 
 /** The signed-in status page calls readinessPath, the application's read-only DAB procedure. */
 export type BrowserConfig =
-  | { mode: 'entra'; tenantId: string; clientId: string; scope: string; localBackend?: boolean; readinessPath: string }
-  | { mode: 'local'; readinessPath: string }
+  | { mode: 'entra'; tenantId: string; clientId: string; scope: string; localBackend?: boolean; readinessPath: string; creationStatusPath?: '/__sql_apps/creation' }
+  | { mode: 'local'; readinessPath: string; creationStatusPath?: '/__sql_apps/creation' }
   | { mode: 'static-web-apps'; provider: 'aad' | 'github' | 'google'; readinessPath: string };
 
 export function parseBrowserConfig(value: unknown): BrowserConfig {
@@ -12,7 +12,13 @@ export function parseBrowserConfig(value: unknown): BrowserConfig {
   if (typeof readinessPath !== 'string' || !/^\/api\/[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(readinessPath)) {
     throw new Error('Invalid browser readiness path');
   }
-  if ('mode' in value && value.mode === 'local') return { mode: 'local', readinessPath };
+  const creation = 'creationStatusPath' in value;
+  if (creation && (value.creationStatusPath !== '/__sql_apps/creation' ||
+      !('mode' in value) || value.mode !== 'local' && !(value.mode === 'entra' && 'localBackend' in value && value.localBackend === true))) {
+    throw new Error('Creation status is allowed only on the local front-door origin');
+  }
+  const status: { creationStatusPath?: '/__sql_apps/creation' } = creation ? { creationStatusPath: '/__sql_apps/creation' } : {};
+  if ('mode' in value && value.mode === 'local') return { mode: 'local', readinessPath, ...status };
   if ('mode' in value && value.mode === 'static-web-apps' && 'provider' in value &&
       ['aad', 'github', 'google'].includes(String(value.provider))) {
     return { mode: 'static-web-apps', provider: value.provider as 'aad' | 'github' | 'google', readinessPath };
@@ -23,7 +29,7 @@ export function parseBrowserConfig(value: unknown): BrowserConfig {
     const localBackend = 'localBackend' in value ? value.localBackend : undefined;
     if ('localBackend' in value && typeof localBackend !== 'boolean') throw new Error('Invalid local backend configuration');
     return { mode: 'entra', tenantId: value.tenantId, clientId: value.clientId, scope: value.scope,
-      ...(typeof localBackend === 'boolean' ? { localBackend } : {}), readinessPath };
+      ...(typeof localBackend === 'boolean' ? { localBackend } : {}), readinessPath, ...status };
   }
   throw new Error('Invalid browser authentication configuration');
 }

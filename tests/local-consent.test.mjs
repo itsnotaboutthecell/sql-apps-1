@@ -9,7 +9,7 @@ import { once } from 'node:events';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
-import { planConsent, assertConsent, grantConsent, revokeConsent, acknowledgeTerms } from '../src/local-consent.mjs';
+import { planConsent, assertConsent, grantConsent, revokeConsent, acknowledgeTerms, planBundle, grantBundle } from '../src/local-consent.mjs';
 import { initializeWorkspace } from '../src/workspace.mjs';
 import { withFileLock } from '../src/file-lock.mjs';
 const execute = promisify(execFile);
@@ -33,6 +33,12 @@ async function fixture(t, selected = false) {
     'src/local-app.ts': '// gateway',
     'src/selected-local.ts': '// selected app',
     'src/local-images.ts': '// pinned local images',
+    'src/sql-endpoint.ts': '// endpoint runtime',
+    'src/endpoint-local.ts': '// endpoint operations',
+    'src/local-data-process.ts': '// host DAB',
+    'src/sql-target.mjs': '// target selection',
+    'scripts/sql-express.ps1': '# Windows bootstrap',
+    '.config/host-dab/dotnet-tools.json': '{}',
     'scripts/build-provenance.mjs': '// build',
     'tsconfig.runtime.json': '{}',
     'role-based-data.json': '{"profile":"role-based-data","requiredRole":"AppUser","readinessPath":"/api/Ready"}',
@@ -53,6 +59,63 @@ test('read-only commands remain available without grants or state creation', asy
     assert.equal((await planConsent(home, { operation })).allowed, true);
   }
   await assert.rejects(readFile(join(home, '.sql-apps', 'consent.json')), { code: 'ENOENT' });
+});
+
+test('endpoint approval selects only the reviewed target and never accepts container terms', async t => {
+  const home = await realpath(await fixture(t, true));
+  const sqlTarget = { version: 1, provider: 'express', instance: 'SQLEXPRESS', server: '127.0.0.1', port: 1433, database: 'development' };
+  const bundle = await planBundle(home, { profile: 'role-based-data', sqlTarget });
+  assert.equal(bundle.terms.required, false);
+  assert.equal(bundle.requirements.some(item => item.scope === 'sql-start'), false);
+  assert.ok(bundle.requirements.some(item => item.target.includes('express')));
+  await assert.rejects(readFile(join(home, '.sql-apps', 'sql-target.json')), { code: 'ENOENT' });
+  await assert.rejects(grantBundle(home, { profile: 'role-based-data', sqlTarget: { ...sqlTarget, port: 1434 }, approval: bundle.approval }), /changed/);
+  await grantBundle(home, { profile: 'role-based-data', sqlTarget, approval: bundle.approval });
+  assert.deepEqual(JSON.parse(await readFile(join(home, '.sql-apps', 'sql-target.json'), 'utf8')).target, sqlTarget);
+  const consent = await planConsent(home, { operation: 'app' });
+  assert.equal(consent.allowed, true);
+  assert.equal(consent.termsRequired, false);
+  await writeFile(join(home, '.sql-apps', 'sql-target.json'), JSON.stringify({ version: 1, home, target: { ...sqlTarget, port: 1434 } }));
+  assert.equal((await planConsent(home, { operation: 'app' })).allowed, false);
+});
+
+test('Express instance changes are separate, target-bound one-operation grants, even before workspace initialization', async t => {
+  const home = await realpath(await fixture(t));
+  const sqlTarget = { version: 1, provider: 'express', instance: 'SQLEXPRESS', server: '127.0.0.1', port: 1433, database: 'development' };
+  const bundle = await planBundle(home, { profile: 'role-based-data', workspace: '30000', sqlTarget });
+  await grantBundle(home, { profile: 'role-based-data', workspace: '30000', sqlTarget, approval: bundle.approval });
+  const request = { operation: 'configure-express' };
+  const plan = await planConsent(home, request);
+  assert.equal(plan.allowed, false, 'ordinary startup approval never authorizes instance changes');
+  assert.equal(plan.termsRequired, false);
+  assert.deepEqual(plan.requirements.map(item => item.scope), ['maintenance']);
+  assert.equal(plan.requirements[0].reusable, false);
+  await assert.rejects(grantConsent(home, plan), /one-operation/);
+  await grantConsent(home, plan, { once: true });
+  const authRequest = { operation: 'configure-express-auth' };
+  const authPlan = await planConsent(home, authRequest);
+  assert.equal(authPlan.allowed, false, 'containment/TCP approval never authorizes mixed mode');
+  assert.equal(authPlan.requirements[0].reusable, false);
+  assert.match(authPlan.requirements[0].effects.join(' '), /mixed.mode/i);
+  assert.notEqual(authPlan.requirements[0].contract, plan.requirements[0].contract);
+  await assertConsent(home, request);
+  await assert.rejects(assertConsent(home, request), /permission/);
+  await grantConsent(home, authPlan, { once: true });
+  await assertConsent(home, authRequest);
+  await assert.rejects(assertConsent(home, authRequest), /permission/);
+});
+
+test('endpoint CLI initializes its approved workspace without interpreting the port block as a container', async t => {
+  const home = await realpath(await fixture(t));
+  const { proposeWorkspace } = await import('../src/workspace.mjs');
+  const proposal = await proposeWorkspace(home, undefined, { includeSql: false });
+  const workspace = String((proposal.conflicts.length ? proposal.alternative : proposal.descriptor).basePort);
+  const sqlTarget = { version: 1, provider: 'express', instance: 'SQLEXPRESS', server: '127.0.0.1', port: 1433, database: 'development' };
+  const bundle = await planBundle(home, { profile: 'role-based-data', workspace, sqlTarget });
+  await grantBundle(home, { profile: 'role-based-data', workspace, sqlTarget, approval: bundle.approval });
+  await execute(process.execPath, [resolve('dist', 'src', 'local-cli.js'), 'workspace-init', workspace],
+    { cwd: home, env: { ...process.env, SQL_APPS_PROJECT_HOME: home } });
+  assert.equal(JSON.parse(await readFile(join(home, '.sql-apps', 'workspace.json'), 'utf8')).basePort, Number(workspace));
 });
 
 test('composite startup lists every missing scope before any mutation', async t => {
@@ -387,8 +450,28 @@ test('guarded execution denies before the runner and passes only approved operat
   await main(['run', 'build'], home, runner);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, process.execPath);
-  assert.deepEqual(calls[0].args, [join(resolve(), 'dist', 'scripts', 'build-provenance.mjs')]);
+  assert.deepEqual(calls[0].args, [join(resolve(), 'scripts', 'build-provenance.mjs')]);
   await assert.rejects(main(['run', 'azure'], home, runner), /Unsupported/);
+});
+
+test('a guarded foundation build runs before compiled tooling exists', async t => {
+  const home = await fixture(t);
+  for (const name of ['local-consent.mjs', 'tooling-context.mjs', 'project-contract.mjs',
+    'workspace.mjs', 'sql-target.mjs', 'file-lock.mjs']) {
+    await copyFile(resolve('src', name), join(home, 'src', name));
+  }
+  await copyFile(cli, join(home, 'scripts', 'local-consent.mjs'));
+  await writeFile(join(home, 'scripts', 'build-tooling-package.mjs'), '');
+  await mkdir(join(home, 'packages', 'sql-apps'), { recursive: true });
+  await writeFile(join(home, 'packages', 'sql-apps', 'package.json'), '{"name":"@microsoft/sql-apps"}');
+  await writeFile(join(home, 'package.json'), JSON.stringify({
+    name: 'sql-apps', type: 'module', scripts: { build: 'node scripts/build-provenance.mjs' },
+  }));
+  await writeFile(join(home, 'scripts', 'build-provenance.mjs'),
+    'import { writeFile } from "node:fs/promises"; await writeFile("built.txt", "built");\n');
+  await grantConsent(home, await planConsent(home, { operation: 'build' }));
+  await execute(process.execPath, [join(home, 'scripts', 'local-consent.mjs'), 'run', 'build'], { cwd: home });
+  assert.equal(await readFile(join(home, 'built.txt'), 'utf8'), 'built');
 });
 
 // The cross-OS setup-diagnostics CI job runs without a build; npm test builds first and covers this.

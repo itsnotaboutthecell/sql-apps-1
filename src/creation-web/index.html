@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SQL Apps · Bringing your application to life</title>
+  <link rel="stylesheet" href="/__sql_apps/style.css">
+  <script type="module" src="/__sql_apps/progress.js"></script>
+</head>
+<body>
+  <main>
+    <header><a href="/__sql_apps/creation">SQL Apps</a><span>Local development</span></header>
+    <p class="eyebrow">One working capability at a time</p>
+    <h1 id="title">Bringing your application to life</h1>
+    <p id="summary" role="status" aria-live="polite">Connecting to your local creation session…</p>
+    <ol id="capabilities" aria-label="Application capabilities"></ol>
+    <ul id="surfaces" aria-label="Verified application endpoints"></ul>
+    <section id="acceptance" aria-labelledby="acceptance-title" hidden>
+      <h2 id="acceptance-title">Usable — review pending</h2>
+      <p>The application can be explored now. A scaffold is not a finished product.
+        Ready still requires the primary save/reload/error journey and accepted desktop and narrow design review.</p>
+      <a id="open-app" href="/">Open application</a>
+    </section>
+    <details>
+      <summary>View technical details</summary>
+      <p id="diagnostic"></p>
+      <button id="recheck" type="button">Recheck capabilities</button>
+      <p>Rechecks are read-only. Recover a failed service through the existing
+        reviewed setup/consent flow. No database reset or mutation is retried here.</p>
+      <dl><dt>Application origin</dt><dd id="origin"></dd><dt>Outstanding acceptance</dt><dd id="blockers"></dd></dl>
+    </details>
+    <footer>Green means verified — not just a completed command.</footer>
+  </main>
+</body>
+</html>

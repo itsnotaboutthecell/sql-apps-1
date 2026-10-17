@@ -1,6 +1,14 @@
 # Run locally
 
-Run a browser app backed by SQL on your own computer. No Azure subscription is required. Complete [Get started](getting-started.md) first.
+Run a browser app on your own computer backed by SQL. Container and Express routes require no Azure subscription. Complete [Get started](getting-started.md) first.
+
+Prefer the Azure SQL container, then Azure SQL directly, then SQL Server 2025
+Express on supported Windows x64. Missing preview access is not a complete stop:
+review the [endpoint fallback workflow](../reference/setup.md#choose-a-database-without-blocking-the-journey).
+Docker and container terms apply only to the container instructions below.
+Endpoint routes use host DAB and require both .NET and ASP.NET Core 8.0 runtimes,
+even with a newer SDK. Ctrl+C stops its child along with the gateway,
+so use `app` rather than `serve` after that stop. SQL data remains intact.
 
 ## Choose what to run
 
@@ -15,12 +23,15 @@ SQL Apps has one profile, [role-based-data](../reference/role-based-data.md): Az
 
 The [setup coordinator](../reference/setup.md) connects these steps without
 requiring a desktop executable. Run `npm run setup -- plan --json`
-before changing anything. After explicit approvals, `run` or `resume` rechecks
+before changing anything. Before tooling restore, use the installed plugin's
+`setup plan --json` instead. Bootstrap setup stops after restore; review the
+installed package's plan and changed approval scopes before continuing.
+After explicit approvals, `run` or `resume` rechecks
 the checkout, skips current dependencies/builds and launches the app.
 It never records grants automatically. The existing individual commands below
 remain available; selected examples retain their separate application workflow.
 
-Before the first approval, explain what stays separate: tool installations (only if missing) and anything in Azure. Everything else for local startup is one approval: `npm run setup -- approval --profile role-based-data --workspace <base-port>` lists restore, build, the workspace port block, image downloads, SQL startup, schema, services, the read-only SQL acceptance check and the SQL terms line, with exclusions. After explicit approval run the printed `setup approve ... --approval <id>`, then `setup run`. Editing your application's SQL, DAB configuration or `role-based-data.json` reuses the approval; launcher, port or terms changes show a new id to review.
+Before the first approval, explain what stays separate: tool installations (only if missing), the bootstrap-to-installed-tooling approval transition, and anything in Azure. With tooling installed, local startup shares one approval: `npm run setup -- approval --profile role-based-data --workspace <base-port>` lists restore, build, the workspace port block, image downloads, SQL startup, schema, services, the read-only SQL acceptance check and the SQL terms line, with exclusions. After explicit approval run the printed `setup approve ... --approval <id>`, then `setup run`. Editing your application's SQL, DAB configuration or `role-based-data.json` reuses the approval; launcher, port or terms changes show a new id to review.
 
 [Remembered local permissions](../reference/local-consent.md) store that approval per checkout and workspace across sessions. Grants are revocable, never global, and do not cover tool installations or Azure deployment.
 

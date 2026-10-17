@@ -5,32 +5,43 @@ description: "Use when defining or changing a SQL Apps application, screen, clie
 
 # Build the application
 
-Resolve `../../scripts/sql-apps.mjs` from this installed skill, run its absolute path with `home`, and confirm the application project before edits. If creating a new app from the foundation, run `projects create "<name>"` and work only in that generated project. The default root is `%USERPROFILE%\SqlAppsProjects`; never build a domain app inside or beside the foundation/plugin checkout. `SQL_APPS_HOME` selects runtime code, not loaded skills.
+Confirm the project with absolute installed `../../scripts/sql-apps.mjs home`.
+Review `projects create-plan "<name>"`, obtain approval, then
+`projects create "<name>" --approval <id>`. Edit only the generated project.
+`SQL_APPS_HOME` selects runtime, not skills.
 
 ## Agree on one useful slice
 
-Read the saved brief with `guide`, then the current request. Treat the requested change as the useful slice. Ask only about missing users/access, records/fields, actions/validation or outcomes, one question at a time. Summarize new decisions and exclusions; do not repeat settled discovery.
+Read the saved brief with `guide`; the requested change is the useful slice. Ask only about missing users/access, fields, actions, validation or outcomes, one question at a time. Summarize decisions/exclusions without repeated discovery.
 
-Read `docs/guides/build-your-app.md` only for unresolved scope. Apply the relevant contract in `docs/maintainers/application-boundary.md` before changing it.
+Consult `docs/guides/build-your-app.md` for unresolved scope; apply `docs/maintainers/application-boundary.md` before edits.
 
-Keep `application.json` named for the app with `selectedExamples: []`. The only profile is `role-based-data`, with capabilities `["data"]`. Do not copy examples, scaffold another runtime or add unrequested capabilities. File storage and jobs belong outside SQL Apps, using maintained Azure skills.
+Keep `application.json` named for the app with `selectedExamples: []`. Use only `role-based-data`, capabilities `["data"]`. No copied examples, alternate runtime or unrequested capabilities. File storage/jobs belong outside SQL Apps, using maintained Azure skills.
 
-Before implementing a new user-facing app or meaningful UI change, use `sql-apps-design`. Keep database and access decisions separate from visual choices. A basic shell is an implementation milestone, not final design acceptance: small scope, not unfinished visual quality.
+Before implementing a new user-facing app or meaningful UI change, use `sql-apps-design`. Keep database and access decisions separate from visuals. A basic shell is an implementation milestone, not final design acceptance: small scope, not unfinished visual quality.
 
 ## Implement the slice
 
-Reuse the runtime, client, DAB and SQL project. Apply **Domain contracts and live acceptance** from the boundary reference for text limits, exact values, mutation ordering, readiness and positive controls.
+Reuse runtime/client/DAB/SQL. Apply the boundary's **Domain contracts and live acceptance**: text limits, exact values, mutation ordering, readiness and positive controls.
+
+Use project-owned domain source and typed `@microsoft/sql-apps/browser` helpers;
+never copy foundation runtime/scripts/infrastructure or edit installed tooling.
 
 - Define the configured role and allowed member types.
 - Expose only required procedures; the gateway chooses the DAB role from validated claims.
 - Reject caller-supplied role escalation; preserve agreed owner isolation.
 
-Deliver one real interaction before expanding. Product screens show account/access states, never persona selectors. Test identities stay on the developer page; simulation does not prove Entra assignment or cloud tokens. Label mock or synthetic-only behavior.
+Verify browser save, fresh-document reload and visible failed-save feedback before
+expanding. Product screens show account/access, never persona selectors.
+Developer-page simulations do not prove Entra assignment or cloud tokens;
+label mock/synthetic behavior.
+
+For list/search/dashboard/detail read changes, apply `docs/reference/read-performance.md`: bounded results, ordering, freshness, latency and redundant requests. Preserve authorization and read-after-write behavior; cache proposals need a separate reviewed contract.
 
 ## Check the application boundary
 
-Use `sql-apps-validation` for checks, live workflow evidence and required rendered browser review. Follow its four-verdict report; repeat the changed and original workflows.
+Use `sql-apps-validation` for checks, live evidence and required rendered browser review; follow its four-verdict report and repeat changed/original workflows.
 
-Remove tests importing excluded examples rather than restoring example code. Report legacy database objects retained by non-destructive publishing; cleanup needs a separate reviewed plan and approval.
+Remove tests importing excluded examples; do not restore them. Report legacy database objects retained by non-destructive publishing; cleanup needs separate review and approval.
 
 Use `sql-apps-local` for startup/resume and `sql-apps-cloud-preview` only for requested sharing.

@@ -11,7 +11,11 @@
   },
   "exports": {
     "./project-contract": "./dist/src/project-contract.mjs",
-    "./tooling-context": "./dist/src/tooling-context.mjs"
+    "./tooling-context": "./dist/src/tooling-context.mjs",
+    "./browser": {
+      "types": "./dist/src/browser.d.ts",
+      "default": "./dist/src/browser.js"
+    }
   },
   "files": [
     "bin",

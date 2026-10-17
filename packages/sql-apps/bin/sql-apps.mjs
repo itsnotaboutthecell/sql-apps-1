@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const COMMANDS = {
   build: 'dist/scripts/build-provenance.mjs',
   setup: 'dist/scripts/setup.mjs',
+  creation: 'dist/scripts/creation.mjs',
   'setup-check': 'dist/scripts/setup-check.mjs',
   guide: 'dist/scripts/guide.mjs',
   'workspace-check': 'dist/scripts/workspace-check.mjs',
@@ -13,6 +14,7 @@ export const COMMANDS = {
   local: 'dist/src/local-cli.js',
   publish: 'dist/src/personal-free-cli.js',
   check: 'dist/scripts/check-application.mjs',
+  'check-api': 'dist/scripts/check-application-api.mjs',
 };
 
 const packageHome = resolve(dirname(fileURLToPath(import.meta.url)), '..');

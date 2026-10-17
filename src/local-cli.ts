@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { readSqlTarget } from './sql-target.mjs';
 
 const [command = 'help', selection] = process.argv.slice(2);
 const projectRoot = resolve(process.env.SQL_APPS_PROJECT_HOME ?? process.cwd());
@@ -8,6 +9,7 @@ if (command === 'help') {
   console.log('Usage: npm run local -- <app|serve|app-test|app-check|start-sql|verify|init|test|data|stop> [sql-container-name]\nWorkspace: workspace-plan | workspace-init <base-port|legacy>. Select isolation or explicit legacy compatibility before app startup. workspace-plan is read-only; initialization records selection, never deletes existing resources. app starts SQL, Data API builder and the browser gateway using role-based-data.json and the authorized procedures in dab/dab-config.json; serve reuses running SQL and DAB. app-check inspects legacy sample objects without dropping data. No Azure subscription or Entra registration required. Loopback-only claim simulation is not production authentication. role-based-app and role-based-serve remain as aliases of app and serve.');
   console.log('SQL recovery: recover-sql [workspace-sql-container] explicitly recreates only a stopped isolated SQL container, preserving its image version, credentials, ports and labeled volume. Obtain approval first; no volume reset or external/legacy recovery.');
   console.log('Authentication: default local preview is simulated. SQL_APPS_LOCAL_AUTH=entra requires AZURE_TENANT_ID and API_CLIENT_ID and a registered workspace callback; local DAB still uses claim simulation.');
+  console.log('Express maintenance: configure-express enables containment/loopback TCP and restarts the selected instance. configure-express-auth separately enables mixed-mode SQL authentication and restarts it, without enabling SA. Each requires its own reviewed one-operation administrator approval; ordinary startup never changes instance configuration.');
   console.log('Selected application: selected-app <artifact directory> provisions only its isolated SQL database/login and DAB, then serves the browser. selected-serve <artifact directory> reuses verified running services. selected-stop <application name> removes only that owned DAB container and preserves SQL data. Build with npm run app:build -- <name> local-simulation first. These commands never select an example in the default application.');
   console.log('Selected acceptance: selected-test <artifact directory> runs the opted-in example acceptance suite against its already-running local app; obtain approval for synthetic writes and scoped cleanup first.');
 } else {
@@ -34,10 +36,13 @@ if (command === 'help') {
       import('./local-auth.mjs'),
       import('./role-based-rules.mjs'),
     ]);
-    const container = selection ?? runtimeFor(undefined, projectRoot).defaultSql;
+    const containerSelection = command.startsWith('selected-') || ['workspace-plan', 'workspace-init'].includes(command) ? undefined : selection;
+    const container = runtimeFor(containerSelection, projectRoot).sqlContainer;
+    const sqlTarget = await readSqlTarget(projectRoot, container);
+    if (sqlTarget.provider !== 'container' && containerSelection) throw new Error('A SQL container argument conflicts with the selected endpoint target.');
     if (['selected-app', 'selected-serve', 'selected-test'].includes(command) &&
         (!selection || process.argv.length !== 4)) throw new Error('Provide exactly one selected application artifact directory');
-    const profile = profileCommands.includes(command)
+    const profile = (profileCommands.includes(command) || sqlTarget.provider !== 'container' && ['test', 'app-check'].includes(command))
       ? await readRoleBasedProfile(join(projectRoot, 'role-based-data.json'))
       : undefined;
     if (profile) {
@@ -50,7 +55,10 @@ if (command === 'help') {
     const serve = command === 'serve' || command === 'role-based-serve';
     if (app || serve) readLocalAuthentication();
     await assertConsent(projectRoot, { operation: command, ...(selection === undefined ? {} : { selection }) });
-    if (command === 'selected-app' || command === 'selected-serve') {
+    if (sqlTarget.provider !== 'container' && !command.startsWith('selected-') && !['workspace-plan', 'workspace-init'].includes(command)) {
+      const { endpointLocalCommand } = await import('./endpoint-local.js');
+      await endpointLocalCommand(command, sqlTarget, run, profile);
+    } else if (command === 'selected-app' || command === 'selected-serve') {
       if (!selection) throw new Error('Provide exactly one selected application artifact directory');
       const { prepareSelectedLocalApplication, serveSelectedLocalApplication } = await import('./selected-local.js');
       if (command === 'selected-app') await prepareSelectedLocalApplication(projectRoot, selection);

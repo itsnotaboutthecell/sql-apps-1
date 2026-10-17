@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { checkSelectedApplication } from '../../../dist/src/application-build.js';
-import { selectedLocalPaths, querySelectedLocal } from '../../../dist/src/selected-local.js';
+import { querySelectedLocal } from '../../../dist/src/selected-local.js';
 import { runtimeFor } from '../../../dist/src/workspace.mjs';
 import { run } from '../../../dist/src/process.js';
 
@@ -10,7 +10,6 @@ if (process.argv.length !== 3) throw new Error('Usage: node examples\\todo\\demo
 const manifest = await checkSelectedApplication(process.cwd(), resolve(process.argv[2]), 'local-simulation');
 if (manifest.name !== 'todo') throw new Error('This opt-in acceptance suite requires the selected Todo reference');
 const runtime = runtimeFor();
-const target = selectedLocalPaths(runtime, manifest.name);
 const hashes = [];
 const expired = [];
 const admin = sql => querySelectedLocal(runtime, manifest.name, sql, run, true);
@@ -170,4 +169,4 @@ SELECT N'PROCEDURE OWNERSHIP AND PERMISSIONS PASSED';
     }
   }
 }
-console.log(`SELECTED TODO SQL/GATEWAY ACCEPTANCE PASSED (${target.database}); exact limits, ownership, expiry, permissions and scoped cleanup.`);
+console.log(`SELECTED TODO SQL/GATEWAY ACCEPTANCE PASSED (workspace ${runtime.id}); exact limits, ownership, expiry, permissions and scoped cleanup.`);

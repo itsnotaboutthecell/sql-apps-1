@@ -11,6 +11,17 @@ import { verifyContainerWorkspace } from './local-ownership.js';
 import { saveJson, withStateLock } from './state-files.js';
 import { run, type Run } from './process.js';
 import type { DemoOptions } from './demo-app.js';
+import { readSqlTarget, validateSqlTarget } from './sql-target.mjs';
+import { initializeEndpoint, endpointRuntimeQuery, endpointAdminQuery, type EndpointTarget } from './sql-endpoint.js';
+import { startHostData, verifyHostData, stopHostData } from './local-data-process.js';
+
+async function selectedEndpoint(runtime: WorkspaceRuntime, name: string): Promise<EndpointTarget | null> {
+  const selected = await readSqlTarget(runtime.home, runtime.sqlContainer);
+  if (selected.provider === 'container') return null;
+  const target = validateSqlTarget({ ...selected, database: `${selected.database}_${name.replaceAll('-', '_')}` });
+  if (target.provider === 'container') throw new Error('Selected endpoint provider changed unexpectedly.');
+  return target;
+}
 
 export function selectedLocalPaths(runtime: WorkspaceRuntime, name: string) {
   if (runtime.mode !== 'isolated' || !runtime.ownsSqlName || runtime.ports.sql === null) throw new Error('Selected application requires an isolated workspace-owned SQL container');
@@ -44,6 +55,11 @@ function connection(runtime: WorkspaceRuntime, state: z.infer<typeof credentials
 }
 
 export async function querySelectedLocal(runtime: WorkspaceRuntime, name: string, sql: string, runner: Run, admin = false) {
+  const endpoint = await selectedEndpoint(runtime, name);
+  if (endpoint) {
+    const rows = await (admin ? endpointAdminQuery : endpointRuntimeQuery)(endpoint, sql, runner);
+    return rows.map(row => Object.values(row).map(value => value == null ? '' : String(value)).join('|')).join('\n');
+  }
   const state = await readCredentials(runtime, name);
   await verifyContainerWorkspace(runtime.sqlContainer, runtime, sqlImage, { '1433/tcp': runtime.ports.sql! }, runner);
   if (admin) return localAdminQuery(runtime.sqlContainer, state.database, sql, runner, [state.password]);
@@ -54,6 +70,11 @@ export async function querySelectedLocal(runtime: WorkspaceRuntime, name: string
 
 async function verifyData(runtime: WorkspaceRuntime, name: string, runner: Run) {
   const target = selectedLocalPaths(runtime, name);
+  const endpoint = await selectedEndpoint(runtime, name);
+  if (endpoint) {
+    await verifyHostData(endpoint, JSON.parse(await readFile(target.configFile, 'utf8')));
+    return;
+  }
   const state = await readCredentials(runtime, name);
   await verifyContainerWorkspace(target.dataContainer, runtime, dabImage, { '5000/tcp': runtime.ports.data }, runner);
   const details = z.object({
@@ -80,6 +101,13 @@ async function selectedContext(home: string, directory: string) {
 
 async function initializeDatabase(runtime: WorkspaceRuntime, manifest: ApplicationBuildManifest, directory: string, runner: Run) {
   const target = selectedLocalPaths(runtime, manifest.name);
+  const endpoint = await selectedEndpoint(runtime, manifest.name);
+  if (endpoint) {
+    const grants = (await readFile(join(directory, 'setup', 'grants.sql'), 'utf8')).replaceAll('$(ApplicationUser)', runtime.login);
+    await initializeEndpoint(endpoint, runner, { profile: 'role-based-data', requiredRole: 'AppUser', readinessPath: '/api/Ready' },
+      { project: join(directory, 'sql', 'database.sqlproj'), output: target.compiled, intermediate: target.intermediate, grants, postDeploy: true });
+    return;
+  }
   await withStateLock(target.stateFile, async () => {
     await verifyLocal(runtime.sqlContainer, runner);
     let state: z.infer<typeof credentials>;
@@ -116,6 +144,15 @@ IF SUSER_ID(N'${target.login}') IS NULL CREATE LOGIN [${target.login}] WITH PASS
 export async function prepareSelectedLocalApplication(home: string, directory: string, runner: Run = run) {
   if (process.env.NODE_ENV === 'production') throw new Error('Selected local startup is disabled in production');
   const context = await selectedContext(home, directory);
+  const endpoint = await selectedEndpoint(context.runtime, context.manifest.name);
+  if (endpoint) {
+    if (await portState(context.runtime.ports.gateway) !== 'free') throw new Error('Selected gateway port is occupied or unverifiable; no service was stopped.');
+    await initializeDatabase(context.runtime, context.manifest, directory, runner);
+    const config: unknown = JSON.parse(await readFile(join(directory, 'dab', 'dab-config.json'), 'utf8'));
+    await saveJson(context.target.configFile, config);
+    await startHostData(endpoint, config, runner);
+    return context;
+  }
   const { runtime, manifest, target } = context;
   await withStateLock(join(target.directory, 'startup'), async () => {
     if (await portState(runtime.ports.gateway) !== 'free') throw new Error('Selected gateway port is occupied or unverifiable; reuse the intended app without stopping unrelated processes');
@@ -187,6 +224,11 @@ export async function stopSelectedLocalData(home: string, name: string, runner: 
   if (runtime.home !== runtimeFor().home) throw new Error('Run selected local commands from the explicitly bound runtime home');
   const target = selectedLocalPaths(runtime, name);
   await withStateLock(join(target.directory, 'startup'), async () => {
+    const endpoint = await selectedEndpoint(runtime, name);
+    if (endpoint) {
+      await stopHostData(endpoint);
+      return;
+    }
     await verifyData(runtime, name, runner);
     await runner('docker', ['rm', '--force', target.dataContainer]);
   });

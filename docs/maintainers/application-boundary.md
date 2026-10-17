@@ -8,7 +8,7 @@ The reusable foundation supplies SQL/DAB, browser authentication, ownership secu
 
 `application.json` names the application and declares `selectedExamples: []`. The default runtime client, browser, DAB and SQL project are sample-free. Optional examples own their client, schema, acceptance and workflow tests under `examples/<name>/tests`; they are not application dependencies.
 
-`tsconfig.runtime.json` compiles only runtime sources, excluding tests/examples. Container builds do not compile example tests and copy only intended runtime output. The domain-neutral `dbo.OwnerPredicate` is independently defined under `sql/security`.
+The foundation's `tsconfig.runtime.json` compiles only runtime sources, excluding tests/examples. Generated projects consume that compiled runtime from the pinned tooling package and own their domain source. Container builds do not compile example tests and copy only intended runtime output. The domain-neutral `dbo.OwnerPredicate` is independently defined under `sql/security`.
 
 New applications must not copy `examples/` or its workflow tests unless explicitly requested. Inherited tests importing an excluded example are a broken application boundary, not a reason to restore the placeholder. Keep domain-neutral tests and negative regression checks proving legacy sample SQL/API absence. The installed `sql-apps-application` skill guides application-specific development and requires the checks below. This is a validated workflow, not a general schema/application generator.
 
@@ -21,16 +21,16 @@ schema and acceptance-session work retain their documented approval boundaries.
 
 ```powershell
 npm run build
-node scripts\check-application.mjs .
+npm run app:check -- .
 dotnet build sql\database.sqlproj --output dist\sql
-node scripts\check-application.mjs . sql\obj\Debug\model\model.xml
+npm run app:check -- . sql\obj\Debug\model\model.xml
 ```
 
 Against an approved running local app, use the verified startup origin and the
 selected SQL container:
 
 ```powershell
-node scripts\check-application-api.mjs "<verified-origin>"
+npm run app:check-api -- "<verified-origin>"
 npm run local -- app-check <sql-container-name>
 ```
 
@@ -63,6 +63,7 @@ actual target.
 
 Apply these rules to an application's own fields and procedures, not just the reference example:
 
+- **Application reads:** apply [Design and verify application reads](../reference/read-performance.md) for list/search/dashboard/detail read changes: agree bounded results, ordering, freshness and latency without weakening access or mutation visibility. Use the existing validation contract for measured performance evidence.
 - **Text storage:** SQL `nvarchar(n)` limits UTF-16 code units, matching JavaScript string `.length` and HTML `maxlength`, not necessarily a validator's string `.max(n)`. Test ASCII and supplementary Unicode at the exact maximum and maximum + 1 for create, update and returned records. Normalize inputs only as agreed; do not silently trim returned SQL values. Use wide procedure inputs (`nvarchar(max)`) so narrowing cannot truncate invalid input before validation; reject blank values and enforce `DATALENGTH(value) <= 2 * n` after the agreed normalization.
 - **Exact values:** validate enum membership and byte length together because SQL comparisons can ignore trailing padding. Use the agreed case-sensitive/binary comparison where exact tokens are required; an unknown token must never pass through a zero-length fallback. Validate real Gregorian dates, including leap days, rather than only their textual shape. Reject caller fields for server-owned identities, ownership and status unless the app explicitly permits them.
 - **Readiness:** probe the actual domain schema and required procedure access read-only. Avoid concatenating catalog/domain strings with differing collation; use independent or numeric checks. A responding readiness procedure is necessary, but does not prove CRUD, persistence or authorization.

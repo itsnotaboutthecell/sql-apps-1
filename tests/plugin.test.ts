@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm, readFile, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile, realpath, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -293,6 +293,65 @@ test('diagnostics establishes local evidence before specialist routing', async (
   assert.match(diagnostics, /explicit approval/i);
 });
 
+test('SQL Apps read performance is application-owned and demand-loaded', async () => {
+  const application = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-application', 'SKILL.md'), 'utf8');
+  assert.match(application, /read-performance\.md/);
+  assert.match(application, /read|list|search|dashboard/i);
+  const boundary = await readFile(resolve('docs', 'maintainers', 'application-boundary.md'), 'utf8');
+  assert.match(boundary, /read-performance\.md/);
+});
+
+test('SQL Apps read performance diagnostics discovers slowness and preserves specialist ownership', async () => {
+  const diagnostics = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-diagnostics', 'SKILL.md'), 'utf8');
+  const description = diagnostics.match(/^description: "?([^\r\n]+?)"?$/m)?.[1];
+  assert.ok(description && /slow|latency|performance/i.test(description));
+  assert.match(diagnostics, /read-performance\.md/);
+  for (const name of [
+    'diagnose-slow-query', 'read-execution-plan',
+    'diagnose-blocking-and-deadlocks', 'diagnose-resource-pressure',
+  ]) assert.ok(diagnostics.includes(name), `Preserve the ${name} handoff`);
+  assert.ok(diagnostics.indexOf('## Diagnose the selected app') < diagnostics.indexOf('## Escalate the isolated issue'));
+  const entry = await readFile(resolve('skills', 'sql-apps-getting-started', 'SKILL.md'), 'utf8');
+  assert.match(entry, /sql-apps-diagnostics[^\r\n]*(?:slow|latency|performance)/i);
+});
+
+test('SQL Apps read performance validation requires observed comparison evidence', async () => {
+  const validation = await readFile(resolve('plugins', 'sql-apps', 'skills', 'sql-apps-validation', 'SKILL.md'), 'utf8');
+  assert.match(validation, /read-performance\.md/);
+  assert.match(validation, /before[\s\S]*after/i);
+  assert.match(validation, /measur|observ/i);
+});
+
+test('SQL Apps read performance reference defines correctness and measurement boundaries', async () => {
+  const files = await readdir(resolve('docs', 'reference'));
+  assert.ok(files.includes('read-performance.md'), 'Supply the on-demand application-read reference');
+  const reference = await readFile(resolve('docs', 'reference', 'read-performance.md'), 'utf8');
+  for (const requirement of [
+    /server-side/i, /pagination/i, /deterministic/i,
+    /N\+1/i, /polling/i, /freshness/i, /invalidation/i,
+    /authorization/i, /owner/i, /tenant/i, /cache key/i,
+    /p50/i, /p95/i, /sample count/i,
+    /cold/i, /warm/i, /concurrency/i, /payload/i,
+    /reset|failover/i, /rollback/i,
+    /monitor-growth\.md/, /diagnose-slow-query/,
+  ]) assert.match(reference, requirement);
+  assert.doesNotMatch(reference, /```(?:sql|tsql)\b/i, 'Engine collection recipes belong to microsoft-sql');
+});
+
+test('SQL Apps read performance documentation links the shared contract and evaluations', async () => {
+  const paths = ['docs/README.md', 'docs/reference/copilot-plugin.md', 'docs/reference/monitor-growth.md'];
+  const contents = await Promise.all(paths.map(path => readFile(resolve(path), 'utf8')));
+  for (const [index, content] of contents.entries()) {
+    assert.match(content, /\]\([^)\r\n]*read-performance\.md[^)\r\n]*\)/, `${paths[index]} must link the read contract`);
+  }
+  const evaluations = await readFile(resolve('docs', 'maintainers', 'agent-evaluations.md'), 'utf8');
+  for (const scenario of [
+    /100,000 records/, /400 cheap reads/, /60 HTTP requests/,
+    /microsoft-sql is unavailable/, /zero wait counters following a failover/,
+    /cache is keyed only by tenant/,
+  ]) assert.match(evaluations, scenario);
+});
+
 test('workflow skills stay within their shared context budget', async () => {
   const contents = await Promise.all(skillPaths.map(path => readFile(resolve(path), 'utf8')));
   const words = contents.reduce((total, content) => total + content.trim().split(/\s+/).length, 0);
@@ -435,6 +494,7 @@ test('plugin dispatch uses checkout cwd, passes literal arguments and preserves 
   await writeFile(join(home, 'package.json'), JSON.stringify({ name: 'sql-apps', scripts: { local: 'node dist/src/local-cli.js' } }));
   for (const file of ['src/local-cli.ts', 'sql/database.sqlproj', 'plugins/sql-apps/plugin.json']) await writeFile(join(home, file), '');
   await writeFile(join(home, 'src', 'workspace.mjs'), await readFile(resolve('src', 'workspace.mjs')));
+  await writeFile(join(home, 'src', 'sql-target.mjs'), await readFile(resolve('src', 'sql-target.mjs')));
   await writeFile(join(home, 'application.json'), JSON.stringify({ name: 'fixture', selectedExamples: [] }));
   await writeFile(join(home, 'runtime-contract.json'), JSON.stringify({ version: 1, capabilities: ['local', 'setup-check'] }));
   await writeFile(join(home, 'scripts', 'workspace-check.mjs'), await readFile(resolve('scripts', 'workspace-check.mjs')));
@@ -485,6 +545,11 @@ test('plugin dispatch uses checkout cwd, passes literal arguments and preserves 
     { env: { SQL_APPS_HOME: home } }));
   assert.equal(journey.cwd, home);
   assert.deepEqual(journey.args, ['plan', '--profile', 'role-based-data', '--workspace', '30000', '--json']);
+  const endpointApproval = ['approve', '--profile', 'role-based-data', '--workspace', '30000',
+    '--sql-provider', 'express', '--sql-target', join(home, 'target.json'), '--approval', 'a'.repeat(12)];
+  const forwardedApproval = JSON.parse(await run(process.execPath, [launcher, 'setup', ...endpointApproval],
+    { env: { SQL_APPS_HOME: home } }));
+  assert.deepEqual(forwardedApproval.args, endpointApproval);
   await writeFile(join(home, 'scripts/guide.mjs'),
     'console.log(JSON.stringify({cwd:process.cwd(),args:process.argv.slice(2)}));');
   const guided = JSON.parse(await run(process.execPath, [launcher, 'guide'], { env: { SQL_APPS_HOME: home } }));

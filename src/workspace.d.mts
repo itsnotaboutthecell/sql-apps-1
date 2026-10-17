@@ -1,6 +1,7 @@
 export type PortState = 'free' | 'occupied' | 'unknown';
 export interface WorkspaceDescriptor {
-  version: 1;
+  version: 1 | 2;
+  topology?: 'front-door';
   home: string;
   id: string;
   mode: 'isolated' | 'legacy';
@@ -16,23 +17,25 @@ export interface WorkspaceRuntime {
   login: string;
   ownsSqlName: boolean;
   stateDirectory: string;
-  ports: { gateway: number; data: number; sql: number | null };
+  ports: { gateway: number; data: number; sql: number | null; internalGateway?: number };
   origins: { app: string; data: string };
   names: { data: string; sqlNetwork: string; sqlState: string; dataConfig: string };
   labels: string[];
 }
 export function workspaceFile(root?: string): string;
+export function workspaceIdentity(path: string): string;
 export function readWorkspace(root?: string): WorkspaceDescriptor | null;
 export function describeWorkspace(root: string, selection: number | 'legacy'): WorkspaceDescriptor;
 export function runtimeFor(container?: string, root?: string, proposed?: WorkspaceDescriptor): WorkspaceRuntime;
 export function portState(port: number): Promise<PortState>;
-export function proposeWorkspace(root?: string, probe?: (port: number) => Promise<PortState>): Promise<{
+export function proposeWorkspace(root?: string, probe?: (port: number) => Promise<PortState>, options?: { includeSql?: boolean }): Promise<{
   selected?: WorkspaceDescriptor;
   descriptor?: WorkspaceDescriptor;
+  ports?: { name: string; port: number; state: PortState }[];
   conflicts?: { name: string; port: number; state: PortState }[];
   alternative?: WorkspaceDescriptor | null;
   nextAction?: string;
   scope: string;
 }>;
 export function initializeWorkspace(root: string | undefined, selection: number | 'legacy',
-  probe?: (port: number) => Promise<PortState>): Promise<WorkspaceRuntime>;
+  probe?: (port: number) => Promise<PortState>, options?: { frontDoor?: boolean; sessionId?: string }): Promise<WorkspaceRuntime>;

@@ -1,8 +1,12 @@
 # Local runtime reference
 
-The local inner loop uses the Azure SQL Database container (Private Preview, **EngineEdition 5**), Microsoft.Build.Sql/SqlPackage, Data API builder 2.0.12 and a loopback browser gateway. It does not use a SQL Server substitute, cloud resources, or an upstream hosted runtime.
+The preferred local inner loop uses the Azure SQL Database container (Private Preview, **EngineEdition 5**), Microsoft.Build.Sql/SqlPackage, Data API builder 2.0.12 and a loopback browser gateway. When unavailable, explicitly select Azure SQL Database directly, then SQL Server 2025 Express as a Windows x64 last resort. Endpoint routes use pinned host DAB without Docker; Express is a compatibility fallback, not the Azure SQL engine. See [database selection, approvals and lifecycle](setup.md#choose-a-database-without-blocking-the-journey). Container-specific commands and recovery below apply only to the container route.
 
 For the shortest startup path, use [Run locally](../guides/run-locally.md). This reference covers individual commands, workspace ownership, diagnostics and recovery. If you have a pre-rebrand checkout, read [migration notes](../maintainers/naming-transition.md).
+
+New guided projects use [progressive creation](progressive-creation.md): one
+public origin before restore, a private gateway at base+2, and explicit current
+browser/design gates for Ready. Existing direct-start workspaces are unchanged.
 
 ## One local profile
 
@@ -18,11 +22,13 @@ Local mutations enforce [remembered permissions](local-consent.md) before dispat
 
 ## Prerequisites
 
-First time installing development tools? Use [guided setup](../guides/getting-started.md) rather than treating this list as instructions. Copilot can offer approved installations, explain access/license conditions, guide restarts and verify each step on Windows, macOS or Linux. `node scripts/setup-check.mjs` runs before npm restore/build and never installs or mutates resources.
+First time installing development tools? Use [guided setup](../guides/getting-started.md) rather than treating this list as instructions. Copilot can offer approved installations, explain access/license conditions, guide restarts and verify each step on Windows, macOS or Linux. After tooling restore, `npm run setup:check` needs no application build and never installs or mutates resources. Before restore, use the installed plugin's `setup plan --json` through its explicit foundation binding.
 
 - Node.js 22 or 24 LTS and npm.
 - .NET SDK 8 or later. The CLI restores this repository's SqlPackage tool.
-- Docker with Linux containers. The SQL preview image requires x64; `start-sql` requests `linux/amd64`, including on emulated hosts.
+- Endpoint routes additionally require both .NET and ASP.NET Core 8.0 runtimes;
+  review side-by-side SDK 8 installation if only a newer SDK is present.
+- For the container route, Docker with Linux containers. The SQL preview image requires x64; `start-sql` requests `linux/amd64`, including on emulated hosts.
 - Access to the current preview container image, or an already running current Azure SQL container. Obtain preview access using the [official announcement](https://devblogs.microsoft.com/azure-sql/azure-sql-database-container-prpr/) and its linked instructions. This project does not distribute registry credentials or circumvent preview access.
 - A free selected workspace port block. Explicit legacy compatibility uses 18080 (gateway) and 15000 (DAB).
 - Initial access to download the pinned DAB image, npm packages, .NET SQL build dependencies and SqlPackage.

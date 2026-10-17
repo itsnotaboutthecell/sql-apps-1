@@ -6,17 +6,20 @@ From the intended checkout:
 
 ```powershell
 npm run guide
-node scripts/guide.mjs --json
+npm run guide -- --json
 ```
 
-These dependency-free commands work before build or package restore. They report source/build/workspace state, saved decisions and a suggested next action without starting services or contacting Azure.
+These commands require restored tooling but no application build. Before restore,
+use the installed plugin's `guide` and explicit foundation binding. They report
+source/build/workspace state, saved decisions and a suggested next action without
+starting services or contacting Azure.
 
 ## Save a brief
 
 Create a JSON file with the agreed decisions, then pass its path:
 
 ```powershell
-node scripts/guide.mjs --save "C:\path\project-brief.json"
+npm run guide -- --save "C:\path\project-brief.json"
 ```
 
 Example input:

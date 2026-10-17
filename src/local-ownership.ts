@@ -28,7 +28,7 @@ export async function checkWorkspacePorts(container: string, runner: Run, images
   const runtime = runtimeFor(container);
   if (runtime.mode !== 'isolated') return;
   const components: [number | null, string | null, string | null][] = [
-    [runtime.ports.gateway, null, null],
+    [runtime.ports.internalGateway ?? runtime.ports.gateway, null, null],
     [runtime.ports.data, runtime.names.data, 'data'],
   ];
   if (runtime.ownsSqlName) components.push([runtime.ports.sql, container, 'sql']);

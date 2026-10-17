@@ -212,17 +212,14 @@ test('current project takes precedence over the foundation binding and explicit 
   const profile = await mkdtemp(join(tmpdir(), 'sql-apps binding-'));
   t.after(() => rm(profile, { recursive: true, force: true }));
   await writeFile(join(profile, 'sql-apps-local.json'), JSON.stringify({ version: 1, home: process.cwd() }));
-  const { recordBuild } = await load();
-  await recordBuild(home);
-  await recordBuild(active);
   const env = { ...process.env, COPILOT_HOME: profile };
   delete env.SQL_APPS_HOME;
-  const current = await execute(process.execPath, [launcher, 'verify'], { cwd: active, env });
-  assert.match(current.stdout, /EXECUTED/);
-  const selected = await execute(process.execPath, [launcher, 'verify'], {
+  const current = await execute(process.execPath, [launcher, 'workspace-check'], { cwd: active, env });
+  assert.equal(JSON.parse(current.stdout).bound.home, active);
+  const selected = await execute(process.execPath, [launcher, 'workspace-check'], {
     cwd: active, env: { ...env, SQL_APPS_HOME: home },
   });
-  assert.match(selected.stdout, /EXECUTED/);
+  assert.equal(JSON.parse(selected.stdout).bound.home, home);
 });
 
 test('checkout plugin requires separate foundation tooling for generated projects', async t => {

@@ -9,6 +9,7 @@ import { resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { planConsent, grantConsent } from '../src/local-consent.mjs';
 import { checkSetup } from '../scripts/setup-check.mjs';
+import { sqlTargetFingerprint } from '../src/sql-target.mjs';
 
 let setup;
 try { setup = await import('../scripts/setup.mjs'); }
@@ -35,6 +36,24 @@ async function fixture(t, selected = true) {
 test('a dependency-free coordinator exposes planning and guarded execution', () => {
   assert.equal(typeof setup?.planSetup, 'function');
   assert.equal(typeof setup?.runSetup, 'function');
+});
+
+test('endpoint gateway reuse requires the actual selected provider and target fingerprint', async t => {
+  const { home, deps, options } = await fixture(t);
+  const runtime = runtimeFor(undefined, home);
+  const target = { version: 1, provider: 'express', instance: 'SQLEXPRESS', server: '127.0.0.1', port: 1433, database: 'development' };
+  await writeFile(join(home, '.sql-apps', 'sql-target.json'), JSON.stringify({ version: 1, home, target }));
+  const identity = { version: 1, id: runtime.id, mode: runtime.mode, profile: options.profile, origins: runtime.origins,
+    container: runtime.defaultSql, sourceFingerprint: 'fixture-build', authentication: { mode: 'preview' } };
+  const response = value => async url => Response.json(String(url).endsWith('/local/workspace') ? value : { status: 'ready' });
+  for (const value of [identity, { ...identity, sqlProvider: 'express', sqlTargetFingerprint: 'wrong' }]) {
+    const report = await setup.planSetup(home, options, { ...deps, fetch: response(value) });
+    assert.equal(report.running, false);
+    assert.equal(report.next.code, 'WORKSPACE_SQL_TARGET_MISMATCH');
+  }
+  const report = await setup.planSetup(home, options, { ...deps,
+    fetch: response({ ...identity, sqlProvider: 'express', sqlTargetFingerprint: sqlTargetFingerprint(target) }) });
+  assert.equal(report.running, true);
 });
 
 test('prerequisites ready never means workspace selected or launch approved', async t => {
@@ -474,6 +493,31 @@ test('approved restore and build re-plan readiness and skip already verified npm
   assert.deepEqual(calls[0], ['dotnet', ['tool', 'restore']]);
   assert.equal(calls[1][0], process.execPath);
   assert.equal(calls.flat(2).includes('ci'), false);
+});
+
+test('foundation bootstrap stops after restore so the installed tooling is reviewed before build', async t => {
+  const { home, deps, options } = await fixture(t);
+  for (const name of ['package.json', 'package-lock.json', '.config/dotnet-tools.json', 'tsconfig.runtime.json', 'scripts/build-provenance.mjs']) {
+    await mkdir(join(home, name, '..'), { recursive: true });
+    await writeFile(join(home, name), '{}');
+  }
+  for (const operation of ['restore', 'build']) await grantConsent(home, await planConsent(home, { operation }));
+  let restored = false;
+  const calls = [];
+  const report = await setup.runSetup(home, options, {
+    ...deps,
+    source: async () => ({ ready: true, bootstrap: !restored, fingerprint: 'fixture-build',
+      build: { ready: false, code: 'BUILD_UNVERIFIED' } }),
+    dependencies: async () => ({ ready: restored, npmReady: true, sqlToolsReady: restored }),
+    consent: async (root, request) => ['restore', 'build'].includes(request.operation) ?
+      planConsent(root, request) : deps.consent(root, request),
+    execute: async (file, args) => { calls.push([file, args]); restored = true; },
+    progress: () => {},
+  });
+  assert.equal(calls.length, 1, 'bootstrap must not run a foundation build after installing the project package');
+  assert.equal(report.next.id, 'build');
+  assert.equal(report.next.status, 'blocked');
+  assert.equal(report.next.code, 'TOOLING_RESTORED');
 });
 
 test('a timed-out dependency probe blocks restore instead of running npm ci under an existing grant', async t => {

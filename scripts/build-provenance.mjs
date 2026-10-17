@@ -74,19 +74,22 @@ async function esbuild(tools) {
 async function buildFoundation(home) {
   await compileTypeScript(home, home, 'tsconfig.runtime.json');
   for (const module of [
-    'workspace.mjs', 'file-lock.mjs', 'local-consent.mjs', 'local-auth.mjs',
+    'workspace.mjs', 'file-lock.mjs', 'local-consent.mjs', 'local-auth.mjs', 'sql-target.mjs',
     'role-based-rules.mjs', 'project-contract.mjs', 'tooling-context.mjs',
+    'creation-progress.mjs', 'creation-session.mjs', 'creation-checks.mjs', 'creation-front-door.mjs', 'creation-acceptance.mjs',
   ]) {
     await copyFile(join(home, 'src', module), join(home, 'dist', 'src', module));
   }
   await mkdir(join(home, 'dist', 'scripts'), { recursive: true });
   for (const script of [
     'build-provenance.mjs', 'setup.mjs', 'setup-check.mjs', 'guide.mjs', 'workspace-check.mjs',
-    'local-consent.mjs', 'check-application.mjs',
+    'local-consent.mjs', 'check-application.mjs', 'check-application-api.mjs', 'projects.mjs',
+    'creation.mjs',
   ]) {
     await copyFile(join(home, 'scripts', script), join(home, 'dist', 'scripts', script));
   }
   const { build } = await esbuild(home);
+  await cp(join(home, 'src', 'creation-web'), join(home, 'dist', 'src', 'creation-web'), { recursive: true });
   await build({
     absWorkingDir: home,
     entryPoints: { app: 'src/web/app.ts', 'auth/redirect': 'src/web/auth-redirect.ts' },
@@ -110,7 +113,7 @@ async function buildProject(project, tools) {
     const entries = { app: join(project, 'src', 'web', 'app.ts') };
     if (await exists(join(project, 'src', 'web', 'auth-redirect.ts'))) {
       entries['auth/redirect'] = join(project, 'src', 'web', 'auth-redirect.ts');
-    }
+    } else entries['auth/redirect'] = join(tools, 'dist', 'src', 'web', 'auth-redirect.js');
     await build({ absWorkingDir: project, entryPoints: entries, bundle: true, format: 'esm', outdir: join(project, 'public') });
   }
   if (await exists(join(project, 'src', 'web', 'developer.ts'))) {

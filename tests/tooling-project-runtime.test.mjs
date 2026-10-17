@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { createServer } from 'node:http';
 import { after, before, test } from 'node:test';
 
 const execute = promisify(execFile);
@@ -12,13 +13,13 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const staged = join(root, 'dist', 'tooling-project-runtime-test-package');
 const version = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
 
-async function run(command, args, cwd) {
+async function run(command, args, cwd, environment = {}) {
   try {
     return await execute(command, args, {
       cwd,
       windowsHide: true,
       maxBuffer: 16 * 1024 * 1024,
-      env: { ...process.env, SQL_APPS_PROJECT_HOME: undefined },
+      env: { ...process.env, ...environment, SQL_APPS_PROJECT_HOME: undefined },
     });
   } catch (error) {
     return { stdout: error.stdout ?? '', stderr: error.stderr ?? '', code: error.code };
@@ -59,6 +60,7 @@ async function projectFixture(t) {
       name: 'customer-data',
       private: true,
       type: 'module',
+      sqlApps: { project: true },
       dependencies: { '@microsoft/sql-apps': version },
       scripts: {
         build: 'sql-apps build',
@@ -158,6 +160,26 @@ test('tooling context resolves source, package and ancestor project homes explic
   );
   assert.equal(await context.projectHome({}, join(project, 'src', 'web')), project);
   assert.equal(await context.projectHome({ SQL_APPS_PROJECT_HOME: project }, root), project);
+  const foundation = join(project, 'foundation');
+  await mkdir(foundation);
+  await writeFile(join(foundation, 'package.json'), JSON.stringify({ name: 'sql-apps' }));
+  assert.equal(await context.installedTooling(foundation), undefined,
+    'a foundation without a project manifest must not adopt an ancestor application package');
+});
+
+test('installed tooling mismatches and incomplete packages fail instead of falling back to the foundation', async t => {
+  const { project, tooling } = await projectFixture(t);
+  const context = await import('../src/tooling-context.mjs');
+  const manifestPath = join(tooling, 'package.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  await writeFile(manifestPath, JSON.stringify({ ...manifest, version: '999.0.0' }));
+  await assert.rejects(context.installedTooling(project), /does not match the project pin/);
+  const plugin = await import('../plugins/sql-apps/scripts/sql-apps.mjs');
+  await assert.rejects(plugin.workspaceReport(project, {
+    cwd: root, environment: { SQL_APPS_HOME: project }, userHome: project,
+  }), /does not match the project pin/);
+  await rm(manifestPath);
+  await assert.rejects(context.installedTooling(project), { code: 'ENOENT' });
 });
 
 test('packaged project commands run from nested paths without using the foundation checkout', async t => {
@@ -184,10 +206,69 @@ test('packaged project commands run from nested paths without using the foundati
   assert.equal(JSON.parse(guide.stdout).home, project);
 
   const setupCheck = await run(process.execPath, [bin, 'setup-check', '--json'], nested);
-  assert.equal(JSON.parse(setupCheck.stdout).home, project);
-  for (const output of [workspace.stdout, build.stdout, guide.stdout, setupCheck.stdout, setupCheck.stderr]) {
+  const diagnostic = JSON.parse(setupCheck.stdout);
+  assert.equal(diagnostic.home, project);
+  assert.equal(diagnostic.checks.find(check => check.id === 'dependencies').status, 'ready',
+    'TypeScript hoisted beside the tooling package is a valid installed dependency');
+  const plan = await run(process.execPath, [bin, 'setup', 'plan', '--json'], nested);
+  assert.doesNotMatch(plan.stderr, /Run setup-check from a validated SQL Apps project/);
+  assert.equal(JSON.parse(plan.stdout).home, project,
+    'the packaged planner passes validated project context to the prerequisite checker');
+  for (const output of [workspace.stdout, build.stdout, guide.stdout, setupCheck.stdout, setupCheck.stderr, plan.stdout, plan.stderr]) {
     assert.doesNotMatch(output, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
   }
+});
+
+test('the plugin uses installed project tooling and agrees with package build provenance', async t => {
+  const { project, tooling } = await projectFixture(t);
+  const build = await run(process.execPath, [join(tooling, 'bin', 'sql-apps.mjs'), 'build'], project);
+  assert.equal(build.code, undefined, build.stderr);
+  const plugin = await import('../plugins/sql-apps/scripts/sql-apps.mjs');
+  const environment = { SQL_APPS_HOME: project, COPILOT_HOME: join(project, 'absent-profile') };
+  const report = await plugin.workspaceReport(project, { cwd: root, environment, userHome: project });
+  assert.equal(report.bound.toolingHome, tooling);
+  assert.equal(report.bound.build.code, 'BUILD_CURRENT');
+  const launcher = join(root, 'plugins', 'sql-apps', 'scripts', 'sql-apps.mjs');
+  const guide = await run(process.execPath, [launcher, 'guide'], project, environment);
+  assert.equal(guide.code, undefined, guide.stderr);
+  assert.equal(JSON.parse(guide.stdout).home, project);
+  const plan = await run(process.execPath, [launcher, 'setup', 'plan', '--json'], project, environment);
+  assert.equal(JSON.parse(plan.stdout).home, project, plan.stderr);
+});
+
+test('a factory project builds its UI and publishing artifact without foundation implementation source', async t => {
+  const { project, tooling } = await projectFixture(t);
+  const userHome = join(dirname(project), 'factory-user');
+  await mkdir(userHome);
+  const { createProject } = await import('../scripts/projects.mjs');
+  const created = await createProject(root, 'Independent App', { userHome, initializeGit: false });
+  await assert.rejects(readFile(join(created.path, 'src', 'local-cli.ts')), { code: 'ENOENT' });
+  await assert.rejects(readFile(join(created.path, 'scripts', 'setup.mjs')), { code: 'ENOENT' });
+  const installed = join(created.path, 'node_modules', '@microsoft', 'sql-apps');
+  await mkdir(dirname(installed), { recursive: true });
+  await cp(tooling, installed, { recursive: true });
+  for (const dependency of ['typescript', 'esbuild', '@esbuild', '@azure/msal-browser', '@azure/msal-common', 'zod', '@types/node', 'undici-types']) {
+    const destination = join(created.path, 'node_modules', dependency);
+    await mkdir(dirname(destination), { recursive: true });
+    await cp(join(root, 'node_modules', dependency), destination, { recursive: true });
+  }
+  const bin = join(installed, 'bin', 'sql-apps.mjs');
+  const types = await run(process.execPath, [join(root, 'node_modules', 'typescript', 'bin', 'tsc'), '--noEmit'], created.path);
+  assert.equal(types.code, undefined, `${types.stdout}\n${types.stderr}`);
+  const build = await run(process.execPath, [bin, 'build'], created.path);
+  assert.equal(build.code, undefined, `${build.stdout}\n${build.stderr}`);
+  assert.ok((await readFile(join(created.path, 'public', 'app.js'), 'utf8')).length > 0);
+  assert.ok((await readFile(join(created.path, 'public', 'auth', 'redirect.js'), 'utf8')).length > 0);
+  const checked = await run(process.execPath, [bin, 'check'], created.path);
+  assert.equal(checked.code, undefined, `${checked.stdout}\n${checked.stderr}`);
+  assert.doesNotMatch(checked.stdout, /customized UI/);
+  const publisher = pathToFileURL(join(installed, 'dist', 'src', 'personal-free-build.js')).href;
+  const artifact = join(created.path, 'dist', 'publish-fixture');
+  const publishBuild = await run(process.execPath, ['--input-type=module', '-e',
+    `import { buildPersonalFreeArtifact } from ${JSON.stringify(publisher)}; await buildPersonalFreeArtifact(process.cwd(), ${JSON.stringify(artifact)});`],
+  created.path, { SQL_APPS_TOOLING_HOME: installed });
+  assert.equal(publishBuild.code, undefined, publishBuild.stderr);
+  assert.ok((await readFile(join(artifact, 'static', 'app.js'), 'utf8')).length > 0);
 });
 
 test('project rebuild removes generated output whose source was deleted', async t => {
@@ -260,9 +341,49 @@ test('every packaged command target resolves outside the project and read-only c
     assert.equal(resolve(tooling, target).startsWith(tooling), true);
     assert.equal(resolve(tooling, target).startsWith(project + '\\dist'), false);
   }
-  for (const args of [['--help'], ['setup', 'help'], ['consent', 'help'], ['local', 'help']]) {
+  for (const args of [['--help'], ['setup', 'help'], ['creation', 'help'], ['consent', 'help'], ['local', 'help']]) {
     const result = await run(process.execPath, [bin, ...args], join(project, 'src'));
     assert.equal(result.code, undefined, `${args.join(' ')}: ${result.stderr}`);
+  }
+});
+
+test('installed tooling owns a pre-build front door and bundles every creation asset outside the foundation', async t => {
+  const { project, tooling } = await projectFixture(t);
+  const load = path => import(pathToFileURL(join(tooling, 'dist', path)).href);
+  const { initialProgress } = await load('src/creation-progress.mjs');
+  const { writeCreationJson, readCreationJson } = await load('src/creation-session.mjs');
+  const { startCreationProcess, stopCreationProcess } = await load('scripts/creation.mjs');
+  const reserve = createServer();
+  await new Promise(done => reserve.listen(0, '127.0.0.1', done));
+  const port = reserve.address().port;
+  await new Promise(done => reserve.close(done));
+  const directory = join(dirname(project), 'creation-session');
+  const snapshot = initialProgress({ home: project, name: 'Installed project', workspaceId: 'installed-fixture',
+    publicOrigin: `http://127.0.0.1:${port}`, gatewayOrigin: `http://127.0.0.1:${port === 65535 ? port - 1 : port + 1}` });
+  await writeCreationJson(join(directory, 'progress.json'), snapshot);
+  await writeCreationJson(join(project, '.sql-apps', 'creation-session.json'),
+    { version: 1, home: project, directory, sessionId: snapshot.sessionId });
+  await startCreationProcess(directory, tooling);
+  try {
+    for (const path of ['/', '/__sql_apps/style.css', '/__sql_apps/progress.js', '/__sql_apps/endpoint', '/__sql_apps/endpoint.js']) {
+      const response = await fetch(`${snapshot.publicOrigin}${path}`);
+      assert.equal(response.status, 200, `${path} must be bundled and served by installed tooling`);
+      assert.ok((await response.text()).length);
+    }
+    const result = await run(process.execPath, [join(tooling, 'bin', 'sql-apps.mjs'), 'creation', 'status'], join(project, 'src'));
+    assert.equal(result.code, undefined, result.stderr);
+    const status = JSON.parse(result.stdout);
+    assert.equal(status.sessionId, snapshot.sessionId);
+    assert.equal(status.connected, true);
+    assert.equal(status.ready, false);
+    assert.equal(status.usable, false);
+    const receipt = await readCreationJson(join(directory, 'process.json'));
+    await writeCreationJson(join(directory, 'process.json'), { ...receipt, pid: receipt.pid + 1 });
+    await assert.rejects(stopCreationProcess(directory), /ownership/i);
+    await writeCreationJson(join(directory, 'process.json'), receipt);
+    assert.equal((await fetch(`${snapshot.publicOrigin}/__sql_apps/identity`)).status, 200);
+  } finally {
+    await stopCreationProcess(directory);
   }
 });
 

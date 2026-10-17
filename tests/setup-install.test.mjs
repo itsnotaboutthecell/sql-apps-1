@@ -10,6 +10,53 @@ test('setup exposes a project-owned installation planner', async () => {
   assert.equal(typeof module.planInstallation, 'function');
 });
 
+test('Express installation is pinned, Windows x64 only and does not require WinGet', async () => {
+  const deps = { ...environment('win32'),
+    report: async () => ({ checks: [{ id: 'sql-express', toolState: 'missing' }] }),
+    probe: async (command) => {
+      assert.equal(command, 'powershell.exe');
+      return JSON.stringify({ supported: true, instances: [] });
+    },
+  };
+  const plan = await module.planInstallation(process.cwd(), 'sql-express', deps);
+  assert.equal(plan.outcome, 'approval-required');
+  assert.equal(plan.command.file, 'powershell.exe');
+  assert.equal(plan.command.args.includes('Install'), true);
+  assert.match(plan.source, /microsoft\.com.*108836/);
+  assert.match(plan.installer.sha256, /^[A-F0-9]{64}$/);
+  for (const host of [
+    { ...deps.host, platform: 'darwin' }, { ...deps.host, architecture: 'arm64' },
+  ]) assert.equal((await module.planInstallation(process.cwd(), 'sql-express', { ...deps, host })).command, null);
+  const older = await module.planInstallation(process.cwd(), 'sql-express', {
+    ...deps, probe: async () => JSON.stringify({ supported: true, instances: [{ instance: 'SQLEXPRESS', majorVersion: 16, edition: 'Express Edition' }] }),
+  });
+  assert.equal(older.command, null);
+});
+
+test('Express registration alone is not installation readiness and unknown inventory never authorizes install', async () => {
+    const base = { ...environment('win32'), probe: async () => JSON.stringify({ supported: true,
+      instances: [{ instance: 'SQLEXPRESS', majorVersion: 17, edition: 'Express Edition', verified: false }] }) };
+    const registered = await module.planInstallation(process.cwd(), 'sql-express', base);
+    assert.equal(registered.outcome, 'manual');
+    assert.equal(registered.command, null);
+    for (const probe of [async () => '{"supported":true}', async () => { throw new Error('registry denied'); }]) {
+      assert.equal((await module.planInstallation(process.cwd(), 'sql-express', { ...base, probe })).command, null);
+    }
+});
+
+test('Express installer restart code is never readiness and its approval cannot be replayed', async t => {
+    const home = await mkdtemp(join(tmpdir(), 'sql-apps-express-restart-'));
+    t.after(() => rm(home, { recursive: true, force: true }));
+    const deps = { ...environment('win32'), probe: async () => '{"supported":true,"instances":[]}' };
+    const path = join(home, 'reviewed.json');
+    await writeFile(path, JSON.stringify(await module.planInstallation(home, 'sql-express', deps)));
+    const runner = async () => { throw Object.assign(new Error('restart required'), { code: 3010 }); };
+    const result = await module.installReviewed(path, home, { ...deps, runner });
+    assert.equal(result.outcome, 'restart-required');
+    assert.equal(result.ready, false);
+    await assert.rejects(module.installReviewed(path, home, { ...deps, runner }), /consumed/);
+});
+
 function environment(platform, state = 'missing') {
   return {
     host: { name: 'fixture-host', platform, architecture: 'x64', release: 'fixture', distro: 'ubuntu', distroVersion: '24.04' },
@@ -25,6 +72,40 @@ test('compatible tools and broken installed shims never produce install commands
     assert.equal(plan.command, null);
     assert.equal(plan.outcome, state === 'ready' ? 'ready' : 'manual');
   }
+});
+
+test('missing host DAB runtimes permit reviewed SDK 8 installation beside a ready newer SDK', async () => {
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    const deps = { ...environment(platform), report: async () => ({ checks: [
+      { id: 'dotnet', toolState: 'ready' }, { id: 'host-dab-runtime', toolState: 'missing' },
+    ] }) };
+    const plan = await module.planInstallation(process.cwd(), 'dotnet', deps);
+    assert.equal(plan.outcome, 'approval-required');
+    assert.match(plan.command.args.join(' '), /Microsoft\.DotNet\.SDK\.8|dotnet-sdk@8|dotnet-sdk-8\.0/);
+    assert.match(plan.effects.join(' '), /side-by-side/i);
+    assert.match(plan.effects.join(' '), /preserve/i);
+    for (const state of ['check-failed', 'unsupported']) {
+      const manual = await module.planInstallation(process.cwd(), 'dotnet', { ...deps, report: async () => ({
+        checks: [{ id: 'dotnet', toolState: 'ready' }, { id: 'host-dab-runtime', toolState: state }],
+      }) });
+      assert.equal(manual.outcome, 'manual');
+      assert.equal(manual.command, null);
+    }
+  }
+});
+
+test('side-by-side runtime installation rechecks both host runtimes before readiness', async t => {
+  const home = await mkdtemp(join(tmpdir(), 'sql-apps-runtime-install-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  let installed = false;
+  const deps = { ...environment('win32'), report: async () => ({ checks: [
+    { id: 'dotnet', toolState: 'ready' }, { id: 'host-dab-runtime', toolState: installed ? 'ready' : 'missing' },
+  ] }) };
+  const path = join(home, 'reviewed.json');
+  await writeFile(path, JSON.stringify(await module.planInstallation(home, 'dotnet', deps)));
+  const result = await module.installReviewed(path, home, { ...deps, runner: async () => { installed = true; } });
+  assert.equal(result.ready, true);
+  assert.equal(result.outcome, 'ready');
 });
 
 test('macOS SDK installation selects the versioned SDK 8 cask, not an evolving latest SDK', async () => {

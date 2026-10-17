@@ -4,6 +4,21 @@ SQL Apps can remember explicitly approved local operations across sessions.
 This avoids approving the same restore, build or startup effects repeatedly.
 It does not turn "continue autonomously" into permission.
 
+Database selection follows container -> Azure SQL directly -> SQL Server 2025
+Express. Endpoint grants bind provider, server/instance, port, database and
+workspace. Matching setup approval alone persists the nonsecret selection;
+changing targets never moves data. Container EULA/`sql-start` scopes do not apply
+to endpoints. Host DAB's pinned NuGet restore belongs to services approval.
+Express installation has its own reviewed installer/license plan;
+`configure-express` requires a separate **one-operation maintenance grant** for
+instance-wide containment, loopback TCP and restart effects.
+`configure-express-auth` needs its own one-operation administrator approval for
+mixed-mode SQL authentication and restart; containment approval never authorizes
+authentication-mode changes. SA and server-level app logins remain untouched.
+SQL-only Azure
+provisioning has a separate exact-target/free-only/firewall plan, not permission
+to publish the app. See [fallback setup](setup.md#choose-a-database-without-blocking-the-journey).
+
 The [setup coordinator](setup.md) plans these same operations and uses their
 existing guarded execution. It never grants scopes automatically. System
 installation plans are separate: explicitly reviewed `setup install` consumes
@@ -16,7 +31,7 @@ contain no credentials. Re-probe tools after installation/restart.
 
 1. Confirm the canonical application checkout and inspect setup read-only.
 2. Install missing tools only, each with its own reviewed plan.
-3. Run `setup approval --profile role-based-data --workspace <base-port>`. It
+3. With pinned tooling installed, run `setup approval --profile role-based-data --workspace <base-port>`. It
    lists restore, build, workspace selection, image downloads, SQL startup,
    schema, services, the read-only SQL acceptance check and the SQL terms line
    together, plus what is excluded. Present it once.
@@ -31,23 +46,29 @@ Individual `plan`/`grant` commands below remain for scripted or partial use.
 `grant --plan-from <operation> [selection]` records a freshly computed plan
 without a temporary file.
 
+Before the first restore, the plugin's explicit foundation binding provides
+bootstrap planning and approved restore only. Setup stops after restore; plan
+again through the installed pinned package and review changed approval scopes.
+Bootstrap grants do not silently authorize a different implementation.
+
 Deliver an approved useful slice early and label synthetic or mock-only
 behavior. Use the validation skill for current workflow evidence; saved grants
 and checkpoints are not acceptance.
 
 ## Commands available before build
 
-Run from the intended checkout. These commands need Node, but not npm packages
-or compiled runtime:
+Run from the intended checkout after tooling restore. No application build is
+required. Before restore, use the plugin's `consent-plan`, `consent-status` and
+approved `consent-run restore` through its explicit foundation binding:
 
 ```powershell
-node scripts/local-consent.mjs plan build
-node scripts/local-consent.mjs status build
-node scripts/local-consent.mjs revoke build
-node scripts/local-consent.mjs revoke terms
+npm run consent -- plan build
+npm run consent -- status build
+npm run consent -- revoke build
+npm run consent -- revoke terms
 ```
 
-The equivalent npm command is `npm run consent -- <command>`. Plans and status
+The foundation also supports `node scripts/local-consent.mjs <command>`. Plans and status
 return JSON including requirements, effects, matching/missing scopes, terms
 status and `allowed`. A missing grant is normal planning output, not a successful
 execution. `run` fails explicitly when permission or acknowledgement is missing.
@@ -57,7 +78,7 @@ execution. `run` fails explicitly when permission or acknowledgement is missing.
 Save the plan as UTF-8 JSON in an untracked location. For example, in PowerShell:
 
 ```powershell
-node scripts/local-consent.mjs plan build |
+npm run --silent consent -- plan build |
   Set-Content -Encoding utf8 "$env:TEMP\sql-apps-build-plan.json"
 ```
 
@@ -65,8 +86,8 @@ Review the checkout and effects in that file. **Only after explicitly approving
 those effects**, record it and execute:
 
 ```powershell
-node scripts/local-consent.mjs grant "$env:TEMP\sql-apps-build-plan.json"
-node scripts/local-consent.mjs run build
+npm run consent -- grant "$env:TEMP\sql-apps-build-plan.json"
+npm run consent -- run build
 ```
 
 `grant` recomputes the requirements and rejects a stale or copied plan. The
@@ -78,7 +99,7 @@ local files, not system installations. Restore only when dependencies are missin
 Workspace creation is separate:
 
 ```powershell
-node scripts/local-consent.mjs plan workspace-init 30000
+npm run consent -- plan workspace-init 30000
 ```
 
 Replace `30000` with the reviewed free port block from `workspace-plan`. Grant
@@ -106,7 +127,7 @@ tag as its identity. Do not put private terms or credentials in chat or source.
 With explicit approval to record the acknowledgement:
 
 ```powershell
-node scripts/local-consent.mjs terms "C:\path\to\reviewed-preview-terms.txt"
+npm run consent -- terms "C:\path\to\reviewed-preview-terms.txt"
 ```
 
 SQL Apps records the canonical document path and SHA-256 content digest, not the

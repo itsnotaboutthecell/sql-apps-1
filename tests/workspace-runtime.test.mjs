@@ -62,6 +62,21 @@ test('occupied deterministic candidate produces a free alternate proposal withou
   await assert.rejects(readFile(workspaceFile(root)), { code: 'ENOENT' });
 });
 
+test('endpoint workspace proposals and initialization never reserve a container SQL port', async t => {
+  const root = await home(t);
+  const { proposeWorkspace, initializeWorkspace } = await load();
+  const checked = [];
+  const proposal = await proposeWorkspace(root, async port => { checked.push(port); return 'free'; }, { includeSql: false });
+  assert.equal(checked.length, 2);
+  assert.deepEqual(proposal.ports.map(item => item.name), ['gateway', 'data']);
+  await mkdir(join(root, '.sql-apps'), { recursive: true });
+  await writeFile(join(root, '.sql-apps', 'sql-target.json'), JSON.stringify({ version: 1, home: root,
+    target: { version: 1, provider: 'express', instance: 'SQLEXPRESS', server: '127.0.0.1', port: 1433, database: 'development' } }));
+  checked.length = 0;
+  await initializeWorkspace(root, proposal.descriptor.basePort, async port => { checked.push(port); return 'free'; });
+  assert.deepEqual(checked, [proposal.descriptor.basePort, proposal.descriptor.basePort + 1]);
+});
+
 test('initialization requires an explicit available port block and never replaces a descriptor', async t => {
   const root = await home(t);
   const { initializeWorkspace, workspaceFile } = await load();

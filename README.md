@@ -44,16 +44,20 @@ The journey is **Describe -> Run locally -> Make it yours -> Share optionally**.
 Already have Node installed? Check your setup from the generated project folder:
 
 ```powershell
-node scripts/setup-check.mjs
+npm run setup:check
 ```
 
-The check explains missing prerequisites without installing anything. The guides and commands do not require a particular LLM provider. If you use GitHub Copilot, the optional [Copilot plugin](docs/reference/copilot-plugin.md) adds project-specific skills. Local work needs only that plugin; its documentation lists the maintained Microsoft SQL, Azure Skills and Azure Cost companion plugins to install when you choose cloud work.
+This npm command requires restored tooling. Before the first restore, use the
+installed plugin launcher's `setup plan --json` through its explicit foundation
+binding; see the [setup coordinator](docs/reference/setup.md). Generated projects
+do not copy foundation scripts. The check explains missing prerequisites without
+installing anything. The guides and commands do not require a particular LLM provider. If you use GitHub Copilot, the optional [Copilot plugin](docs/reference/copilot-plugin.md) adds project-specific skills. Local work needs only that plugin; its documentation lists the maintained Microsoft SQL, Azure Skills and Azure Cost companion plugins to install when you choose cloud work.
 
 For one connected setup journey, ask your assistant to use the [setup coordinator](docs/reference/setup.md). It plans needed installation, restore, build, workspace and startup steps, then resumes after explicit approvals without repeating current work. It does not generate your domain app, accept licenses or deploy to Azure.
 
 ## What to expect
 
-**Local first.** No Azure subscription is needed to run locally. You need Node 22 or 24, a .NET SDK, Docker with Linux containers, and access to the Azure SQL Database container. The container is in **private preview**: [request access](https://aka.ms/azuresqldb-container-signup) and read the [container documentation](https://aka.ms/azuresqldb-container). Initial package and image downloads require internet. Docker and your chosen AI provider have their own licensing/access conditions.
+**Local first, without a preview-access dead end.** Prefer the Azure SQL Database container, then Azure SQL Database directly, then SQL Server 2025 Express on supported Windows x64. Node 22 or 24 and a .NET SDK are shared prerequisites; endpoint fallbacks use pinned host DAB without Docker and additionally require .NET and ASP.NET Core 8.0 runtimes, even with a newer SDK. Container and Express routes need no Azure subscription. The container is in **private preview**: [request access](https://aka.ms/azuresqldb-container-signup) and read the [container documentation](https://aka.ms/azuresqldb-container). Missing access offers another [explicitly approved database route](docs/reference/setup.md#choose-a-database-without-blocking-the-journey), never silent data migration. Initial downloads need internet; Docker, SQL installation and your AI provider have their own licensing/access conditions.
 
 **Your application.** Work with your AI assistant to implement and test its screens and SQL behavior in its generated repository. The project factory creates the runtime foundation, not a finished domain app. The default project has no Todo screen or sample data; examples are selected explicitly.
 

@@ -54,7 +54,7 @@ Restart the App or create a **fresh session** after installation. In **Customize
 | Skill | Example prompt |
 | --- | --- |
 | `sql-apps-local` | Start SQL Apps locally; reuse it if it is already running. |
-| `sql-apps-diagnostics` | Check SQL Apps local service status without changing anything. |
+| `sql-apps-diagnostics` | Diagnose a failed SQL Apps workflow or slow read without changing services. |
 | `sql-apps-validation` | Run SQL Apps unit tests and typecheck; do not restart services. |
 | `sql-apps-cloud-preview` | Assess whether personal-free fits; hand separately planned architectures to maintained Azure skills and explain their cost, access and interruption trade-offs. |
 | `sql-apps-application` | Build a domain-specific application without copying the Todo example; verify source, build, API and database boundaries. |
@@ -70,6 +70,15 @@ decisions remain in `sql-apps-application`.
 from the actual target package, distinguishing generated apps from foundation
 maintenance, and owns evidence collection and the four-verdict report.
 Application and cloud skills hand off to that contract rather than duplicating it.
+
+For relevant read changes and slow reads, use [Application read performance](read-performance.md).
+SQL Apps owns bounded results, redundant requests and user-action measurements;
+the maintained `microsoft-sql` skills own query, plan, blocking and resource tuning.
+Application-side investigation does not require a companion installation. If an
+isolated database question needs an unavailable specialist, report the missing
+capability and hand over its evidence rather than installing automatically or
+duplicating SQL diagnostics. These additions do not introduce a cache or change
+runtime behavior.
 
 Invoke a skill explicitly from the App's skill picker/slash completion if natural-language discovery picks another plugin instead. Ask for **SQL Apps** and confirm the **sql-apps-skills** marketplace. The plugin does not embed the browser UI; use the startup-reported origin (`http://127.0.0.1:18080/` in fixed-port mode) for the actual application.
 
@@ -113,7 +122,7 @@ node "C:\git\sql-apps\plugins\sql-apps\scripts\sql-apps.mjs" setup plan --json
 `role-based-data` is the only profile, so `--profile role-based-data` is
 optional. See [Setup coordinator](setup.md) for
 workspace selection, approvals, installation plans and continuation. `setup`
-forwards arguments literally to the bound checkout's coordinator and retains
+forwards arguments literally to the selected tooling coordinator and retains
 source/binding checks. It does not change loaded skills, grant permissions,
 install another assistant, generate domain screens or deploy.
 
@@ -128,6 +137,13 @@ The launcher resolves the application runtime in this order:
 Invalid explicit paths/bindings fail; they never silently fall back. The
 installer binding identifies the trusted foundation that supplies the project
 factory. It does not require applications to live beside that checkout.
+
+Once a project's exact pinned `@microsoft/sql-apps` package is restored, that
+package owns command dispatch and build provenance, even when the plugin retains
+a foundation binding. A missing package permits read-only/bootstrap commands,
+not foundation-owned application builds or runtime execution. Bootstrap setup
+stops after restore; plan again through the installed package and explicitly
+review changed approval scopes before continuing.
 
 Create and switch projects through the plugin:
 

@@ -54,6 +54,16 @@ before(async () => {
   await runNode([join(root, 'scripts', 'build-tooling-package.mjs')]);
 });
 
+test('tooling ships endpoint helpers, the pinned host DAB manifest and SQL-only provisioning', async () => {
+  for (const file of [
+    'dist/src/sql-target.mjs', 'dist/src/sql-endpoint.js', 'dist/src/endpoint-local.js',
+    'dist/src/local-data-process.js', 'dist/src/azure-sql-development.js',
+    'assets/scripts/sql-express.ps1', 'assets/infra/development-sql.bicep',
+  ]) assert.ok((await lstat(join(staged, file))).isFile(), file);
+  const manifest = JSON.parse(await readFile(join(staged, 'assets', '.config', 'host-dab', 'dotnet-tools.json'), 'utf8'));
+  assert.equal(manifest.tools['microsoft.dataapibuilder'].version, '2.0.12');
+});
+
 test('tooling:pack uses a POSIX-portable package path', async () => {
   const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
   assert.equal(
@@ -87,6 +97,7 @@ test('stages publishable package metadata with synchronized exact runtime depend
     assert.deepEqual(candidate.exports, {
       './project-contract': './dist/src/project-contract.mjs',
       './tooling-context': './dist/src/tooling-context.mjs',
+      './browser': { types: './dist/src/browser.d.ts', default: './dist/src/browser.js' },
     });
     assert.deepEqual(candidate.dependencies, expectedDependencies);
     for (const version of Object.values(candidate.dependencies)) {
@@ -103,7 +114,7 @@ test('staged tree contains only package files and immutable runtime assets', asy
   assert(paths.includes('LICENSE'));
   assert(paths.includes('bin/sql-apps.mjs'));
   assert(paths.includes('dist/src/project-contract.mjs'));
-  assert(paths.includes('assets/src/web/auth-view.ts'));
+  assert.equal(paths.includes('assets/src/web/auth-view.ts'), false);
   assert(paths.includes('assets/src/web/app.ts'));
   for (const path of paths) {
     assert.equal((await lstat(join(staged, path))).isSymbolicLink(), false, path);
@@ -151,6 +162,7 @@ test('bin help is project-independent and its validated command map targets pack
     assert.deepEqual(module.COMMANDS, {
       build: 'dist/scripts/build-provenance.mjs',
       setup: 'dist/scripts/setup.mjs',
+      creation: 'dist/scripts/creation.mjs',
       'setup-check': 'dist/scripts/setup-check.mjs',
       guide: 'dist/scripts/guide.mjs',
       'workspace-check': 'dist/scripts/workspace-check.mjs',
@@ -158,6 +170,7 @@ test('bin help is project-independent and its validated command map targets pack
       local: 'dist/src/local-cli.js',
       publish: 'dist/src/personal-free-cli.js',
       check: 'dist/scripts/check-application.mjs',
+      'check-api': 'dist/scripts/check-application-api.mjs',
     });
     const originalArgv = process.argv;
     const originalHome = process.env.SQL_APPS_PROJECT_HOME;

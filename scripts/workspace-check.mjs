@@ -5,16 +5,18 @@ import { lstat, mkdir, readFile, readdir, realpath, rename, unlink, writeFile } 
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readProjectManifest } from '../src/project-contract.mjs';
-import { projectHome, toolingHome } from '../src/tooling-context.mjs';
+import { installedTooling, projectHome, toolingHome } from '../src/tooling-context.mjs';
 
 const execute = promisify(execFile);
-const extensions = new Set(['.ts', '.mts', '.js', '.mjs', '.json', '.sql', '.sqlproj', '.html', '.css', '.bicep']);
+const extensions = new Set(['.ts', '.mts', '.js', '.mjs', '.json', '.sql', '.sqlproj', '.html', '.css', '.bicep', '.ps1']);
 const generatedBrowserArtifacts = new Set(['public/app.js', 'public/auth/redirect.js']);
 const excluded = new Set(['node_modules', 'obj', 'bin', '.git', '.sql-apps']);
 const projectDirectories = ['src', 'public', 'sql', 'dab'];
 const projectFiles = [
   '.sql-apps-project.json', 'package.json', 'package-lock.json', 'application.json',
   'role-based-data.json', 'tsconfig.json', '.config/dotnet-tools.json',
+  'creation-checks.json',
+  '.config/host-dab/dotnet-tools.json',
 ];
 
 async function fingerprint(home, directories, files = [], { source = false, prefix = '' } = {}) {
@@ -140,7 +142,7 @@ async function inspectBuild(home, sourceFingerprint, implementationFingerprint) 
 
 export async function inspectSource(value, options = {}) {
   const home = await realpath(value);
-  const tools = await realpath(options.toolingHome ?? await toolingHome(import.meta.url));
+  const tools = await realpath(await installedTooling(home) ?? options.toolingHome ?? await toolingHome(import.meta.url));
   try {
     const sourcePackage = home === tools
       ? JSON.parse(await readFile(join(home, 'package.json'), 'utf8'))
@@ -204,6 +206,7 @@ export async function inspectSource(value, options = {}) {
     return {
       home,
       toolingHome: tools,
+      bootstrap: toolingPackage.name !== '@microsoft/sql-apps',
       ready: true,
       code: 'SOURCE_READY',
       packageVersion: pkg.version ?? null,

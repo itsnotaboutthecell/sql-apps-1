@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - run: node --test tests/setup.test.mjs tests/setup-install.test.mjs tests/setup-journey.test.mjs tests/local-consent.test.mjs tests/workspace.test.mjs tests/workspace-runtime.test.mjs
+      - run: node --test tests/creation-*.test.mjs tests/setup.test.mjs tests/setup-install.test.mjs tests/setup-journey.test.mjs tests/local-consent.test.mjs tests/workspace.test.mjs tests/workspace-runtime.test.mjs
   validate:
     strategy:
       matrix:

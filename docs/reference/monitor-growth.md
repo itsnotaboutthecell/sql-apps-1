@@ -45,6 +45,11 @@ Keep free-tier SQL pause-at-monthly-limit behavior unless the owner deliberately
 
 Record the action, UTC time, observed delay and selected database: for example, creating and reloading a test item. Use approved synthetic records, not a production load test. Compare that time window in Database Hub.
 
+First use [Application read performance](read-performance.md) to distinguish
+unbounded results, repeated requests and slow result consumption from SQL work.
+That reference owns the read contract and comparable end-to-end measurements;
+this page remains the cloud resource, allowance and growth workflow.
+
 For a direct check, use your SQL editor to connect to the same **Azure SQL application database** with a separate operator identity that has `VIEW DATABASE STATE`. Subscription Reader alone is not enough; do not broaden the application's execute-only or least-privilege login to run diagnostics.
 
 ### Recent resource samples

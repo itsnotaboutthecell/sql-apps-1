@@ -1,4 +1,4 @@
-import { lstat, mkdir, readdir, realpath, rm, copyFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, realpath, rm, copyFile, readFile, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inspectSource } from './workspace-check.mjs';
@@ -8,7 +8,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, 'dist', 'tooling-package');
 const assets = [
   '.config/dotnet-tools.json',
-  'src/web',
+  '.config/host-dab/dotnet-tools.json',
+  'scripts/sql-express.ps1',
+  'src/web/app.ts',
   'sql',
   'dab',
   'public/index.html',
@@ -78,6 +80,8 @@ async function stageToolingPackage(destination) {
   for (const asset of assets) {
     await copyEntry(join(canonicalRoot, asset), join(expected, 'assets', asset));
   }
+  const app = join(expected, 'assets', 'src', 'web', 'app.ts');
+  await writeFile(app, (await readFile(app, 'utf8')).replace("'../browser.js'", "'@microsoft/sql-apps/browser'"));
   console.log(`Tooling package staged at ${expected}`);
 }
 

@@ -252,15 +252,7 @@ async function readLocal(container: string): Promise<LocalState> {
   return state;
 }
 
-export async function publishLocalSchema(container: string, target: {
-  database: string; project: string; output: string; intermediate?: string; runPostDeploy?: boolean;
-}, run: Run): Promise<void> {
-  stateSchema.shape.container.parse(container);
-  z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,127}$/).parse(target.database);
-  const environment = z.array(z.string()).parse(JSON.parse(await run('docker', ['inspect', container, '--format', '{{json .Config.Env}}'])));
-  const adminPassword = environment.find(value => value.startsWith('MSSQL_SA_PASSWORD='))?.slice('MSSQL_SA_PASSWORD='.length);
-  if (!adminPassword) throw new Error('Container must expose MSSQL_SA_PASSWORD for local schema publishing; it is never printed or persisted');
-  const port = await sqlHostPort(container, run);
+export async function ensureLocalSqlPackage(run: Run): Promise<void> {
   const tools = z.object({ tools: z.object({ 'microsoft.sqlpackage': z.object({
     version: z.string().regex(/^\d+\.\d+\.\d+$/),
   }) }) }).parse(JSON.parse(await readFile(projectPath('.config', 'dotnet-tools.json'), 'utf8')));
@@ -273,6 +265,18 @@ export async function publishLocalSchema(container: string, target: {
     console.error('SqlPackage version probe failed; restoring the approved local tool manifest before schema publication.');
   }
   if (!verified) await run('dotnet', ['tool', 'restore']);
+}
+
+export async function publishLocalSchema(container: string, target: {
+  database: string; project: string; output: string; intermediate?: string; runPostDeploy?: boolean;
+}, run: Run): Promise<void> {
+  stateSchema.shape.container.parse(container);
+  z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,127}$/).parse(target.database);
+  const environment = z.array(z.string()).parse(JSON.parse(await run('docker', ['inspect', container, '--format', '{{json .Config.Env}}'])));
+  const adminPassword = environment.find(value => value.startsWith('MSSQL_SA_PASSWORD='))?.slice('MSSQL_SA_PASSWORD='.length);
+  if (!adminPassword) throw new Error('Container must expose MSSQL_SA_PASSWORD for local schema publishing; it is never printed or persisted');
+  const port = await sqlHostPort(container, run);
+  await ensureLocalSqlPackage(run);
   await run('dotnet', ['build', target.project, '--output', target.output,
     ...(target.intermediate ? [`-p:BaseIntermediateOutputPath=${target.intermediate}${target.intermediate.endsWith(sep) ? '' : sep}`] : [])]);
   await run('dotnet', ['tool', 'run', 'sqlpackage', '--', '/Action:Publish', `/SourceFile:${join(target.output, 'database.dacpac')}`,
@@ -330,6 +334,8 @@ async function testLocalSql(state: LocalState, run: Run): Promise<void> {
   const sql = (await readFile(projectPath('sql', 'local', 'acceptance.sql'), 'utf8')).replaceAll('$(LocalDabUser)', login);
   const result = await databaseQuery(state, sql, run);
   if (!result.includes('LOCAL SQL ACCEPTANCE PASSED')) throw new Error('SQL acceptance did not report success');
+  const { recordCreationCapability } = await import('./creation-session.mjs');
+  await recordCreationCapability(runtimeFor().home, 'data', 'verified', 'Least-privilege SQL schema and query acceptance passed.');
 }
 
 export function localPrincipal(oid: string, scope = 'access_as_user', role = 'authenticated'): string {

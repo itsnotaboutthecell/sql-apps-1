@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { planConsent, grantConsent, assertConsent, revokeConsent, acknowledgeTerms } from '../src/local-consent.mjs';
 import { projectHome, toolingHome } from '../src/tooling-context.mjs';
 
@@ -39,9 +39,15 @@ export async function main(args = process.argv.slice(2), value, runner = execute
     const request = { operation, ...(selection === undefined ? {} : { selection }) };
     const plan = await planConsent(home, request);
     if (command !== 'run') { console.log(JSON.stringify(plan, null, 2)); return; }
+    const toolingPackage = JSON.parse(await readFile(join(tools, 'package.json'), 'utf8'));
+    if (operation !== 'restore' && toolingPackage.name !== '@microsoft/sql-apps' &&
+        JSON.parse(await readFile(join(home, 'package.json'), 'utf8')).sqlApps?.project === true) {
+      throw new Error('Restore the pinned project tooling first, then review setup and approvals through the installed package before build or runtime execution.');
+    }
     if (operation === 'build' || operation === 'restore') {
       await assertConsent(home, request);
-      if (operation === 'build') await runner(process.execPath, [join(tools, 'dist', 'scripts', 'build-provenance.mjs')], home);
+      if (operation === 'build') await runner(process.execPath, [toolingPackage.name === '@microsoft/sql-apps' ?
+        join(tools, 'dist', 'scripts', 'build-provenance.mjs') : fileURLToPath(new URL('./build-provenance.mjs', import.meta.url))], home);
       else {
         if (process.platform === 'win32') {
           const npm = process.env.npm_execpath ?? join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');

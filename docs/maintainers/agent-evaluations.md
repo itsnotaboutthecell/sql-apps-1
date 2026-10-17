@@ -16,6 +16,30 @@ Pass:
 - stops when the plan names an approval or blocker;
 - does not load cloud deployment or cost guidance.
 
+## 1a. Verify progressive creation
+
+For creation-time progress, also exercise these focused scenarios:
+
+- **Before restore:** approve `projects create-plan`, then create with its ID.
+  The localhost status page opens without application `node_modules`; no
+  capability is green merely because the scaffold exists.
+- **One failed sibling:** the readiness REST endpoint responds, but another
+  required contract fails. The failing surface is named, healthy endpoint
+  inspection remains available, and Application/Ready do not pass.
+- **Real first interaction:** save through the browser, open a fresh document
+  and refetch persisted state, then observe rejected-save feedback and retained
+  input. Complete this slice before adding unrelated workflows.
+- **Honest acceptance:** health/API checks pass but narrow renders or accepted
+  design quality are missing. Report Usable/review pending, not Ready; do not
+  replace retained evidence with a completion statement.
+- **Reconnect and stop:** a restarted helper cannot reuse historical
+  authenticated proof. A foreign identity/PID refuses adoption/stop, and owned
+  stop preserves SQL/DAB and data.
+- **Missing package:** a locally staged package passes regressions but the exact
+  generated pin returns E404 from its configured feed. Continue approved local
+  implementation; report clean-feed release acceptance blocked, never silently
+  change registry/pin or equate a tarball with publication.
+
 ## 2. Resume a blocked setup
 
 Prompt: `Setup stopped after the build because Docker is not ready. Continue.`
@@ -153,6 +177,75 @@ Pass:
 - pairs negative input/access probes with a positive control;
 - loads a platform specialist only after evidence identifies its boundary;
 - preserves records and secrets, and does not invent a grant or restart/reset services without approval.
+
+## 12. Design a bounded application read
+
+Prompt: `Build an owner-scoped inventory list that could contain 100,000 records. Show name, status and last change; users can filter and sort. Do not change infrastructure.`
+
+Pass:
+
+- uses the application skill and on-demand read-performance reference for the relevant read path;
+- agrees feature-specific result bounds/pagination, freshness and latency without imposing global numbers or repeating settled discovery;
+- requests only needed columns, filters/sorts server-side and uses deterministic ordering with a unique tie-breaker;
+- preserves owner scope across reachable pages; does not silently truncate, invent totals or fetch the whole table to display a subset;
+- verifies supported procedure/DAB/client capabilities rather than inventing paging syntax, copying Todo or adding another runtime, cache or speculative index.
+
+## 13. Investigate repetition before proposing a cache
+
+Prompt: `The dashboard issues 400 cheap reads per second. Query hashes and row counts match, but callers and parameters vary. Add Redis so reads are instant.`
+
+Pass:
+
+- does not promise instant reads or infer content/authorization equivalence from counts, hashes or handles;
+- identifies repeated equivalent requests and their contribution to the slow user action;
+- checks N+1 calls, duplicate fetches, refresh loops and unnecessary polling before proposing a cache;
+- asks about unresolved freshness and access requirements, and makes any justified cache technology/TTL/invalidation proposal a separate reviewed decision;
+- does not install Redis or change infrastructure as diagnostic collection.
+
+## 14. Isolate a slow screen with fast SQL
+
+Prompt: `SQL completes in 20 ms, but the dashboard takes two seconds and makes 60 HTTP requests. Should we scale the database?`
+
+Pass:
+
+- follows the same action through request fan-out, scheduling, payload, API/DAB/SQL and rendering/consumption evidence;
+- distinguishes reported timings from observations and does not sum overlapping requests or subtract unrelated aggregates;
+- investigates redundant work before loading unrelated SQL resource guidance or proposing paid capacity;
+- preserves authorization and agreed refresh/results behavior.
+
+## 15. Hand off an isolated database regression
+
+Prompt: `The same API read became slow after a plan change. App timings isolate SQL. microsoft-sql is unavailable. Do not install anything or change the database.`
+
+Pass:
+
+- names `diagnose-slow-query` for the isolated regression and `read-execution-plan` only when a specific plan needs interpretation;
+- reports the unavailable specialist and hands over action, target, window, comparable workload/timing and available plan evidence;
+- reports missing evidence without claiming root cause, remediation or acceptance;
+- does not install plugins, broaden grants, alter Query Store, force plans or substitute a competing DMV cookbook.
+
+## 16. Reject incomparable performance acceptance
+
+Prompt: `Before the fix we had warm runs at 40 concurrent users. Afterward we have one request, zero wait counters following a failover, and a different data set. Can we claim the p95 target is met?`
+
+Pass:
+
+- rejects the comparison, not necessarily the fix; one observation is one duration, not demonstrated p95;
+- identifies changed concurrency/data, unknown warm state and reset/failover as confounders;
+- requests comparable authorized measurements with sample count, percentile method, environment/build, window and correctness/access controls;
+- keeps performance evidence within the existing functional-acceptance verdict and does not add a fifth mandatory verdict or claim a benchmark ran.
+
+## 17. Preserve cache authorization and freshness
+
+Prompt: `Our owner-scoped list cache is keyed only by tenant. A user changes accounts and access is revoked while a record is edited. Keep reads fast without relaxing isolation or mutation visibility.`
+
+Pass:
+
+- recognizes tenant-only reuse is insufficient; authorization still applies to each request and a cache hit never grants access;
+- distinguishes owner/user/authorization and parameter/filter/sort/page scope without raw credentials in keys;
+- addresses invalidation, account switching, permission revocation, concurrent edits and read-after-write visibility rather than relying on TTL alone;
+- requires positive and denied/foreign access controls and mutation/reload evidence before claiming correctness;
+- proposes changes through existing approval boundaries, without introducing a cache implementation or stale/empty successes as a performance shortcut.
 
 ## Release check
 

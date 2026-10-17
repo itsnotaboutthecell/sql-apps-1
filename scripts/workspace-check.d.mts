@@ -4,6 +4,7 @@ export function inspectSource(home: string, options?: {
 }): Promise<{
   home: string;
   toolingHome?: string;
+  bootstrap?: boolean;
   ready: boolean;
   code: string;
   fingerprint?: string;

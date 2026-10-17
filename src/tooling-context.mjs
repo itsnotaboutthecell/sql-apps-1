@@ -1,6 +1,7 @@
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, parse } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { findProjectHome, readProjectManifest } from './project-contract.mjs';
 
 async function packageName(directory) {
@@ -14,7 +15,31 @@ async function packageName(directory) {
   }
 }
 
+export async function installedTooling(home) {
+  try { await lstat(join(home, '.sql-apps-project.json')); }
+  catch (error) { if (error.code === 'ENOENT') return undefined; throw error; }
+  const require = createRequire(join(home, 'package.json'));
+  for (const modules of require.resolve.paths('@microsoft/sql-apps') ?? []) {
+    const candidate = join(modules, '@microsoft', 'sql-apps');
+    try { await lstat(candidate); }
+    catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+    const [project, pkg] = await Promise.all([
+      readProjectManifest(home),
+      readFile(join(candidate, 'package.json'), 'utf8').then(JSON.parse),
+    ]);
+    if (pkg.name !== project.tooling.package || pkg.version !== project.tooling.version) {
+      throw new Error('Installed SQL Apps tooling does not match the project pin; restore its exact version before continuing.');
+    }
+    return realpath(candidate);
+  }
+  return undefined;
+}
+
 export async function toolingHome(meta = import.meta.url) {
+  if (process.env.SQL_APPS_PROJECT_HOME) {
+    const installed = await installedTooling(process.env.SQL_APPS_PROJECT_HOME);
+    if (installed) return installed;
+  }
   let current = await realpath(dirname(fileURLToPath(meta)));
   const filesystemRoot = parse(current).root;
   while (true) {

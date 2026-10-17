@@ -1,8 +1,7 @@
-import { ApiError, SqlAppsClient } from '../client.js';
-import { parseBrowserConfig } from '../browser-config.js';
-import { parseCurrentUser } from '../access.js';
-import { prepareAuthentication, SessionExpiredError, type BrowserAuthentication } from './session.js';
-import { renderAuthentication, authenticationErrorMessage, type AuthState } from './auth-view.js';
+import {
+  ApiError, SqlAppsClient, parseBrowserConfig, parseCurrentUser, prepareAuthentication, SessionExpiredError,
+  renderAuthentication, authenticationErrorMessage, connectCreationStatus, type BrowserAuthentication, type AuthState,
+} from '../browser.js';
 
 const element = <T extends HTMLElement>(id: string) => {
   const value = document.getElementById(id);
@@ -44,6 +43,7 @@ async function main() {
   const response = await fetch('/auth/config', { redirect: 'error', signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new ApiError(response.status);
   const config = parseBrowserConfig(await response.json());
+  if ('creationStatusPath' in config && config.creationStatusPath) connectCreationStatus(config.creationStatusPath);
   authMode = config.mode;
   const notice = config.mode === 'entra' && config.localBackend
     ? 'Microsoft sign-in is real. Local DAB claims and backend services remain development simulations.'

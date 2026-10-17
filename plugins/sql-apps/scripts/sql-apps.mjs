@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 
 export function bindingPath() {
   return join(process.env.COPILOT_HOME || join(homedir(), '.copilot'), 'sql-apps-local.json');
@@ -19,8 +20,8 @@ export async function validateHome(value) {
        typeof pkg.dependencies?.['@microsoft/sql-apps'] !== 'string')) || !validLocalScript) {
     throw new Error('The selected directory is not this SQL Apps application checkout');
   }
-  for (const file of ['src/local-cli.ts', 'sql/database.sqlproj',
-    ...(foundation ? ['plugins/sql-apps/plugin.json'] : [])]) await access(join(root, file));
+  for (const file of ['sql/database.sqlproj',
+    ...(foundation ? ['src/local-cli.ts', 'plugins/sql-apps/plugin.json'] : ['.sql-apps-project.json'])]) await access(join(root, file));
   return root;
 }
 
@@ -100,12 +101,6 @@ export async function dispatchProjects(args, options = {}) {
 }
 
 export async function workspaceReport(home, options = {}) {
-  const inspector = join(home, 'scripts', 'workspace-check.mjs');
-  try { await access(inspector); }
-  catch (error) {
-    throw new Error('Workspace preflight missing from the selected checkout; obtain the updated source before execution.', { cause: error });
-  }
-  const { checkWorkspace } = await import(pathToFileURL(inspector).href);
   const environment = options.environment ?? process.env;
   const userHome = resolve(options.userHome ?? homedir());
   const pkg = JSON.parse(await readFile(join(home, 'package.json'), 'utf8'));
@@ -113,6 +108,17 @@ export async function workspaceReport(home, options = {}) {
   let foundation = true;
   if (pkg.sqlApps?.project === true) {
     foundation = false;
+    const require = createRequire(join(home, 'package.json'));
+    for (const modules of require.resolve.paths('@microsoft/sql-apps') ?? []) {
+      const candidate = join(modules, '@microsoft', 'sql-apps');
+      try { await access(candidate); }
+      catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+      const context = await import(pathToFileURL(require.resolve('@microsoft/sql-apps/tooling-context')).href);
+      tools = await context.installedTooling(home);
+      break;
+    }
+  }
+  if (!foundation && tools === home) {
     let candidate = resolve(options.cwd ?? process.cwd());
     while (true) {
       try {
@@ -132,6 +138,9 @@ export async function workspaceReport(home, options = {}) {
       candidate = parent;
     }
   }
+  const toolingPackage = JSON.parse(await readFile(join(tools, 'package.json'), 'utf8'));
+  const inspector = join(tools, ...(toolingPackage.name === '@microsoft/sql-apps' ? ['dist'] : []), 'scripts', 'workspace-check.mjs');
+  const { checkWorkspace } = await import(pathToFileURL(inspector).href);
   let source = 'checkout';
   let explicit = false;
   if (environment.SQL_APPS_HOME !== undefined) {
@@ -182,12 +191,13 @@ const consentCommands = new Set(['consent-plan', 'consent-status', 'consent-gran
 export async function main(args = process.argv.slice(2)) {
   const [command = 'help', container = 'sql-apps-sql'] = args;
   if (command === 'projects') {
-    if (args.length > 3) throw new Error('Usage: projects <root [absolute-path]|create <name>|list|open <absolute-path>>');
+    if (args.length > 5) throw new Error('Usage: projects <create-plan <name>|create <name> [--approval <id>]|root|list|open>');
     await dispatchProjects(args.slice(1));
     return;
   }
   const journey = command === 'setup';
-  if (!journey && !consentCommands.has(command) && args.length > 2) throw new Error('Expected a command and its optional selection');
+  const creation = command === 'creation';
+  if (!journey && !creation && !consentCommands.has(command) && args.length > 2) throw new Error('Expected a command and its optional selection');
   if (command === 'help') {
     console.log('SQL Apps local plugin: projects <root|create|list|open> | home | workspace-check | guide | guide-save <absolute-brief.json> | status | setup-check [existing-sql-container] | ' + [...commands].join(' | '));
     console.log('role-based-setup-check [existing-sql-container] is an alias of setup-check. Local commands use the configured checkout; no cloud deployment command is exposed.');
@@ -195,10 +205,8 @@ export async function main(args = process.argv.slice(2)) {
     console.log('Pre-build journey: setup plan|status|run|resume [--workspace <base-port|legacy>] [--json]; setup approval|approve [--workspace <n>] [--approval <id>] is the one local approval; setup install-plan <tool> | setup install <absolute-reviewed-plan.json>. Install only after explicit approval.');
     return;
   }
-  if (!['home', 'workspace-check', 'guide', 'guide-save', 'status', 'setup-check', 'role-based-setup-check', 'setup'].includes(command) && !commands.has(command) && !consentCommands.has(command)) throw new Error(`Unsupported plugin command: ${command}`);
-  if (journey) {
-    if (args.length > 10) throw new Error('Too many setup arguments');
-  } else if (consentCommands.has(command)) {
+  if (!['home', 'workspace-check', 'guide', 'guide-save', 'status', 'setup-check', 'role-based-setup-check', 'setup', 'creation'].includes(command) && !commands.has(command) && !consentCommands.has(command)) throw new Error(`Unsupported plugin command: ${command}`);
+  if (consentCommands.has(command)) {
     if (['consent-plan', 'consent-status', 'consent-run'].includes(command)) {
       if (args.length < 2 || args.length > 3) throw new Error('Provide an operation and its optional selection');
     } else if (command === 'consent-revoke') {
@@ -212,7 +220,7 @@ export async function main(args = process.argv.slice(2)) {
     if (args.length !== 2 || !isAbsolute(container)) throw new Error('Provide an absolute artifact directory for the selected application');
   } else if (command === 'selected-stop') {
     if (args.length !== 2 || !/^[a-z][a-z0-9-]{0,31}$/.test(container)) throw new Error('Invalid application selection');
-  } else if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(container)) throw new Error('Invalid SQL container name');
+  } else if (!journey && !creation && !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(container)) throw new Error('Invalid SQL container name');
   const home = await resolveHome();
   if (command === 'home') { console.log(home); return; }
   const workspace = await workspaceReport(home);
@@ -235,24 +243,35 @@ export async function main(args = process.argv.slice(2)) {
   const guided = command === 'guide' || command === 'guide-save';
   const setup = command === 'setup-check' || command === 'role-based-setup-check';
   const consent = consentCommands.has(command);
-  const cli = journey ? join(home, 'scripts', 'setup.mjs') : consent ? join(home, 'scripts', 'local-consent.mjs') : guided ? join(home, 'scripts', 'guide.mjs') :
-    setup ? join(home, 'scripts', 'setup-check.mjs') : join(home, 'dist', 'src', 'local-cli.js');
+  if (workspace.bound.bootstrap &&
+      (!journey && !creation && !guided && !setup && !consent || command === 'consent-run' && container !== 'restore')) {
+    throw new Error('Restore the pinned project tooling first, then run setup plan through the installed package and review its approvals before build or runtime execution.');
+  }
+  const tools = workspace.bound.toolingHome;
+  const toolingPackage = JSON.parse(await readFile(join(tools, 'package.json'), 'utf8'));
+  const scripts = join(tools, ...(toolingPackage.name === '@microsoft/sql-apps' ? ['dist'] : []), 'scripts');
+  const cli = journey ? join(scripts, 'setup.mjs') : creation ? join(scripts, 'creation.mjs') :
+    consent ? join(scripts, 'local-consent.mjs') : guided ? join(scripts, 'guide.mjs') :
+    setup ? join(scripts, 'setup-check.mjs') : join(tools, 'dist', 'src', 'local-cli.js');
   try { await access(cli); }
   catch (error) {
     throw new Error(journey ? 'Setup coordinator missing from the bound checkout; obtain the updated project.' : consent ? 'Consent commands missing from the bound checkout; obtain the updated project.' : guided ? 'Guide missing from the bound checkout; obtain the updated project.' :
       setup ? 'Setup diagnostic missing from the bound checkout; obtain the updated project.' :
       'Local CLI not built. Review consent-plan build, then after approval use consent-run build in the configured checkout', { cause: error });
   }
-  if (!journey && !guided && !setup && !consent && !workspace.bound.build.ready) {
+  if (!journey && !creation && !guided && !setup && !consent && !workspace.bound.build.ready) {
     throw new Error(`Runtime build is not verified: ${workspace.bound.build.code}. ${workspace.bound.build.nextAction}`);
   }
-  const childArgs = journey ? [cli, ...args.slice(1)] : consent ? [cli, command.replace('consent-', ''), ...args.slice(1)] :
+  const childArgs = journey || creation ? [cli, ...args.slice(1)] : consent ? [cli, command.replace('consent-', ''), ...args.slice(1)] :
     guided ? [cli, ...(command === 'guide-save' ? ['--save', container] : []), '--json'] :
     setup ? [cli, '--json', ...(command === 'role-based-setup-check' ? ['--profile', 'role-based-data'] : []),
       ...(args.length === 2 ? ['--container', container] : [])] :
     [cli, command, ...(args.length === 2 ? [container] : [])];
   await new Promise((done, reject) => {
-    const child = spawn(process.execPath, childArgs, { cwd: home, shell: false, stdio: 'inherit' });
+    const environment = { ...process.env, SQL_APPS_TOOLING_HOME: tools };
+    if (workspace.bound.project) environment.SQL_APPS_PROJECT_HOME = home;
+    else delete environment.SQL_APPS_PROJECT_HOME;
+    const child = spawn(process.execPath, childArgs, { cwd: home, env: environment, shell: false, stdio: 'inherit' });
     child.once('error', reject);
     child.once('close', (code, signal) => {
       if (signal) reject(new Error(`Local CLI terminated by ${signal}`));

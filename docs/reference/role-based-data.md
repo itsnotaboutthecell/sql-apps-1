@@ -32,7 +32,7 @@ For cloud delivery, preserve production `AzureAD` DAB authentication, `/api` RES
 
 Follow [scoped consent](../guides/run-locally.md#approvals-and-readiness). Dependency restore, build, workspace selection, SQL terms/downloads/schema/startup and synthetic acceptance are distinct approval scopes.
 
-Before build, `node scripts/setup-check.mjs --profile role-based-data` checks prerequisites and only selected gateway/DAB ports; the installed launcher exposes the same diagnostic as `role-based-setup-check`. It does not install tools or start services.
+After tooling restore and before build, `npm run setup:check -- --profile role-based-data` checks prerequisites and only selected gateway/DAB ports; the installed launcher exposes the same diagnostic as `role-based-setup-check`, including through its explicit foundation bootstrap binding before restore. It does not install tools or start services.
 
 After an approved build and explicit workspace selection:
 

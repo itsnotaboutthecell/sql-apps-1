@@ -4,6 +4,10 @@ Functional acceptance and design acceptance are separate. `sql-apps check`
 reports missing or incomplete design evidence when application UI differs from
 the SQL Apps template.
 
+Progressive creation additionally imports retained current-build browser and
+desktop/narrow evidence before showing Ready. The importer does not replace this
+critique or quality verdict. See [progressive creation](progressive-creation.md).
+
 ## Design intent
 
 Create `docs/design-intent.md` before implementing a new user-facing app or

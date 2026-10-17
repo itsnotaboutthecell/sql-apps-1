@@ -11,6 +11,9 @@ import { runtimeFor } from './workspace.mjs';
 import type { RoleBasedProfile } from './role-based-profile.js';
 import { probeReadiness } from './readiness.js';
 import { projectPath } from './runtime-roots.js';
+import { readSqlTarget, sqlTargetFingerprint } from './sql-target.mjs';
+import { recordCreationCapability, creationSession } from './creation-session.mjs';
+import { loopbackFetch } from './creation-checks.mjs';
 
 export const localAppOrigin = runtimeFor().origins.app;
 const tenantId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -22,12 +25,14 @@ export const developmentUsers = [
 export async function createLocalApp(fetcher: typeof fetch, authorized: RoleBasedProfile,
   container = runtimeFor().defaultSql, authentication: LocalAuthentication = readLocalAuthentication(), entraKey?: JWTVerifyGetKey) {
   if (process.env.NODE_ENV === 'production') throw new Error('Local development server is disabled in production');
+  const sqlTarget = await readSqlTarget(runtimeFor().home, container);
   const provenance = z.object({ version: z.literal(2), home: z.literal(runtimeFor().home),
     sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
     toolingFingerprint: z.string().regex(/^[a-f0-9]{64}$/) })
     .passthrough()
     .parse(JSON.parse(await readFile(projectPath('dist', 'build-provenance.json'), 'utf8')));
   const sessions = new Map<string, { oid: string; expires: number }>();
+  let documentObserved = false;
   const previewIdentity = async (token: string) => {
     const session = sessions.get(token);
     if (!session || session.expires <= Date.now()) {
@@ -51,12 +56,18 @@ export async function createLocalApp(fetcher: typeof fetch, authorized: RoleBase
         signal, redirect: 'error',
       });
       if (!response.ok) throw new Error(`Authorized data readiness returned HTTP ${response.status}`);
-      await response.body?.cancel();
+      if (runtimeFor(container).ports.internalGateway) {
+        const body: unknown = await response.json();
+        if (!body || typeof body !== 'object' || !('value' in body) || !Array.isArray(body.value)) {
+          throw new Error('Authorized data readiness returned an invalid row envelope');
+        }
+      } else await response.body?.cancel();
     });
   };
   const users = developmentUsers.map((user, index) => ({
     ...user, name: `${user.name} (${index === 0 ? 'simulated user with required role' : 'simulated user without required role'})`,
   }));
+  const creationStatus = runtimeFor(container).ports.internalGateway ? { creationStatusPath: '/__sql_apps/creation' as const } : {};
   const app = await createGateway({
     requiredRole: authorized.requiredRole, readinessPath: authorized.readinessPath,
     tenantId: gatewayTenant, apiClientId: gatewayClient, dabUrl: localOrigin,
@@ -67,7 +78,8 @@ export async function createLocalApp(fetcher: typeof fetch, authorized: RoleBase
     browserConfig: authentication.mode === 'entra' ? {
       mode: 'entra', tenantId: authentication.tenantId, clientId: authentication.clientId,
       scope: `api://${authentication.clientId}/access_as_user`, localBackend: true, readinessPath: authorized.readinessPath,
-    } : { mode: 'local', readinessPath: authorized.readinessPath },
+      ...creationStatus,
+    } : { mode: 'local', readinessPath: authorized.readinessPath, ...creationStatus },
     requestGuard: async (request, reply) => {
       if (request.headers.host !== new URL(localAppOrigin).host) {
         return reply.code(403).send({ error: 'Use the loopback development origin' });
@@ -88,13 +100,42 @@ export async function createLocalApp(fetcher: typeof fetch, authorized: RoleBase
       headers.delete('x-ms-api-role');
       headers.set('x-ms-client-principal', localPrincipal(user.oid, 'access_as_user', authorized.requiredRole));
       headers.set('x-ms-api-role', authorized.requiredRole);
-      return fetcher(target, { ...options, headers });
+      const response = await fetcher(target, { ...options, headers });
+      if (runtimeFor(container).ports.internalGateway && target.pathname === authorized.readinessPath && response.ok) {
+        const body: unknown = await response.clone().json();
+        if (!body || typeof body !== 'object' || !('value' in body) || !Array.isArray(body.value)) throw new Error('Invalid authorized readiness response.');
+        let additionalChecks = false;
+        try {
+          await readFile(projectPath('creation-checks.json'));
+          additionalChecks = true;
+        } catch (error) {
+          if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+        }
+        if (!additionalChecks) {
+          await recordCreationCapability(runtimeFor(container).home, 'services', 'verified', 'Authenticated required browser data endpoint returned a row envelope.');
+          if (documentObserved) await recordCreationCapability(runtimeFor(container).home, 'application', 'verified', 'Application document and authenticated data query verified.');
+        }
+      }
+      return response;
     },
   });
+  if (runtimeFor(container).ports.internalGateway) {
+    app.addHook('onResponse', async (request, reply) => {
+      if (request.url === '/' && reply.statusCode === 200 && String(reply.getHeader('content-type')).includes('text/html')) {
+        documentObserved = true;
+        const session = await creationSession(runtimeFor(container).home);
+        if (session?.snapshot.capabilities.find(item => item.id === 'services')?.state === 'verified') {
+          await recordCreationCapability(runtimeFor(container).home, 'application', 'verified', 'Application document and authenticated data query verified.');
+        }
+      }
+    });
+  }
   app.get('/local/workspace', async () => {
     const runtime = runtimeFor();
     return { version: 1, id: runtime.id, mode: runtime.mode, origins: runtime.origins,
       container, sourceFingerprint: provenance.sourceFingerprint, authentication,
+      ...(sqlTarget.provider === 'container' ? {} : { sqlProvider: sqlTarget.provider, sqlTargetFingerprint: sqlTargetFingerprint(sqlTarget) }),
+      ...(runtime.ports.internalGateway ? { gatewayOrigin: `http://127.0.0.1:${runtime.ports.internalGateway}` } : {}),
       profile: 'role-based-data' };
   });
   if (authentication.mode === 'preview') {
@@ -163,13 +204,19 @@ export async function waitForLocalReadiness(app: LocalApp, pause = readinessPaus
 export async function startLocalGateway(app: LocalApp, container: string, pause = readinessPause): Promise<void> {
   try {
     await waitForLocalReadiness(app, pause);
-    await app.listen({ host: '127.0.0.1', port: runtimeFor(container).ports.gateway });
-    const response = await fetch(new URL('/health/ready', localAppOrigin),
-      { signal: AbortSignal.timeout(5_000), redirect: 'error' });
+    const runtime = runtimeFor(container);
+    await app.listen({ host: '127.0.0.1', port: runtime.ports.internalGateway ?? runtime.ports.gateway });
+    const verificationOrigin = runtime.ports.internalGateway ? `http://127.0.0.1:${runtime.ports.internalGateway}` : localAppOrigin;
+    const response = await (runtime.ports.internalGateway ? loopbackFetch : fetch)(new URL('/health/ready', verificationOrigin),
+      { headers: { host: new URL(localAppOrigin).host }, signal: AbortSignal.timeout(5_000), redirect: 'error' });
     const body = readinessStatus.parse(await response.json());
     if (response.status !== 200 || body.status !== 'ready') {
       const dependency = body.status === 'not-ready' ? body.dependency ?? 'profile' : 'profile';
       throw new Error(`Running local gateway ${dependency} readiness did not pass initial HTTP confirmation`);
+    }
+    if (runtime.ports.internalGateway) {
+      await recordCreationCapability(runtime.home, 'data', 'verified', 'Configured SQL query and schema responded through authorized DAB.');
+      await recordCreationCapability(runtime.home, 'data-access', 'verified', 'Authorized configured SQL readiness procedure returned a row envelope.');
     }
   } catch (cause) {
     try { await app.close(); }

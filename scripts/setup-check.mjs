@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { readFile, access, realpath, lstat, mkdir, writeFile } from 'node:fs/promises';
 import { totalmem, hostname, release } from 'node:os';
 import { createServer } from 'node:net';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { randomUUID, createHash } from 'node:crypto';
@@ -11,6 +11,8 @@ import { runtimeFor, describeWorkspace } from '../src/workspace.mjs';
 import { readSqlSources, roleBasedDabProblem, roleBasedProcedureProblem, roleBasedProfileProblem } from '../src/role-based-rules.mjs';
 import { readProjectManifest } from '../src/project-contract.mjs';
 import { projectHome, toolingHome } from '../src/tooling-context.mjs';
+import { recommendSqlRoutes, resolveSqlTarget } from '../src/sql-target.mjs';
+import { loopbackFetch } from '../src/creation-checks.mjs';
 
 const execute = promisify(execFile);
 const containerPattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
@@ -55,6 +57,8 @@ export function parseArguments(args) {
     else if (args[i] === '--container' && !options.container && containerPattern.test(args[i + 1] ?? '')) options.container = args[++i];
     else if (args[i] === '--profile' && !options.profile && args[i + 1] === 'role-based-data') options.profile = args[++i];
     else if (args[i] === '--workspace' && !options.workspace && (args[i + 1] === 'legacy' || /^\d{5}$/.test(args[i + 1] ?? ''))) options.workspace = args[++i];
+    else if (args[i] === '--sql-provider' && !options.sqlProvider && ['container', 'azure', 'express'].includes(args[i + 1])) options.sqlProvider = args[++i];
+    else if (args[i] === '--sql-target' && !options.sqlTarget && isAbsolute(args[i + 1] ?? '')) options.sqlTarget = args[++i];
     else throw new Error('Usage: node scripts/setup-check.mjs [--json] [--container <existing-sql-container>] [--profile role-based-data] [--workspace <base-port|legacy>]');
   }
   return options;
@@ -76,6 +80,8 @@ export async function checkSetup(options = {}, injected = {}, context = {}) {
     throw new Error('Requested workspace differs from the existing selection; inspect it without overwriting.');
   }
   const runtime = proposed ? runtimeFor(options.container, root, proposed) : selected;
+  const sqlTarget = await resolveSqlTarget(root, runtime.sqlContainer, options);
+  const endpoint = sqlTarget.provider !== 'container';
   if (options.container && !containerPattern.test(options.container)) throw new Error('Invalid SQL container name');
   if (options.profile && options.profile !== 'role-based-data') throw new Error('Invalid setup profile');
   const deps = {
@@ -140,7 +146,28 @@ export async function checkSetup(options = {}, injected = {}, context = {}) {
       'Check the SDK/PATH in a fresh terminal; install the SDK, not just the runtime, only if missing.',
       true, failedTool(error));
   }
+  if (endpoint) {
+    try {
+      const lines = (await deps.run('dotnet', ['--list-runtimes'])).split(/\r?\n/).filter(line => line.trim());
+      const runtimes = lines.map(line => /^(\S+)\s+(\d+\.\d+\.\d+(?:[-+]\S+)?)\s+\[.+\]\s*$/.exec(line));
+      if (runtimes.some(runtime => !runtime)) throw new Error('Unrecognized runtime listing');
+      const missing = ['Microsoft.NETCore.App', 'Microsoft.AspNetCore.App'].filter(name =>
+        !runtimes.some(runtime => runtime[1] === name && /^8\.0\.\d+$/.test(runtime[2])));
+      add('host-dab-runtime', missing.length ? 'action-required' : 'ready',
+        missing.length ? 'HOST_DAB_RUNTIME_MISSING' : 'HOST_DAB_RUNTIME_READY',
+        missing.length ? `Host DAB 2.0.12 requires the missing .NET 8 runtimes: ${missing.join(', ')}.` :
+          'Host DAB .NET and ASP.NET Core 8 runtimes are installed.',
+        missing.length ? 'Approve this SQL target selection first if not saved, then review setup install-plan dotnet for side-by-side SDK 8 installation; preserve existing SDKs.' :
+          'No host runtime installation needed.', true, missing.length ? 'missing' : 'ready');
+    } catch (error) {
+      add('host-dab-runtime', 'action-required', 'HOST_DAB_RUNTIME_UNVERIFIED',
+        'Host DAB .NET 8 runtimes could not be verified.',
+        'Review dotnet --list-runtimes and PATH before approving an installation; an unknown probe failure is not a missing runtime.',
+        true, failedTool(error));
+    }
+  }
   let engine;
+  if (!endpoint) {
   try {
     if (!/^Docker version \d+\.\d+\.\d+/i.test((await deps.run('docker', ['--version'])).trim())) throw new Error('invalid Docker version');
     add('docker-cli', 'ready', 'DOCKER_CLI_READY', 'Docker CLI is available.', 'Check the engine below.', true, 'ready');
@@ -203,6 +230,50 @@ export async function checkSetup(options = {}, injected = {}, context = {}) {
       }
     }
   } else add('sql-image', 'not-checked', 'SQL_NOT_CHECKED', 'SQL image/container not checked without the engine.', 'Start Docker, then rerun setup-check.');
+  } else {
+    add('sql-endpoint', 'ready', 'SQL_ENDPOINT_SELECTED', `Selected ${sqlTarget.provider} development database ${sqlTarget.database}.`,
+      'Selection is not SQL readiness; startup verifies the approved engine/database and least-privilege principal.');
+    if (sqlTarget.provider === 'express' && (deps.platform !== 'win32' || deps.architecture !== 'x64')) {
+      add('sql-platform', 'action-required', 'EXPRESS_HOST_UNSUPPORTED', 'SQL Server 2025 Express requires Windows x64.', 'Select Azure SQL on this host.');
+    } else if (sqlTarget.provider === 'express') {
+      try {
+        const helper = join(tools, await exists(join(tools, 'assets', 'runtime-contract.json')) ? 'assets' : '', 'scripts', 'sql-express.ps1');
+        const inventory = JSON.parse(await deps.run('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', helper, '-Action', 'Inspect']));
+        if (inventory.supported !== true) throw new Error('Express host requirements are unsupported or unverifiable.');
+        if (!Array.isArray(inventory.instances)) throw new Error('invalid Express inventory');
+        const instance = inventory.instances.find(item => item.instance?.toLowerCase() === sqlTarget.instance.toLowerCase());
+        if (!instance) add('sql-express', 'action-required', 'EXPRESS_MISSING', 'The selected Express instance was not found.',
+          'Review setup install-plan sql-express; only after approval run its exact installation plan, then separately review configure-express.', true, 'missing');
+        else if (instance.majorVersion !== 17 || !/^Express Edition(?:\s|$)/.test(instance.edition)) add('sql-express', 'action-required', 'EXPRESS_VERSION_UNSUPPORTED',
+          'The selected instance is not SQL Server 2025 Express.', 'Select a supported instance or Azure SQL. Do not upgrade or overwrite this instance automatically.', true, 'unsupported');
+        else if (instance.verified && (instance.containedAuthentication !== 1 || !instance.loopbackPorts?.includes(sqlTarget.port))) {
+          add('sql-express', 'action-required', 'EXPRESS_CONFIGURATION_REVIEW_REQUIRED', 'SQL Server 2025 Express identity verified; contained authentication or the selected loopback TCP configuration needs review.',
+            'First approve the selected setup target, then review consent plan configure-express and grant it once. Run local configure-express only after specific approval for instance-wide containment, loopback TCP and restart. No changes were attempted.');
+        } else if (instance.verified && instance.integratedSecurityOnly !== 0) {
+          add('sql-express', 'action-required', 'EXPRESS_SQL_AUTHENTICATION_REVIEW_REQUIRED',
+            'The contained runtime user requires SQL authentication; the selected instance is Windows-only or its authentication mode is unverified.',
+            'Review consent plan configure-express-auth and grant it once only after approving instance-wide mixed mode and restart. This does not enable SA or create a server-level app login. No changes were attempted.');
+        } else add('sql-express', instance.verified ? 'ready' : 'action-required', instance.verified ? 'EXPRESS_IDENTITY_VERIFIED' : 'EXPRESS_IDENTITY_UNVERIFIED',
+          'Express registration was found; SQL identity verification is reported separately.',
+          instance.verified ? 'Startup also verifies the selected loopback port, database and app principal. Containment/TCP/service changes require a separate configure-express grant-once.' :
+            'Inspect the named Windows-authenticated instance and permissions before startup; no installation or restart was attempted.',
+          true, instance.verified ? 'ready' : 'check-failed');
+      } catch (error) {
+        add('sql-express', 'action-required', 'EXPRESS_INSPECTION_FAILED', 'Express inspection could not complete.',
+          `Review PowerShell policy and existing instances (${error.code ?? 'PROBE_FAILED'}); do not install over unknown state.`, true, 'check-failed');
+      }
+    }
+    if (sqlTarget.provider === 'azure') {
+      try {
+        const account = JSON.parse(await deps.run('az', ['account', 'show', '--query', '{id:id,tenantId:tenantId}', '-o', 'json']));
+        if (account.id !== sqlTarget.subscriptionId || account.tenantId !== sqlTarget.tenantId) throw new Error('account mismatch');
+        add('azure-account', 'ready', 'AZURE_ACCOUNT_SELECTED', 'Azure CLI account matches the approved SQL target.', 'No login or resource changes were performed.');
+      } catch {
+        add('azure-account', 'action-required', 'AZURE_ACCOUNT_REVIEW_REQUIRED', 'Azure CLI/login/account selection could not be verified.',
+          'Review official Azure CLI installation/login and select the intended subscription/tenant explicitly, or offer Express. No login was attempted.');
+      }
+    }
+  }
   let containers = [];
   if (engine) {
     try {
@@ -215,9 +286,12 @@ export async function checkSetup(options = {}, injected = {}, context = {}) {
     }
   }
   const ports = [[runtime.ports.gateway, null], [runtime.ports.data, 'data']];
+  if (runtime.ports.internalGateway) ports.push([runtime.ports.internalGateway, null]);
   for (const [port, owner] of ports) {
     const state = await deps.port(port);
     if (state === 'free') add(`port-${port}`, 'ready', 'PORT_FREE', `Local port ${port} is free.`, 'Available for application startup.');
+    else if (state === 'occupied' && owner && endpoint) add(`port-${port}`, 'ready', 'HOST_SERVICE_OWNERSHIP_PENDING',
+      `Host data port ${port} is occupied; runtime ownership still needs verification.`, 'Startup/serve must match the recorded process start, target and configuration before reuse.', false);
     else if (state === 'occupied' && owner && containers.some(value => value.owner === owner &&
       (runtime.mode !== 'isolated' || value.workspace === runtime.id) &&
       new RegExp(`127\\.0\\.0\\.1:${port}->`).test(value.ports))) {
@@ -225,11 +299,13 @@ export async function checkSetup(options = {}, injected = {}, context = {}) {
         'Check the intended checkout/container before reuse; a label alone does not prove readiness.');
     } else {
       let healthy = false;
-      if (port === runtime.ports.gateway && state === 'occupied') {
+      if ([runtime.ports.gateway, runtime.ports.internalGateway].includes(port) && state === 'occupied') {
         try {
-          const response = await deps.fetch(`${runtime.origins.app}/health/live`, { signal: AbortSignal.timeout(2000), redirect: 'error' });
+          const response = port === runtime.ports.internalGateway && !injected.fetch
+            ? await loopbackFetch(`http://127.0.0.1:${port}/health/live`, { headers: { host: new URL(runtime.origins.app).host }, signal: AbortSignal.timeout(2000) })
+            : await deps.fetch(`${runtime.origins.app}/health/live`, { signal: AbortSignal.timeout(2000), redirect: 'error' });
           await response.text();
-          healthy = response.ok;
+          healthy = response.ok || runtime.ports.internalGateway && response.status === 503 && response.headers.get('x-sql-apps-creation') === 'pending';
         } catch { healthy = false; }
       }
       add(`port-${port}`, 'action-required', healthy ? 'EXISTING_GATEWAY_CHECK_OWNERSHIP' : state === 'occupied' ? 'PORT_OCCUPIED' : 'PORT_NOT_CHECKED',
@@ -266,10 +342,19 @@ export async function checkSetup(options = {}, injected = {}, context = {}) {
         'Startup still checks that the readiness procedure exists and responds.', false);
     }
   }
+  let compilerPackage = join(root, 'node_modules', 'typescript', 'package.json');
+  if (context.project === true) {
+    for (const location of [root, tools]) {
+      try {
+        compilerPackage = createRequire(join(location, 'package.json')).resolve('typescript/package.json');
+        break;
+      } catch (error) {
+        if (error.code !== 'MODULE_NOT_FOUND') throw error;
+      }
+    }
+  }
   for (const [id, path, action] of [
-    ['dependencies', context.project === true
-      ? relative(root, join(tools, 'node_modules', 'typescript', 'package.json'))
-      : 'node_modules/typescript/package.json',
+    ['dependencies', relative(root, compilerPackage),
     'After approval, use consent-run restore (guarded npm ci) from this project. Initial downloads need internet.'],
     ['build', 'dist/src/local-cli.js', 'After dependencies and approval, use consent-run build (the guarded build).'],
   ]) {
@@ -277,7 +362,20 @@ export async function checkSetup(options = {}, injected = {}, context = {}) {
     add(id, present ? 'ready' : 'action-required', present ? `${id.toUpperCase()}_PRESENT` : `${id.toUpperCase()}_MISSING`,
       present ? `${id} files are present (not a freshness/correctness check).` : `${id} files are missing.`, action, false);
   }
-  return { version: 1, platform: deps.platform, architecture: deps.architecture, root, home: root,
+  const image = checks.find(check => check.id === 'sql-image');
+  const sqlRoutes = recommendSqlRoutes([
+    { provider: 'container', availability: image?.status === 'ready' ? 'ready' :
+      ['SQL_IMAGE_ACCESS_REQUIRED', 'SQL_NOT_CHECKED'].includes(image?.code) ? 'unavailable' : 'unknown',
+      code: image?.code ?? 'SQL_NOT_CHECKED',
+      nextAction: image?.nextAction ?? 'Inspect container readiness before selecting a different database.' },
+    { provider: 'azure', availability: 'action-required', code: 'AZURE_SQL_REVIEW_REQUIRED',
+      nextAction: 'Offer a selected Azure SQL development database or explicitly approved database-only provisioning; review access, data use and costs first. This does not publish the app.' },
+    { provider: 'express', availability: deps.platform === 'win32' && deps.architecture === 'x64' ? 'action-required' : 'unavailable',
+      code: deps.platform === 'win32' && deps.architecture === 'x64' ? 'EXPRESS_REVIEW_REQUIRED' : 'EXPRESS_HOST_UNSUPPORTED',
+      nextAction: 'Last resort: detect SQL Server 2025 Express on supported Windows x64, then review reuse or installation. Never automatically upgrade an older instance.' },
+  ], endpoint || options.container || options.sqlTarget || options.sqlProvider ||
+    await exists(join(root, '.sql-apps', 'sql-target.json')) ? sqlTarget.provider : undefined);
+  return { version: 1, platform: deps.platform, architecture: deps.architecture, root, home: root, sqlRoutes,
     workspace: { id: runtime.id, mode: runtime.mode, ports: runtime.ports, origins: runtime.origins },
     ready: checks.filter(check => check.required).every(check => check.status === 'ready'), checks,
     scope: 'Read-only prerequisite check, not SQL authorization, complete offline-cache, ownership or runtime acceptance. See docs/guides/getting-started.md.' };
@@ -308,13 +406,25 @@ export async function inspectDependencies(home, probe = (command, args) => runPr
       try {
         const installed = JSON.parse(await readFile(join(home, 'node_modules', ...name.split('/'), 'package.json'), 'utf8'));
         const version = lock.packages?.[`node_modules/${name}`]?.version;
-        if (!installed.main && !installed.exports && installed.bin) {
+        const subpathOnly = installed.exports !== null && typeof installed.exports === 'object' &&
+          !Array.isArray(installed.exports) && Object.keys(installed.exports).length > 0 &&
+          Object.keys(installed.exports).every(key => key.startsWith('./'));
+        if (installed.bin) {
           const bins = typeof installed.bin === 'string' ? [installed.bin] : Object.values(installed.bin);
-          if (bins.length === 0 || bins.some(bin => typeof bin !== 'string' || !bin || bin.split(/[\\/]/).includes('..'))) {
+          if (bins.length === 0 || bins.some(bin => typeof bin !== 'string' || !bin || isAbsolute(bin) || bin.split(/[\\/]/).includes('..'))) {
             throw new Error(`Invalid executable paths in ${name}`);
           }
-          for (const bin of bins) await access(join(home, 'node_modules', ...name.split('/'), bin));
-        } else {
+          const packageRoot = await realpath(join(home, 'node_modules', ...name.split('/')));
+          for (const bin of bins) {
+            const executable = await realpath(join(packageRoot, bin));
+            const contained = relative(packageRoot, executable);
+            if (!contained || contained.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) ||
+                contained === '..' || isAbsolute(contained) || !(await lstat(executable)).isFile()) {
+              throw new Error(`Invalid executable paths in ${name}`);
+            }
+          }
+        }
+        if (!installed.bin || installed.main || installed.exports && !subpathOnly) {
           const entry = require.resolve(name.startsWith('@types/') ? `${name}/package.json` : name);
           await access(entry);
         }
@@ -396,11 +506,47 @@ async function setupHost() {
 
 export async function planInstallation(value, tool, injected = {}) {
   const home = await realpath(value);
-  if (!['node', 'npm', 'dotnet', 'docker'].includes(tool)) throw new Error('Choose node, npm, dotnet or docker; cloud tools are not local prerequisites.');
+  if (!['node', 'npm', 'dotnet', 'docker', 'sql-express'].includes(tool)) throw new Error('Choose node, npm, dotnet, docker or sql-express; cloud tools are not local prerequisites.');
   const host = injected.host ?? await setupHost();
   const probe = injected.probe ?? ((file, args) => runProbe(file, args, home));
+  if (tool === 'sql-express') {
+    const tools = await toolingHome(import.meta.url);
+    const helper = join(tools, await exists(join(tools, 'assets', 'runtime-contract.json')) ? 'assets' : '', 'scripts', 'sql-express.ps1');
+    const plan = { version: 1, planId: randomUUID(), home, host, tool,
+      source: 'https://www.microsoft.com/en-us/download/details.aspx?id=108836', outcome: 'manual', command: null,
+      installer: { version: '17.0.1000.7',
+        url: 'https://download.microsoft.com/download/7ab8f535-7eb8-4b16-82eb-eca0fa2d38f3/SQL2025-SSEI-Expr.exe',
+        sha256: '1C677A33B318481C3217128835F8405CF0026621DCD04B13EB6CB0982E823F27',
+        arguments: ['/IACCEPTSQLSERVERLICENSETERMS', '/ENU', '/ACTION=Install', '/quiet', '/InstallPath="C:\\Program Files\\Microsoft SQL Server"'] },
+      helperHash: createHash('sha256').update(await readFile(helper)).digest('hex'),
+      effects: ['Install SQL Server 2025 Express and its Windows service using the Microsoft bootstrapper; download media and write outside this checkout.',
+        'The exact helper command accepts SQL Server license terms: https://aka.ms/useterms. Review and explicitly accept them before approving this installation.',
+        'Review Microsoft privacy terms (https://privacy.microsoft.com/privacystatement). Cache the verified bootstrapper under current-user LocalAppData\\SqlApps\\Installers; SQL setup downloads additional media and writes Windows installer logs.',
+        'Requires an approved administrator terminal/UAC interaction; never self-elevates, reboots, upgrades an older instance or opens firewall ports.',
+        'Creates the default SQLEXPRESS instance. Existing instance registration prevents installation. Containment, loopback TCP and service restart need separate configuration approval.'],
+      nextAction: 'SQL Express requires supported Windows x64. Reuse a compatible instance or review installation; other platforms should use Azure SQL.' };
+    if (host.platform !== 'win32' || host.architecture !== 'x64') return plan;
+    let inventory;
+    try { inventory = JSON.parse(await probe('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', helper, '-Action', 'Inspect'])); }
+    catch (error) { return { ...plan, nextAction: `Express inventory failed (${error.code ?? 'INSPECTION_FAILED'}); inspect the existing installation/PowerShell policy before retrying. No installation was attempted.` }; }
+    if (inventory?.supported !== true || !Array.isArray(inventory.instances) ||
+        inventory.instances.some(item => typeof item?.instance !== 'string' || !Number.isInteger(item.majorVersion) || typeof item.edition !== 'string')) {
+      return { ...plan, nextAction: 'Express inventory is unsupported or malformed; no installation is authorized.' };
+    }
+    const compatible = inventory.instances.filter(item => item.majorVersion === 17 && /^Express Edition(?:\s|$)/.test(item.edition));
+    if (compatible.length) return { ...plan, outcome: compatible.every(item => item.verified === true) ? 'ready' : 'manual', instances: compatible,
+      nextAction: 'Compatible Express registration found. Select and verify its actual SQL identity/loopback endpoint; no installation is needed or authorized. Unverified SQL probes require diagnosis, never reinstallation.' };
+    if (inventory.instances.some(item => item.instance.toUpperCase() === 'SQLEXPRESS')) return { ...plan,
+      nextAction: 'SQLEXPRESS already exists but is not a compatible SQL Server 2025 Express registration. Diagnose/reuse explicitly; never install over or automatically upgrade it.' };
+    return { ...plan, outcome: 'approval-required', command: { file: 'powershell.exe',
+      args: ['-NoProfile', '-NonInteractive', '-File', helper, '-Action', 'Install'] },
+      nextAction: 'Review the pinned source/hash, license and administrator/service effects. Only after explicit approval, execute the absolute reviewed plan through setup install; then select and separately approve instance configuration.' };
+  }
   const report = await (injected.report ?? (() => checkSetup({ root: home })))();
-  const state = report.checks.find(check => check.id === (tool === 'docker' ? 'docker-cli' : tool))?.toolState;
+  let state = report.checks.find(check => check.id === (tool === 'docker' ? 'docker-cli' : tool))?.toolState;
+  if (tool === 'dotnet' && state === 'ready') {
+    state = report.checks.find(check => check.id === 'host-dab-runtime')?.toolState ?? state;
+  }
   const source = tool === 'docker' ? 'https://docs.docker.com/get-started/get-docker/' :
     tool === 'dotnet' ? 'https://learn.microsoft.com/dotnet/core/install/' : 'https://nodejs.org/en/download';
   const plan = { version: 1, planId: randomUUID(), home, host, tool, source, outcome: 'manual', command: null,
@@ -461,7 +607,7 @@ export async function planInstallation(value, tool, injected = {}) {
     effects: ['Download and install the named system package and its dependencies; write outside the checkout.',
       'May require administrator authentication, terminal/editor restart or manual installer/license completion.',
       ...(tool === 'docker' ? ['Review Docker licensing and networking/service effects before approval. Do not auto-accept terms, enable WSL or reboot.'] : []),
-      ...(tool === 'dotnet' ? ['Install the SDK 8 servicing line, not a runtime-only or unversioned latest package; re-probe the selected SDK afterward.'] : [])],
+      ...(tool === 'dotnet' ? ['Install the SDK 8 servicing line side-by-side, including .NET and ASP.NET Core 8 runtimes; preserve existing SDKs and re-probe afterward.'] : [])],
     nextAction: 'Review this entire plan. Only after explicit approval, save it outside tracked source and run setup install with that absolute plan path.' };
 }
 
@@ -490,6 +636,10 @@ export async function installReviewed(path, value, injected = {}) {
   }
   try { await (injected.runner ?? runSetupCommand)(current.command.file, current.command.args, home); }
   catch (error) {
+    if (approved.tool === 'sql-express' && error.code === 3010) return {
+      version: 1, planId: approved.planId, ready: false, outcome: 'restart-required', code: 'INSTALL_RESTART_REQUIRED',
+      nextAction: 'SQL Express requires a user-approved restart. Do not reinstall; inspect status after the restart and review configuration separately.',
+    };
     return { version: 1, planId: approved.planId, ready: false, outcome: 'failed',
       code: error.code === 'ETIMEDOUT' ? 'INSTALL_TIMEOUT' : error.code === 'ENOENT' ? 'INSTALLER_UNAVAILABLE' : 'INSTALL_FAILED',
       nextAction: 'Inspect installer output, permissions, network and any active installer. Approval was consumed; retry only after reviewing a new plan.' };

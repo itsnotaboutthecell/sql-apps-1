@@ -184,6 +184,16 @@ async function designReviewStatus(root, content) {
   return { reviewed, blocked, unreviewed };
 }
 
+export async function inspectDesignAcceptance(root) {
+  const intent = await optionalFile(join(root, 'docs', 'design-intent.md'));
+  const review = await optionalFile(join(root, 'docs', 'design-review.md'));
+  if (intent !== undefined) validateDesignIntent(intent);
+  const coverage = await designReviewStatus(root, review);
+  const quality = designQuality(review);
+  return { accepted: intent !== undefined && coverage.unreviewed === 0 && coverage.blocked === 0 && quality.status === 'accepted',
+    coverage, quality, review };
+}
+
 async function filesBelow(root, optional = false) {
   let info;
   try { info = await lstat(root); }

@@ -58,7 +58,7 @@ Try the new behavior, check that old actions still work, and run the relevant te
 Keep a short description of the agreed app and next change. Ask your AI assistant to write the agreed brief to an untracked JSON file, then save it with:
 
 ```powershell
-node scripts/guide.mjs --save "C:\path\to\project-brief.json"
+npm run guide -- --save "C:\path\to\project-brief.json"
 ```
 
 The plugin equivalent is `guide-save "<absolute-brief-path>"`. Run `npm run guide` afterward to show saved decisions and the suggested next step. Saved check results are historical; the command does not start the app or check running services. After a code change, run the affected workflow again. See the [guide command reference](../reference/guide.md) for the brief format.
