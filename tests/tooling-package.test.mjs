@@ -87,7 +87,7 @@ test('stages publishable package metadata with synchronized exact runtime depend
 
   for (const candidate of [source, pkg]) {
     assert.equal(candidate.name, '@microsoft/sql-apps');
-    assert.equal(candidate.version, '0.2.2');
+    assert.equal(candidate.version, '0.2.3');
     assert.equal(candidate.type, 'module');
     assert.deepEqual(candidate.bin, { 'sql-apps': 'bin/sql-apps.mjs' });
     assert.equal(Object.hasOwn(candidate, 'private'), false);
@@ -224,7 +224,7 @@ test('bin dispatches from the project root when invoked in a nested directory', 
       starter: 'data',
       profile: 'role-based-data',
       scaffoldVersion: 1,
-      tooling: { package: '@microsoft/sql-apps', version: '0.2.2' },
+      tooling: { package: '@microsoft/sql-apps', version: '0.2.3' },
     })}\n`),
   ]);
 

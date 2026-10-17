@@ -49,7 +49,7 @@ These companion plugins are not prerequisites for local-only development. Instal
 
 ## Use the GitHub Copilot App
 
-Restart the App or create a **fresh session** after installation. In **Customize -> Plugins**, look for **sql-apps**, marketplace **sql-apps-skills**, version **0.2.2**, enabled. Its skills should appear under **Skills**:
+Restart the App or create a **fresh session** after installation. In **Customize -> Plugins**, look for **sql-apps**, marketplace **sql-apps-skills**, version **0.2.3**, enabled. Its skills should appear under **Skills**:
 
 | Skill | Example prompt |
 | --- | --- |

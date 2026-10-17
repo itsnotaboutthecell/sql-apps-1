@@ -3,7 +3,7 @@
   "plugins": [{
     "id": "sql-apps",
     "displayName": "SQL Apps",
-    "version": "0.2.2",
+    "version": "0.2.3",
     "description": "Build and validate Azure SQL Database and Data API Builder applications; use maintained Azure skills for the general cloud lifecycle.",
     "homepage": "https://github.com/microsoft/sql-apps",
     "keywords": ["azure-sql", "typescript"],

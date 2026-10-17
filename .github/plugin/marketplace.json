@@ -1,6 +1,6 @@
 {
   "name": "sql-apps-skills",
   "owner": { "name": "Microsoft", "url": "https://www.microsoft.com" },
-  "metadata": { "description": "Application development on Azure SQL Database and Data API Builder", "version": "0.2.2" },
-  "plugins": [{ "name": "sql-apps", "description": "Build and validate Azure SQL and Data API Builder applications; delegate general Azure lifecycle work to maintained Azure skills", "version": "0.2.2", "source": "./plugins/sql-apps" }]
+  "metadata": { "description": "Application development on Azure SQL Database and Data API Builder", "version": "0.2.3" },
+  "plugins": [{ "name": "sql-apps", "description": "Build and validate Azure SQL and Data API Builder applications; delegate general Azure lifecycle work to maintained Azure skills", "version": "0.2.3", "source": "./plugins/sql-apps" }]
 }
